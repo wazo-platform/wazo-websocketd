@@ -13,24 +13,37 @@ from multiprocessing import Queue
 logger = logging.getLogger(__name__)
 
 
+clients = set()
+
 class CoreWs(object):
 
     def __init__(self, queue):
         self.queue = queue
-        self.start_server = websockets.serve(self.time, '0.0.0.0', 8000)
+        self.start_server = websockets.serve(self.ws_ari, '0.0.0.0', 8000)
 
     def run(self):
         asyncio.get_event_loop().run_until_complete(self.start_server)
         asyncio.get_event_loop().run_forever()
 
     @asyncio.coroutine
-    def time(self, websocket, path):
+    def ws_ari(self, websocket, path):
+        clients.add(websocket)
+        msg = False
         while True:
             if not websocket.open:
                 return
-            yield from websocket.send(self.queue.get())
-            yield from asyncio.sleep(1)
-
+            try:
+                msg = self.queue.get(block=False)
+            except:
+                pass
+            if msg:
+                for c in clients:
+                    try:
+                        yield from c.send(msg)
+                    except:
+                        clients.remove(c)
+                msg = False
+            yield from asyncio.sleep(0.5)
 
 
 class CoreCallControl(object):
@@ -38,14 +51,17 @@ class CoreCallControl(object):
     def __init__(self, queue):
         self.queue = queue
 
-    def run(self):
+    @asyncio.coroutine
+    def ws(self):
+        asterisk = "ws://192.168.32.248:5039/ari/events?app=hello&api_key=xivo:Nasheow8Eag"
         while True:
-            message = json.dumps({'message': 'hello world'})
-            print("callcontrol:", message)
-            self.queue.put(message)
-            time.sleep(5)
+            websocket = yield from websockets.connect(asterisk)
+            ari_ws = yield from websocket.recv()
+            self.queue.put(ari_ws)
+            yield from websocket.close()
 
-
+    def run(self):
+        asyncio.get_event_loop().run_until_complete(self.ws())
 
 class Controller(object):
 
