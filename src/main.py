@@ -6,6 +6,7 @@ import websockets
 import logging
 import json
 import time
+import queue
 
 from multiprocessing import Process
 from multiprocessing import Queue
@@ -28,21 +29,19 @@ class CoreWs(object):
     @asyncio.coroutine
     def ws_ari(self, websocket, path):
         clients.add(websocket)
-        msg = False
         while True:
             if not websocket.open:
                 return
             try:
                 msg = self.queue.get(block=False)
-            except:
-                pass
+            except queue.Empty:
+                msg = None
             if msg:
                 for c in clients:
                     try:
                         yield from c.send(msg)
                     except:
                         clients.remove(c)
-                msg = False
             yield from asyncio.sleep(0.5)
 
 
@@ -53,7 +52,7 @@ class CoreCallControl(object):
 
     @asyncio.coroutine
     def ws(self):
-        asterisk = "ws://192.168.32.248:5039/ari/events?app=hello&api_key=xivo:Nasheow8Eag"
+        asterisk = "ws://192.168.1.124:5039/ari/events?app=callcontrol&api_key=xivo:Nasheow8Eag"
         while True:
             websocket = yield from websockets.connect(asterisk)
             ari_ws = yield from websocket.recv()
