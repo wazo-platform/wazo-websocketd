@@ -109,7 +109,6 @@ def bus_consumer(config, msgQueue):
 def check_auth(token):
     if token:
         with new_auth_client(config['auth']) as auth:
-            print(token)
             return auth.token.is_valid(token)
     return False
 
