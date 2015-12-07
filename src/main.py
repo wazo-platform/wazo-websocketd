@@ -1,83 +1,155 @@
 #!/usr/bin/env python
 
 import asyncio
-import datetime
+import asynqp
 import websockets
 import logging
-import json
-import time
 import queue
+import ssl
 
-from multiprocessing import Process
-from multiprocessing import Queue
+from functools import partial
+from websockets.exceptions import InvalidState
+
+from http import cookies
+
+from xivo_auth_client import Client as client_auth
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
 
 clients = set()
+msgQueue = queue.Queue()
 
-class CoreWs(object):
-
-    def __init__(self, queue):
-        self.queue = queue
-        self.start_server = websockets.serve(self.ws_ari, '0.0.0.0', 8000)
-
-    def run(self):
-        asyncio.get_event_loop().run_until_complete(self.start_server)
-        asyncio.get_event_loop().run_forever()
-
-    @asyncio.coroutine
-    def ws_ari(self, websocket, path):
-        clients.add(websocket)
-        while True:
-            if not websocket.open:
-                return
-            try:
-                msg = self.queue.get(block=False)
-            except queue.Empty:
-                msg = None
-            if msg:
-                for c in clients:
-                    try:
-                        yield from c.send(msg)
-                    except:
-                        clients.remove(c)
-            yield from asyncio.sleep(0.5)
+config = {
+    'ws': {
+        'listen': '0.0.0.0',
+        'port': 9600,
+        'certificate': '/usr/share/xivo-certs/server.crt',
+        'private_key': '/usr/share/xivo-certs/server.key',
+        'ciphers': 'ALL:!aNULL:!eNULL:!LOW:!EXP:!RC4:!3DES:!SEED:+HIGH:+MEDIUM',
+    },
+    'bus': {
+        'username': 'xivo',
+        'password': 'xivo',
+        'host': '192.168.1.124',
+        'port': 5672,
+        'exchange_name': 'xivo',
+        'exchange_type': 'topic',
+        'exchange_durable': True,
+    },
+    'auth': {
+        'host': '192.168.1.124',
+        'port': 9497,
+        'verify_certificate': False,
+    },
+}
 
 
-class CoreCallControl(object):
+@asyncio.coroutine
+def keep_alive(websocket, ping_period=30):
+    while True:
+        yield from asyncio.sleep(ping_period)
 
-    def __init__(self, queue):
-        self.queue = queue
+        try:
+            yield from websocket.ping()
+        except InvalidState:
+            print('Got exception when trying to keep connection alive, giving up.')
+            return
 
-    @asyncio.coroutine
-    def ws(self):
-        asterisk = "ws://192.168.1.124:5039/ari/events?app=callcontrol&api_key=xivo:Nasheow8Eag"
-        while True:
-            websocket = yield from websockets.connect(asterisk)
-            ari_ws = yield from websocket.recv()
-            self.queue.put(ari_ws)
-            yield from websocket.close()
+@asyncio.coroutine
+def ws_client(websocket, path):
+    print(websocket)
 
-    def run(self):
-        asyncio.get_event_loop().run_until_complete(self.ws())
+    if not check_auth(get_token(websocket.raw_request_headers)):
+        print("Auth invalid...")
+        yield from websocket.close()
 
-class Controller(object):
+    asyncio.async(keep_alive(websocket))
+    clients.add(websocket)
 
-    def __init__(self):
-        subscribeMsgQueue = Queue()
-        self.callcontrol = CoreCallControl(subscribeMsgQueue)
-        self.ws = CoreWs(subscribeMsgQueue)
+    try:
+       while True:
+           if not websocket.open:
+               return
+
+           msg = yield from get_messages()
+           for client in clients:
+               yield from client.send(msg)
+    except Exception as e:
+        print("Ouch... {} -> {}".format(e, websocket))
+    finally:
+        clients.remove(websocket)
+
+    yield from websocket.close()
+
+@asyncio.coroutine
+def get_messages():
+    loop = asyncio.get_event_loop()
+    return (yield from loop.run_in_executor(None, msgQueue.get))
+
+@asyncio.coroutine
+def bus_consumer(config, msgQueue):
+    print("Bus Connected. amqp://{}:{}@{}:{}".format(config['username'], config['password'], config['host'], config['port']))
+    connection = yield from asynqp.connect(host=config['host'], port=config['port'], username=config['username'], password=config['password'])
+    channel = yield from connection.open_channel()
+
+    exchange = yield from channel.declare_exchange(config['exchange_name'], config['exchange_type'], durable=config['exchange_durable'])
+    queue = yield from channel.declare_queue(name='', exclusive=True)
+
+    yield from queue.bind(exchange=exchange, routing_key='calls')
+
+    while True:
+        received_message = yield from queue.get()
+
+        if received_message:
+            msgQueue.put(received_message.body.decode("utf-8"))
+            received_message.ack()
+
+    yield from channel.close()
+    yield from connection.close()
 
 
-    def run(self):
-        cc_process = Process(target=self.callcontrol.run, name='callcontrol_process')
-        cc_process.start()
+def check_auth(token):
+    if token:
+        with new_auth_client(config['auth']) as auth:
+            print(token)
+            return auth.token.is_valid(token)
+    return False
 
-        ws_process = Process(target=self.ws.run, name='ws_process')
-        ws_process.start()
+def get_token(headers):
+    cookie = cookies.SimpleCookie()
+    for key, value in headers:
+        if key == 'Cookie':
+            cookie.load(value)
+            if cookie['x-auth-session'].value:
+                return cookie['x-auth-session'].value
+        if key.lower() == 'x-auth-token':
+            return value
+    return None
 
+@contextmanager
+def new_auth_client(config):
+    yield client_auth(**config)
+
+
+def main():
+    asyncio.async(bus_consumer(config['bus'], msgQueue))
+    print('Starting service on {}:{}'.format(config['ws']['listen'], config['ws']['port']))
+
+    ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+    ssl_context.load_cert_chain(config['ws']['certificate'], config['ws']['private_key'])
+    ssl_context.set_ciphers(config['ws']['ciphers'])
+    kwds = {'ssl': ssl_context}
+
+    start_server = websockets.serve(
+        partial(ws_client),
+        config['ws']['listen'],
+        config['ws']['port'],
+        **kwds)
+
+    asyncio.get_event_loop().run_until_complete(start_server)
+    asyncio.get_event_loop().run_forever()
 
 if __name__ == '__main__':
-    start = Controller()
-    start.run()
+    main()
