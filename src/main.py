@@ -57,8 +57,6 @@ def keep_alive(websocket, ping_period=30):
 
 @asyncio.coroutine
 def ws_client(websocket, path):
-    print(websocket)
-
     if not check_auth(get_token(websocket.raw_request_headers, path)):
         print("Auth invalid...")
         yield from websocket.close()
