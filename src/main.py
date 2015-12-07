@@ -10,8 +10,6 @@ import ssl
 from functools import partial
 from websockets.exceptions import InvalidState
 
-from http import cookies
-
 from xivo_auth_client import Client as client_auth
 from contextlib import contextmanager
 
@@ -61,7 +59,7 @@ def keep_alive(websocket, ping_period=30):
 def ws_client(websocket, path):
     print(websocket)
 
-    if not check_auth(get_token(websocket.raw_request_headers)):
+    if not check_auth(get_token(websocket.raw_request_headers, path)):
         print("Auth invalid...")
         yield from websocket.close()
 
@@ -117,13 +115,14 @@ def check_auth(token):
             return auth.token.is_valid(token)
     return False
 
-def get_token(headers):
-    cookie = cookies.SimpleCookie()
+def get_token(headers, path):
+    try:
+        token = path.split('=')[1]
+        return token
+    except:
+        pass
+
     for key, value in headers:
-        if key == 'Cookie':
-            cookie.load(value)
-            if cookie['x-auth-session'].value:
-                return cookie['x-auth-session'].value
         if key.lower() == 'x-auth-token':
             return value
     return None
