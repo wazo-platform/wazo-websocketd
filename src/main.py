@@ -64,18 +64,18 @@ def ws_client(websocket, path):
     asyncio.async(keep_alive(websocket))
     clients.add(websocket)
 
-    try:
-       while True:
-           if not websocket.open:
-               return
+    while True:
+        if not websocket.open:
+            clients.remove(websocket)
+            return
 
-           msg = yield from get_messages()
-           for client in clients:
-               yield from client.send(msg)
-    except Exception as e:
-        print("Ouch... {} -> {}".format(e, websocket))
-    finally:
-        clients.remove(websocket)
+        msg = yield from get_messages()
+        for client in clients:
+            if client.state == 1:
+                try:
+                    yield from client.send(msg)
+                except:
+                    pass
 
     yield from websocket.close()
 
