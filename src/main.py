@@ -74,6 +74,7 @@ def ws_client(websocket, path):
             if client.state == 1:
                 try:
                     yield from client.send(msg)
+                    yield from asyncio.sleep(0.1)
                 except:
                     pass
 
