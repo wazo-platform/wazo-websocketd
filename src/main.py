@@ -56,13 +56,24 @@ def keep_alive(websocket, ping_period=30):
             return
 
 @asyncio.coroutine
-def ws_client(websocket, path):
-    if not check_auth(get_token(websocket.raw_request_headers, path)):
-        print("Auth invalid...")
-        yield from websocket.close()
+def is_authentified(websocket, ping_period=30, token=None):
+    while True:
+        if not check_auth(token):
+            print('Token is not valid!')
+            yield from websocket.close()
+            return
 
-    asyncio.async(keep_alive(websocket))
+        yield from asyncio.sleep(ping_period)
+
+@asyncio.coroutine
+def ws_client(websocket, path):
+    asyncio.async(is_authentified(websocket,
+                                  ping_period=10,
+                                  token=get_token(websocket.raw_request_headers, path)))
     clients.add(websocket)
+
+    asyncio.async(keep_alive(websocket, ping_period=30))
+
 
     while True:
         if not websocket.open:
@@ -71,12 +82,12 @@ def ws_client(websocket, path):
 
         msg = yield from get_messages()
         for client in clients:
-            if client.state == 1:
+            if client.open:
                 try:
                     yield from client.send(msg)
                     yield from asyncio.sleep(0.1)
-                except:
-                    pass
+                except Exception as e:
+                    print(e)
 
     yield from websocket.close()
 
@@ -94,7 +105,7 @@ def bus_consumer(config, msgQueue):
     exchange = yield from channel.declare_exchange(config['exchange_name'], config['exchange_type'], durable=config['exchange_durable'])
     queue = yield from channel.declare_queue(name='', exclusive=True)
 
-    yield from queue.bind(exchange=exchange, routing_key='calls')
+    yield from queue.bind(exchange=exchange, routing_key='calls.#')
 
     while True:
         received_message = yield from queue.get()
