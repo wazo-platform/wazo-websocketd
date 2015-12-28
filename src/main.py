@@ -81,7 +81,8 @@ def ws_client(websocket, path):
             return
 
         msg = yield from get_messages()
-        for client in clients:
+        active_clients = set([elem for elem in clients if elem.open])
+        for client in active_clients:
             if client.open:
                 try:
                     yield from client.send(msg)
