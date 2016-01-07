@@ -107,6 +107,7 @@ def bus_consumer(config, msgQueue):
     queue = yield from channel.declare_queue(name='', exclusive=True)
 
     yield from queue.bind(exchange=exchange, routing_key='calls.#')
+    yield from queue.bind(exchange=exchange, routing_key='chat.message.#')
 
     while True:
         received_message = yield from queue.get()
