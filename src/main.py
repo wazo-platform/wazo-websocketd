@@ -30,14 +30,14 @@ config = {
     'bus': {
         'username': 'xivo',
         'password': 'xivo',
-        'host': '192.168.1.124',
+        'host': '192.168.32.80',
         'port': 5672,
         'exchange_name': 'xivo',
         'exchange_type': 'topic',
         'exchange_durable': True,
     },
     'auth': {
-        'host': '192.168.1.124',
+        'host': '192.168.32.80',
         'port': 9497,
         'verify_certificate': False,
     },
@@ -115,6 +115,8 @@ def bus_consumer(config, msgQueue):
         if received_message:
             msgQueue.put(received_message.body.decode("utf-8"))
             received_message.ack()
+
+        yield from asyncio.sleep(0.1)
 
     yield from channel.close()
     yield from connection.close()
