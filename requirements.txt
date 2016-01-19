@@ -2,7 +2,7 @@ git+https://github.com/xivo-pbx/xivo-lib-rest-client.git
 git+https://github.com/xivo-pbx/xivo-lib-python.git
 git+https://github.com/xivo-pbx/xivo-auth-client.git
 websockets==3.0
-pyyaml
+pyyaml==3.11
 asynqp
-requests==2.8.1
-stevedore==1.9.0
+requests==2.4.3
+stevedore==0.14.1
