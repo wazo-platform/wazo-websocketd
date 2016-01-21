@@ -1,0 +1,23 @@
+sync:
+  image: n3llyb0y/wait
+  links:
+    - rabbitmq
+    - websocketd
+  environment:
+    PORTS: "5672 9600"
+    TIMEOUT: "5"
+
+rabbitmq:
+  image: rabbitmq
+  ports:
+    - "5672:5672"
+
+websocketd:
+  image: xivo-websocketd-test
+  volumes:
+    - "./etc/xivo-websocketd:/etc/xivo-websocketd"
+    - "./ssl:/usr/local/share/ssl"
+  ports:
+    - "9600:9600"
+  links:
+    - rabbitmq

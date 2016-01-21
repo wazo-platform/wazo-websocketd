@@ -1,0 +1,6 @@
+FROM xivo/xivo-websocketd
+
+ADD . /usr/src/xivo-websocketd
+WORKDIR /usr/src/xivo-websocketd
+
+RUN python setup.py develop

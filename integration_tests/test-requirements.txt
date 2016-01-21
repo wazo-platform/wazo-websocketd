@@ -1,0 +1,4 @@
+git+https://github.com/xivo-pbx/xivo-test-helpers.git
+docker-compose
+nose
+websockets
