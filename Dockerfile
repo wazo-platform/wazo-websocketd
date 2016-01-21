@@ -1,9 +1,15 @@
-from python:3.4
+FROM python:3.4.2
 
-ADD . /usr/src/ws
-WORKDIR /usr/src/ws
+ADD . /usr/src/xivo-websocketd
+ADD ./contribs/docker/certs /usr/share/xivo-certs
+WORKDIR /usr/src/xivo-websocketd
+
 RUN pip install -r requirements.txt
-WORKDIR /usr/src/
-RUN rm -rf /usr/src/ws
+RUN python setup.py install
 
-ADD contribs/docker/certs/* /usr/share/xivo-certs/
+WORKDIR /
+RUN rm -rf /usr/src/xivo-websocketd
+
+EXPOSE 9600
+
+CMD xivo-websocketd
