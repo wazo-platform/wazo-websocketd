@@ -6,6 +6,8 @@ import websockets
 import logging
 import queue
 import ssl
+import sys
+import yaml
 
 from functools import partial
 from websockets.exceptions import InvalidState
@@ -19,8 +21,9 @@ logger = logging.getLogger(__name__)
 clients = set()
 msgQueue = queue.Queue()
 
+config_filename = '/etc/xivo-websocketd/config.yml'
 config = {
-    'ws': {
+    'websocket': {
         'listen': '0.0.0.0',
         'port': 9600,
         'certificate': '/usr/share/xivo-certs/server.crt',
@@ -146,22 +149,51 @@ def new_auth_client(config):
 
 
 def main():
+    load_config()
+    wait_for_rabbitmq()
+
     asyncio.async(bus_consumer(config['bus'], msgQueue))
-    print('Starting service on {}:{}'.format(config['ws']['listen'], config['ws']['port']))
+    print('Starting service on {}:{}'.format(config['websocket']['listen'], config['websocket']['port']))
 
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    ssl_context.load_cert_chain(config['ws']['certificate'], config['ws']['private_key'])
-    ssl_context.set_ciphers(config['ws']['ciphers'])
+    ssl_context.load_cert_chain(config['websocket']['certificate'], config['websocket']['private_key'])
+    ssl_context.set_ciphers(config['websocket']['ciphers'])
     kwds = {'ssl': ssl_context}
 
     start_server = websockets.serve(
         partial(ws_client),
-        config['ws']['listen'],
-        config['ws']['port'],
+        config['websocket']['listen'],
+        config['websocket']['port'],
         **kwds)
 
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
+
+
+def load_config():
+    # poor's man load_config (can't use xivo.config_helpers from python3), just
+    # for at least have a first integration tests working
+    try:
+        with open(config_filename) as fobj:
+            file_config = yaml.load(fobj)
+    except EnvironmentError as e:
+        print('Could not read config file {}: {}'.format(config_filename, e), file=sys.stderr)
+        print(e)
+    else:
+        for k, v in file_config.items():
+            if isinstance(v, dict):
+                config.setdefault(k, {})
+                config[k].update(v)
+            else:
+                config[k] = v
+
+
+def wait_for_rabbitmq():
+    # XXX temporary solution for the integrations tests to work -- real
+    #     solution is to reconnect to rabbitmq if connection failed
+    import time
+    time.sleep(3)
+
 
 if __name__ == '__main__':
     main()

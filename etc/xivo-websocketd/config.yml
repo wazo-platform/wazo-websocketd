@@ -1,0 +1,28 @@
+# This file should not be modified as it may get changed by the maintainer.
+
+# WebSocket server
+websocket:
+
+  # Listening address
+  listen: 0.0.0.0
+
+  # Listening port
+  port: 9600
+
+  certificate: /usr/share/xivo-certs/server.crt
+  private_key: /usr/share/xivo-certs/server.key
+
+# xivo-auth (authentication daemon) connection informations.
+auth:
+  host: localhost
+  port: 9497
+  verify_certificate: /usr/share/xivo-certs/server.crt
+
+# Event bus (AMQP) connection informations
+bus:
+  username: guest
+  password: guest
+  host: localhost
+  port: 5672
+  exchange_name: xivo
+  exchange_type: topic
