@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 # Copyright 2016 by Avencall
 # SPDX-License-Identifier: GPL-3.0+
 

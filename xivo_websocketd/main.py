@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+# Copyright 2016 by Avencall
+# SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
 import asynqp
