@@ -1,0 +1,11 @@
+[Unit]
+Description=xivo-websocketd server
+After=network.target rabbitmq-server.service xivo-auth.service
+Wants=rabbitmq-server.service xivo-auth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/xivo-websocketd
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,5 @@
+xivo-websocketd (16.01~~) xivo-dev; urgency=medium
+
+  * Initial release.
+
+ -- Etienne Lessard <elessard@avencall.com>  Mon, 25 Jan 2016 14:35:16 -0500

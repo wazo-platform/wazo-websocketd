@@ -1,0 +1,22 @@
+Source: xivo-websocketd
+Section: python
+Priority: extra
+Maintainer: XiVO Dev Team <dev@avencall.com>
+Uploaders: XiVO Builder Team <release@xivo.io>
+Build-Depends: debhelper (>= 9), dh-python, dh-systemd (>= 1.5), python3-all, python3-setuptools
+Standards-Version: 3.9.5
+X-Python3-Version: >= 3.4
+
+Package: xivo-websocketd
+Architecture: all
+Depends:
+ ${python3:Depends},
+ ${misc:Depends},
+ python3-asynqp,
+ python3-websockets
+Description: XiVO websocket server
+ XiVO is a system based on a powerful IPBX, to bring an easy to
+ install solution for telephony and related services.
+ .
+ xivo-websocketd is a WebSocket server that delivers XiVO related events to
+ clients.
