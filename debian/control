@@ -13,7 +13,9 @@ Depends:
  ${python3:Depends},
  ${misc:Depends},
  python3-asynqp,
- python3-websockets
+ python3-websockets,
+ python3-yaml,
+ xivo-auth-client-python3
 Description: XiVO websocket server
  XiVO is a system based on a powerful IPBX, to bring an easy to
  install solution for telephony and related services.
