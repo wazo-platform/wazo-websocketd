@@ -5,6 +5,7 @@ Wants=rabbitmq-server.service xivo-auth.service
 
 [Service]
 Type=simple
+User=xivo-websocketd
 ExecStart=/usr/bin/xivo-websocketd
 
 [Install]
