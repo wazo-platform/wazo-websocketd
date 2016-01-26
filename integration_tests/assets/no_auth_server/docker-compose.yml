@@ -4,7 +4,7 @@ sync:
     - rabbitmq
     - websocketd
   environment:
-    PORTS: "5672 9600"
+    PORTS: "5672 9502"
     TIMEOUT: "5"
 
 rabbitmq:
@@ -18,6 +18,6 @@ websocketd:
     - "./etc/xivo-websocketd:/etc/xivo-websocketd"
     - "./ssl:/usr/local/share/ssl"
   ports:
-    - "9600:9600"
+    - "9502:9502"
   links:
     - rabbitmq

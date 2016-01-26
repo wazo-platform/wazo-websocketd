@@ -1,6 +1,6 @@
 websocket:
   listen: 0.0.0.0
-  port: 9600
+  port: 9502
   certificate: /usr/local/share/ssl/websocketd/server.crt
   private_key: /usr/local/share/ssl/websocketd/server.key
 

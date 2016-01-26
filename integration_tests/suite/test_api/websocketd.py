@@ -28,7 +28,7 @@ class WebSocketdClient(object):
         else:
             headers = None
 
-        self._websocket = yield from websockets.connect('wss://localhost:9600',
+        self._websocket = yield from websockets.connect('wss://localhost:9502',
                                                         loop=self._loop,
                                                         extra_headers=headers,
                                                         ssl=self._SSL_CONTEXT)

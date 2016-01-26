@@ -7,7 +7,7 @@ websocket:
   listen: 0.0.0.0
 
   # Listening port
-  port: 9600
+  port: 9502
 
   certificate: /usr/share/xivo-certs/server.crt
   private_key: /usr/share/xivo-certs/server.key

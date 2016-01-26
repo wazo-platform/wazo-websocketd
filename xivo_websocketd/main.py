@@ -26,7 +26,7 @@ config_filename = '/etc/xivo-websocketd/config.yml'
 config = {
     'websocket': {
         'listen': '0.0.0.0',
-        'port': 9600,
+        'port': 9502,
         'certificate': '/usr/share/xivo-certs/server.crt',
         'private_key': '/usr/share/xivo-certs/server.key',
         'ciphers': 'ALL:!aNULL:!eNULL:!LOW:!EXP:!RC4:!3DES:!SEED:+HIGH:+MEDIUM',

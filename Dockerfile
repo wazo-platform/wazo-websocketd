@@ -10,6 +10,6 @@ RUN python setup.py install
 WORKDIR /
 RUN rm -rf /usr/src/xivo-websocketd
 
-EXPOSE 9600
+EXPOSE 9502
 
 CMD xivo-websocketd
