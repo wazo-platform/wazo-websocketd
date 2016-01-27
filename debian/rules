@@ -2,7 +2,6 @@
 # -*- makefile -*-
 
 export PYBUILD_NAME=xivo_websocketd
-export PYBUILD_DESTDIR_python3=debian/xivo-websocketd/
 export PYBUILD_DISABLE=test
 
 %:
