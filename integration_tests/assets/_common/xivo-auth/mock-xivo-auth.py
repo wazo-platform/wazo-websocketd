@@ -1,4 +1,4 @@
-# Copyright 2016 by Avencall
+# Copyright 2016 Avencall
 # SPDX-License-Identifier: GPL-3.0+
 
 import sys
