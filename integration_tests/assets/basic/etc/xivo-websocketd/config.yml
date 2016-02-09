@@ -1,16 +1,12 @@
 websocket:
-  listen: 0.0.0.0
-  port: 9502
   certificate: /usr/local/share/ssl/websocketd/server.crt
   private_key: /usr/local/share/ssl/websocketd/server.key
 
 auth:
   host: auth
-  port: 9497
   verify_certificate: /usr/local/share/ssl/auth/server.crt
 
 bus:
   username: guest
   password: guest
   host: rabbitmq
-  port: 5672

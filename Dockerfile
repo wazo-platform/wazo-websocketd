@@ -12,4 +12,4 @@ RUN rm -rf /usr/src/xivo-websocketd
 
 EXPOSE 9502
 
-CMD xivo-websocketd
+CMD ["xivo-websocketd"]

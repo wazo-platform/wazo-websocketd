@@ -2,6 +2,6 @@
 # Copyright 2016 Avencall
 # SPDX-License-Identifier: GPL-3.0+
 
-from xivo_websocketd.main import main
+from xivo_websocketd.bin.main import main
 
 main()

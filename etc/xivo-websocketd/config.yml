@@ -1,28 +1,46 @@
 # This file should not be modified as it may get changed by the maintainer.
+# Add extra configuration files in the extra_config_files directory to override
+# the content from this file
 
-# WebSocket server
-websocket:
+## Extra configuration directory where the config files overriding this file
+## should be.
+#extra_config_files: /etc/xivo-websocketd/conf.d
 
-  # Listening address
-  listen: 0.0.0.0
+## WebSocket server
+#websocket:
+#
+#  # Listening address
+#  listen: 0.0.0.0
+#
+#  # Listening port
+#  port: 9502
+#
+#  certificate: /usr/share/xivo-certs/server.crt
+#  private_key: /usr/share/xivo-certs/server.key
+#  ciphers: ALL:!aNULL:!eNULL:!LOW:!EXP:!RC4:!3DES:!SEED:+HIGH:+MEDIUM
+#
+#  ping_interval: 60
 
-  # Listening port
-  port: 9502
+## xivo-auth (authentication daemon) connection informations.
+#auth:
+#  host: localhost
+#  verify_certificate: /usr/share/xivo-certs/server.crt
 
-  certificate: /usr/share/xivo-certs/server.crt
-  private_key: /usr/share/xivo-certs/server.key
+## Event bus (AMQP) connection informations
+#bus:
+#  host: localhost
+#  port: 5672
+#  username: guest
+#  password: guest
 
-# xivo-auth (authentication daemon) connection informations.
-auth:
-  host: localhost
-  port: 9497
-  verify_certificate: /usr/share/xivo-certs/server.crt
+## Exchanges definitions. WebSockets clients will be able to bind to
+## any exchange defined here. The "xivo" exchange is always defined
+## and there's no way to disable it currently.
+#exchanges:
+#  xivo:
+#    type: topic
+#    durable: true
 
-# Event bus (AMQP) connection informations
-bus:
-  username: guest
-  password: guest
-  host: localhost
-  port: 5672
-  exchange_name: xivo
-  exchange_type: topic
+## Developer options -- do not use them
+#auth_check_strategy: static
+#auth_check_static_interval: 60
