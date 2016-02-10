@@ -33,7 +33,7 @@ class SessionFactory(object):
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
-        logger.info('websocket connection accepted (%s)', ws.remote_address)
+        logger.info('websocket connection accepted %s', ws.remote_address)
         bus_service = self._bus_service_factory.new_bus_service()
         session_protocol = self._session_protocol_factory.new_session_protocol(bus_service, ws)
         session = Session(self._config, self._loop, self._authenticator, bus_service,
@@ -43,7 +43,7 @@ class SessionFactory(object):
             yield from session.run()
         finally:
             self._sessions.remove(session)
-            logger.info('websocket connection terminated (%s)', ws.remote_address)
+            logger.info('websocket session terminated %s', ws.remote_address)
 
 
 class Session(object):
@@ -86,7 +86,7 @@ class Session(object):
             yield from self._ws.close(1011, 'bus connection lost')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
-            logger.info('websocket connection closed (%s)', e.code)
+            logger.info('websocket connection closed with code %s', e.code)
         except Exception:
             logger.exception('unexpected exception during websocket session run:')
             yield from self._ws.close(1011)

@@ -4,5 +4,12 @@
 import os.path
 
 ASSET_ROOT = os.path.join(os.path.dirname(__file__), '..', '..', 'assets')
-VALID_TOKEN = 'valid-token'
-INVALID_TOKEN = 'invalid-token'
+
+VALID_TOKEN_ID = 'valid-token'
+INVALID_TOKEN_ID = 'invalid-token'
+UNAUTHORIZED_TOKEN_ID = 'unauthorized-token'
+
+CLOSE_CODE_NO_TOKEN_ID = 4001
+CLOSE_CODE_AUTH_FAILED = 4002
+CLOSE_CODE_AUTH_EXPIRED = 4003
+CLOSE_CODE_PROTOCOL_ERROR = 4004

@@ -3,7 +3,7 @@
 
 import sys
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
@@ -11,34 +11,60 @@ port = int(sys.argv[1])
 
 context = ('/usr/local/share/ssl/auth/server.crt', '/usr/local/share/ssl/auth/server.key')
 
-tokens = {'valid-token': 'uuid',
-          'valid-token-1': 'uuid-1',
-          'valid-token-2': 'uuid-2'}
+valid_tokens = {
+    'valid-token': {
+        'token': 'valid-token',
+    }
+}
+unauthorized_tokens = [
+    'unauthorized-token',
+]
+dynamic_tokens = {
+}
 
 
-@app.route("/0.1/token/valid-token", methods=['HEAD'])
-@app.route("/0.1/token/valid-token-1", methods=['HEAD'])
-@app.route("/0.1/token/valid-token-2", methods=['HEAD'])
-def token_head_ok():
+@app.route("/0.1/token/<token_id>", methods=['HEAD'])
+def token_head(token_id):
+    if token_id in valid_tokens or token_id in dynamic_tokens:
+        return '', 204
+    elif token_id in unauthorized_tokens:
+        return '', 403
+    return '', 404
+
+
+@app.route("/0.1/token/<token_id>", methods=['GET'])
+def token_get(token_id):
+    token = None
+    if token_id in valid_tokens:
+        token = valid_tokens[token_id]
+    elif token_id in dynamic_tokens:
+        token = dynamic_tokens[token_id]
+    elif token_id in unauthorized_tokens:
+        return '', 403
+    else:
+        return '', 404
+
+    return jsonify({'data': token})
+
+
+@app.route("/_control/token/<token_id>", methods=['PUT'])
+def set_token(token_id):
+    token = request.get_json(force=True)
+    if token is None:
+        return 'get_json() returned None\n', 400
+    token['token'] = token_id
+    dynamic_tokens[token_id] = token
     return '', 204
 
 
-@app.route("/0.1/token/invalid-acl-token", methods=['HEAD'])
-def token_head_forbidden():
-    return '', 403
-
-
-@app.route("/0.1/token/<token>", methods=['GET'])
-def token_get(token):
-    if token not in tokens:
+@app.route("/_control/token/<token_id>", methods=['DELETE'])
+def remove_token(token_id):
+    try:
+        del dynamic_tokens[token_id]
+    except KeyError:
         return '', 404
-
-    return jsonify({
-        'data': {
-            'auth_id': tokens[token],
-            'token': token
-        }
-    })
+    else:
+        return '', 204
 
 
 if __name__ == "__main__":

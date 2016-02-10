@@ -5,6 +5,7 @@ import asyncio
 
 from xivo_test_helpers.asset_launching_test_case import AssetLaunchingTestCase
 
+from .auth import AuthServer
 from .constants import ASSET_ROOT
 from .websocketd import WebSocketdClient 
 
@@ -23,3 +24,4 @@ class IntegrationTest(AssetLaunchingTestCase):
         self.loop = asyncio.new_event_loop()
         self.addCleanup(self.loop.close)
         self.websocketd_client = WebSocketdClient(self.loop)
+        self.auth_server = AuthServer(self.loop)

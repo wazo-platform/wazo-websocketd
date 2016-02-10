@@ -14,8 +14,8 @@ auth:
     - "./xivo-auth:/usr/local/share/xivo-auth"
     - "./ssl:/usr/local/share/ssl"
   command: "python /usr/local/share/xivo-auth/mock-xivo-auth.py 9497"
-  expose:
-    - "9497"
+  ports:
+    - "9497:9497"
 
 rabbitmq:
   image: rabbitmq

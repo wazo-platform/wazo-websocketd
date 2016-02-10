@@ -9,7 +9,7 @@ test-setup: egg-info
 	docker build --no-cache -t xivo-websocketd-test -f docker/Dockerfile-websocketd-test ..
 
 egg-info:
-	cd .. && python setup.py egg_info
+	cd .. && python3 setup.py egg_info
 
 test:
 	nosetests suite
