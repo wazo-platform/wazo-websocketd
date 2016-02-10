@@ -33,14 +33,7 @@ class BusClient(object):
         exchange = yield from self._channel.declare_exchange(name, type_, durable=durable)
         self._exchanges[name] = exchange
 
-    @asyncio.coroutine
-    def declare_xivo_exchange(self):
-        yield from self.declare_exchange('xivo', 'topic', True)
-
     def publish(self, exchange_name, routing_key, body):
         msg = asynqp.Message(body)
         exchange = self._exchanges[exchange_name]
         exchange.publish(msg, routing_key, mandatory=False)
-
-    def publish_on_xivo(self, routing_key, body):
-        self.publish('xivo', routing_key, body)
