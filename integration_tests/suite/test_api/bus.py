@@ -27,7 +27,7 @@ class BusClient(object):
             self._connection = None
 
     @asyncio.coroutine
-    def declare_exchange(self, name, type_, durable):
+    def declare_exchange(self, name, type_, durable=False):
         if name in self._exchanges:
             return
         exchange = yield from self._channel.declare_exchange(name, type_, durable=durable)

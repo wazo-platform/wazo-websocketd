@@ -10,3 +10,8 @@ bus:
   username: guest
   password: guest
   host: rabbitmq
+
+exchanges:
+  potato:
+    type: direct
+    durable: false
