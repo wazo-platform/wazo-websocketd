@@ -40,7 +40,7 @@ class BusClient(object):
     def publish(self, exchange_name, routing_key, body):
         msg = asynqp.Message(body)
         exchange = self._exchanges[exchange_name]
-        exchange.publish(msg, routing_key)
+        exchange.publish(msg, routing_key, mandatory=False)
 
     def publish_on_xivo(self, routing_key, body):
         self.publish('xivo', routing_key, body)

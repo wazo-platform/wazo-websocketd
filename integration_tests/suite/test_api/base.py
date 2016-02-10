@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
+import functools
 
 import asynqp
 
@@ -41,6 +42,16 @@ class IntegrationTest(AssetLaunchingTestCase):
     def __exception_handler(self, loop, context):
         exception = context.get('exception')
         if isinstance(exception, asynqp.exceptions.ConnectionClosedError):
-            print('debug: got asynqp ConnectionClosedError (happens on normal close)')
+            # this happens even on normal close
+            print('debug: got asynqp ConnectionClosedError')
         else:
             loop.default_exception_handler(context)
+
+
+def run_with_loop(f):
+    # decorator to use on test methods of class deriving from IntegrationTest
+    @functools.wraps(f)
+    def wrapper(self, *args, **kwargs):
+        coro = asyncio.coroutine(f)
+        self.loop.run_until_complete(coro(self, *args, **kwargs))
+    return wrapper
