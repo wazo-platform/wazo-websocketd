@@ -5,12 +5,17 @@ import asyncio
 
 from .test_api.base import IntegrationTest
 from .test_api.constants import VALID_TOKEN_ID, INVALID_TOKEN_ID, UNAUTHORIZED_TOKEN_ID,\
-    CLOSE_CODE_AUTH_FAILED, CLOSE_CODE_AUTH_EXPIRED
+    CLOSE_CODE_AUTH_FAILED, CLOSE_CODE_AUTH_EXPIRED, CLOSE_CODE_NO_TOKEN_ID
 
 
 class TestAuthentication(IntegrationTest):
 
     asset = 'basic'
+
+    def test_no_token_closes_websocket(self):
+        coro = self.websocketd_client.test_connect_failure(None,
+                                                           CLOSE_CODE_NO_TOKEN_ID)
+        self.loop.run_until_complete(coro)
 
     def test_valid_auth_gives_result(self):
         coro = self.websocketd_client.test_connect_success(VALID_TOKEN_ID)
