@@ -22,7 +22,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     authenticator = new_authenticator(config, loop)
-    bus_service_factory = BusServiceFactory(config)
+    bus_service_factory = BusServiceFactory(config, loop)
     session_factory = SessionFactory(config, loop, authenticator, bus_service_factory)
     controller = Controller(config, loop, session_factory)
 

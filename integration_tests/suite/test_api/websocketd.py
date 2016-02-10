@@ -23,6 +23,12 @@ class WebSocketdClient(object):
         self._websocket = None
 
     @asyncio.coroutine
+    def close(self):
+        if self._websocket:
+            yield from self._websocket.close()
+            self._websocket = None
+
+    @asyncio.coroutine
     def connect(self, token_id):
         url = 'wss://localhost:9502/'
         if token_id is not None:
@@ -38,12 +44,6 @@ class WebSocketdClient(object):
         except Exception:
             yield from self.close()
             raise
-
-    @asyncio.coroutine
-    def close(self):
-        if self._websocket:
-            yield from self._websocket.close()
-            self._websocket = None
 
     @asyncio.coroutine
     def recv(self, timeout=_TIMEOUT):
@@ -76,6 +76,27 @@ class WebSocketdClient(object):
             msg = json.loads(data)
             if msg['op'] != 'init':
                 raise AssertionError('expected op "init": got op "{}"'.format(msg['op']))
+
+    @asyncio.coroutine
+    def op_bind(self, exchange_name, routing_key):
+        data = json.dumps({'op': 'bind', 'data': {'exchange_name': exchange_name, 'routing_key': routing_key}})
+        yield from self._websocket.send(data)
+        response_data = yield from self.recv()
+        response = json.loads(response_data)
+        if response['op'] != 'bind':
+            raise AssertionError('expected op "bind": got op "{}"'.format(response['op']))
+        if response['code'] != 0:
+            raise AssertionError('error binding to {} with routing key {}'.format(exchange_name, routing_key))
+
+    @asyncio.coroutine
+    def op_start(self):
+        data = json.dumps({'op': 'start'})
+        yield from self._websocket.send(data)
+        # XXX if the connection is already started, we won't receive a reply
+        response_data = yield from self.recv()
+        response = json.loads(response_data)
+        if response['op'] != 'start':
+            raise AssertionError('expected op "bind": got op "{}"'.format(response['op']))
 
     @asyncio.coroutine
     def test_connect_success(self, token_id):

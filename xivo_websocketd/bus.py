@@ -8,22 +8,24 @@ import asynqp
 
 class BusServiceFactory(object):
 
-    def __init__(self, config):
+    def __init__(self, config, loop):
         self._config = config
+        self._loop = loop
 
     def new_bus_service(self):
         exchange_declarator = _ExchangeDeclarator(self._config['bus_exchanges'])
-        return _BusService(self._config, exchange_declarator)
+        return _BusService(self._config, self._loop, exchange_declarator)
 
 
 class _BusService(object):
 
-    def __init__(self, config, exchange_declarator):
+    def __init__(self, config, loop, exchange_declarator):
         self._host = config['bus_host']
         self._port = config['bus_port']
         self._username = config['bus_username']
         self._password = config['bus_password']
         self._exchange_declarator = exchange_declarator
+        self._loop = loop
         self._msg_callback = None
 
     def set_callback(self, msg_callback):
@@ -32,7 +34,7 @@ class _BusService(object):
 
     @asyncio.coroutine
     def connect(self):
-        self._connection = yield from asynqp.connect(self._host, self._port, self._username, self._password)
+        self._connection = yield from asynqp.connect(self._host, self._port, self._username, self._password, loop=self._loop)
         self._channel = yield from self._connection.open_channel()
         self._queue = yield from self._channel.declare_queue(exclusive=True)
         self._consumer = yield from self._queue.consume(self._msg_callback, no_ack=True)
