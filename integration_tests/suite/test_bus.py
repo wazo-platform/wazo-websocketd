@@ -52,11 +52,23 @@ class TestBus(IntegrationTest):
 
         self.assertEqual(data, self.body)
 
+    @run_with_loop
+    def test_dont_receive_message_before_start(self):
+        yield from self._prepare(skip_start=True)
+
+        try:
+            data = yield from self.websocketd_client.recv()
+        except WebSocketdTimeoutError:
+            pass
+        else:
+            raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
+
     @asyncio.coroutine
-    def _prepare(self):
+    def _prepare(self, skip_start=False):
         yield from self.bus_client.connect()
         yield from self.bus_client.declare_exchange(self.exchange_name, self.exchange_type, self.exchange_durable)
         yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
         yield from self.websocketd_client.op_bind(self.exchange_name, self.binding_key)
-        yield from self.websocketd_client.op_start()
+        if not skip_start:
+            yield from self.websocketd_client.op_start()
         self.bus_client.publish(self.exchange_name, self.routing_key, self.body)
