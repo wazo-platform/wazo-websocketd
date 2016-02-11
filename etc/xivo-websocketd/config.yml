@@ -15,6 +15,9 @@
 ## Log level.
 #log_level: info
 
+## PID file.
+#pid_file: /var/run/xivo-websocketd/xivo-websocketd.pid
+
 ## WebSocket server
 #websocket:
 #

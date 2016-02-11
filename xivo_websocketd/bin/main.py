@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from xivo import xivo_logging
+from xivo.daemonize import pidfile_context
 
 from xivo_websocketd.auth import new_authenticator
 from xivo_websocketd.bus import BusServiceFactory
@@ -25,5 +26,7 @@ def main():
     session_factory = SessionFactory(config, loop, authenticator, bus_service_factory)
     controller = Controller(config, loop, session_factory)
 
-    controller.setup()
-    controller.run()
+    # xivo-websocketd always run in "foreground", i.e. never daemonize
+    with pidfile_context(config['pid_file'], foreground=True):
+        controller.setup()
+        controller.run()

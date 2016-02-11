@@ -15,6 +15,7 @@ _DEFAULT_CONFIG = {
     'debug': False,
     'log_level': 'info',
     'log_file': '/var/log/xivo-websocketd.log',
+    'pid_file': '/var/run/xivo-websocketd/xivo-websocketd.pid',
     'foreground': False,
     'auth': {
         'host': 'localhost',
