@@ -4,13 +4,18 @@
 import argparse
 import ssl
 
-from xivo.config_helper import read_config_file_hierarchy
 from xivo.chain_map import ChainMap
+from xivo.config_helper import read_config_file_hierarchy
+from xivo.xivo_logging import get_log_level_by_name
 
 
 _DEFAULT_CONFIG = {
     'config_file': '/etc/xivo-websocketd/config.yml',
     'extra_config_files': '/etc/xivo-websocketd/conf.d/',
+    'debug': False,
+    'log_level': 'info',
+    'log_file': '/var/log/xivo-websocketd.log',
+    'foreground': False,
     'auth': {
         'host': 'localhost',
         'verify_certificate': '/usr/share/xivo-certs/server.crt',
@@ -52,12 +57,24 @@ def _parse_cli_args():
     parser.add_argument('-c',
                         '--config-file',
                         action='store',
-                        help='The path where is the config file')
+                        help="The path where is the config file")
+    parser.add_argument('-d',
+                        '--debug',
+                        action='store_true',
+                        help="Log debug messages. Overrides log_level.")
+    parser.add_argument('-f',
+                        '--foreground',
+                        action='store_true',
+                        help="Foreground, don't daemonize.")
     parsed_args = parser.parse_args()
 
     result = {}
     if parsed_args.config_file:
         result['config_file'] = parsed_args.config_file
+    if parsed_args.debug:
+        result['debug'] = parsed_args.debug
+    if parsed_args.foreground:
+        result['foreground'] = parsed_args.foreground
 
     return result
 
@@ -69,5 +86,7 @@ def _get_reinterpreted_raw_values(config):
     ssl_context.load_cert_chain(config['websocket']['certificate'], config['websocket']['private_key'])
     ssl_context.set_ciphers(config['websocket']['ciphers'])
     result['websocket']['ssl'] = ssl_context
+
+    result['log_level'] = get_log_level_by_name(config['log_level'])
 
     return result

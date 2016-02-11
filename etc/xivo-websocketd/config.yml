@@ -6,6 +6,15 @@
 ## should be.
 #extra_config_files: /etc/xivo-websocketd/conf.d
 
+## Change the log level to debug level.
+#debug: false
+
+## Log file.
+#log_file: /var/log/xivo-websocketd.log
+
+## Log level.
+#log_level: info
+
 ## WebSocket server
 #websocket:
 #

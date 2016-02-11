@@ -28,9 +28,11 @@ class Controller(object):
         self._ws_server = self._loop.run_until_complete(start_ws_server)
 
     def run(self):
+        logger.info('xivo-websocketd starting...')
         try:
             self._loop.run_forever()
         finally:
+            logger.info('xivo-websocketd stopping...')
             self._loop.close()
 
     def _exception_handler(self, loop, context):

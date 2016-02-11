@@ -16,8 +16,7 @@ from xivo_websocketd.session import SessionFactory
 def main():
     config = load_config()
 
-    logging.basicConfig(level=logging.INFO)
-
+    xivo_logging.setup_logging(config['log_file'], config['foreground'], config['debug'], config['log_level'])
     xivo_logging.silence_loggers(['requests'], logging.WARNING)
 
     loop = asyncio.get_event_loop()

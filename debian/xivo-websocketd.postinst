@@ -2,7 +2,9 @@
 
 set -e
 
+LOG_FILENAME='/var/log/xivo-websocketd.log'
 USER='xivo-websocketd'
+GROUP='www-data'
 
 case "$1" in
     configure)
@@ -11,6 +13,11 @@ case "$1" in
             adduser --system --group --quiet \
                 --home / --no-create-home "$USER"
         fi
+
+        if [ ! -e "$LOG_FILENAME" ]; then
+            touch "$LOG_FILENAME"
+        fi
+        chown "$USER:$GROUP" "$LOG_FILENAME"
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
