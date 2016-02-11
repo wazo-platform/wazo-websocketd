@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def new_authenticator(config, loop):
-    auth_client = xivo_auth_client.Client(**config['auth_config'])
+    auth_client = xivo_auth_client.Client(**config['auth'])
     websocketd_auth_client = _WebSocketdAuthClient(loop, auth_client)
     strategy_name = config['auth_check_strategy']
     if strategy_name == 'static':

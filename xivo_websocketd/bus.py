@@ -13,17 +13,17 @@ class BusServiceFactory(object):
         self._loop = loop
 
     def new_bus_service(self):
-        exchange_declarator = _ExchangeDeclarator(self._config['bus_exchanges'])
+        exchange_declarator = _ExchangeDeclarator(self._config['exchanges'])
         return _BusService(self._config, self._loop, exchange_declarator)
 
 
 class _BusService(object):
 
     def __init__(self, config, loop, exchange_declarator):
-        self._host = config['bus_host']
-        self._port = config['bus_port']
-        self._username = config['bus_username']
-        self._password = config['bus_password']
+        self._host = config['bus']['host']
+        self._port = config['bus']['port']
+        self._username = config['bus']['username']
+        self._password = config['bus']['password']
         self._exchange_declarator = exchange_declarator
         self._loop = loop
         self._msg_callback = None

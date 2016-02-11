@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class Controller(object):
 
     def __init__(self, config, loop, session_factory):
-        self._ws_host = config['ws_host']
-        self._ws_port = config['ws_port']
-        self._ws_ssl = config['ws_ssl']
+        self._ws_host = config['websocket']['listen']
+        self._ws_port = config['websocket']['port']
+        self._ws_ssl = config['websocket']['ssl']
         self._loop = loop
         self._session_factory = session_factory
 

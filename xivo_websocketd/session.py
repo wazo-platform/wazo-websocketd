@@ -54,7 +54,7 @@ class Session(object):
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
     def __init__(self, config, loop, authenticator, bus_service, session_protocol, ws, path):
-        self._ws_ping_interval = config['ws_ping_interval']
+        self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
         self._bus_service = bus_service
