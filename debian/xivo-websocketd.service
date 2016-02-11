@@ -1,5 +1,6 @@
 [Unit]
 Description=xivo-websocketd server
+ConditionPathExists=!/var/lib/xivo/disabled
 After=network.target rabbitmq-server.service xivo-auth.service
 Wants=rabbitmq-server.service xivo-auth.service
 
