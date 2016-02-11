@@ -38,6 +38,7 @@ class _WebSocketdAuthClient(object):
 
     @asyncio.coroutine
     def get_token(self, token_id):
+        logger.debug('getting token from xivo-auth')
         try:
             return (yield from self._loop.run_in_executor(None, self._auth_client.token.get, token_id, self._ACL))
         except requests.RequestException as e:
@@ -48,6 +49,7 @@ class _WebSocketdAuthClient(object):
 
     @asyncio.coroutine
     def is_valid_token(self, token_id):
+        logger.debug('checking token validity from xivo-auth')
         return (yield from self._loop.run_in_executor(None, self._auth_client.token.is_valid, token_id, self._ACL))
 
 

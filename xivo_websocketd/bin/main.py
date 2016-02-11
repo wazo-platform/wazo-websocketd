@@ -18,7 +18,7 @@ def main():
     config = load_config()
 
     xivo_logging.setup_logging(config['log_file'], config['foreground'], config['debug'], config['log_level'])
-    xivo_logging.silence_loggers(['requests'], logging.WARNING)
+    xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
 
     loop = asyncio.get_event_loop()
     authenticator = new_authenticator(config, loop)

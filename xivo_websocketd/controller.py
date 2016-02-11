@@ -38,9 +38,11 @@ class Controller(object):
     def _exception_handler(self, loop, context):
         exception = context.get('exception')
         if isinstance(exception, asynqp.exceptions.ConnectionLostError):
+            logger.warning('bus connection has been lost')
             self._session_factory.on_bus_connection_lost()
         elif isinstance(exception, asynqp.exceptions.ConnectionClosedError):
-            pass
+            # this happens when we close a bus connection
+            logger.debug('bus connection has been closed')
         else:
             loop.default_exception_handler(context)
 

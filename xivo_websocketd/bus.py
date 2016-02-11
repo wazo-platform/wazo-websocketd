@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
+import logging
 
 import asynqp
+
+logger = logging.getLogger(__name__)
 
 
 class BusServiceFactory(object):
@@ -34,6 +37,7 @@ class _BusService(object):
 
     @asyncio.coroutine
     def connect(self):
+        logger.debug('connecting to bus')
         self._connection = yield from asynqp.connect(self._host, self._port, self._username, self._password, loop=self._loop)
         self._channel = yield from self._connection.open_channel()
         self._queue = yield from self._channel.declare_queue(exclusive=True)
@@ -41,9 +45,13 @@ class _BusService(object):
 
     @asyncio.coroutine
     def close(self):
-        yield from self._consumer.cancel()
-        yield from self._channel.close()
-        yield from self._connection.close()
+        logger.debug('closing bus service')
+        try:
+            yield from self._consumer.cancel()
+            yield from self._channel.close()
+            yield from self._connection.close()
+        except Exception:
+            logger.exception('unexpected error while closing bus service')
 
     @asyncio.coroutine
     def bind(self, exchange_name, routing_key):
@@ -51,6 +59,7 @@ class _BusService(object):
         if not exchange:
             return False
 
+        logger.debug('binding to %s with key "%s"', exchange_name, routing_key)
         yield from self._queue.bind(exchange, routing_key)
         return True
 
@@ -70,6 +79,7 @@ class _ExchangeDeclarator(object):
         if not definition:
             return None
 
+        logger.debug('declaring exchange %s', exchange_name)
         exchange = yield from channel.declare_exchange(exchange_name, definition['type'],
                                                        durable=definition['durable'])
         self._declared_exchanges[exchange_name] = exchange

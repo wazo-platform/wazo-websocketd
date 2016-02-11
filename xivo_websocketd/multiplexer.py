@@ -41,6 +41,7 @@ class Multiplexer(object):
 
     @asyncio.coroutine
     def close(self):
+        logger.debug('closing multiplexer')
         for handle in self._handles:
             handle.cancel()
         for future in self._futures:
