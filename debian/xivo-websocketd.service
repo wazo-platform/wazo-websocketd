@@ -8,7 +8,7 @@ Wants=rabbitmq-server.service xivo-auth.service
 Type=simple
 User=xivo-websocketd
 Group=www-data
-PermissionStartOnly=yes
+PermissionsStartOnly=yes
 ExecStartPre=/usr/bin/install -d -o xivo-websocketd -g www-data /var/run/xivo-websocketd
 ExecStart=/usr/bin/python3 -u /usr/bin/xivo-websocketd
 

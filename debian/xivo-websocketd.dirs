@@ -1,2 +1,1 @@
 etc/xivo-websocketd/conf.d
-var/run/xivo-websocketd
