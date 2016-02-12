@@ -16,6 +16,7 @@ _DEFAULT_CONFIG = {
     'foreground': False,
     'log_level': 'info',
     'log_file': '/var/log/xivo-websocketd.log',
+    'user': 'xivo-websocketd',
     'pid_file': '/var/run/xivo-websocketd/xivo-websocketd.pid',
     'auth': {
         'host': 'localhost',
@@ -67,6 +68,10 @@ def _parse_cli_args():
                         '--foreground',
                         action='store_true',
                         help="Foreground, don't daemonize.")
+    parser.add_argument('-u',
+                        '--user',
+                        action='store',
+                        help="The owner of the process.")
     parsed_args = parser.parse_args()
 
     result = {}
@@ -76,6 +81,8 @@ def _parse_cli_args():
         result['debug'] = parsed_args.debug
     if parsed_args.foreground:
         result['foreground'] = parsed_args.foreground
+    if parsed_args.user:
+        result['user'] = parsed_args.user
 
     return result
 

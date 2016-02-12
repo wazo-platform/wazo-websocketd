@@ -4,7 +4,8 @@ ADD . /usr/src/xivo-websocketd
 ADD ./contribs/docker/certs /usr/share/xivo-certs
 ADD etc/xivo-websocketd/config.yml /etc/xivo-websocketd/
 RUN mkdir /etc/xivo-websocketd/conf.d/
-RUN mkdir /var/run/xivo-websocketd/
+RUN adduser --system --group --quiet --home / --no-create-home xivo-websocketd
+RUN install -d -o xivo-websocketd -g www-data /var/run/xivo-websocketd/
 
 WORKDIR /usr/src/xivo-websocketd
 
@@ -16,4 +17,4 @@ RUN rm -rf /usr/src/xivo-websocketd
 
 EXPOSE 9502
 
-CMD ["xivo-websocketd"]
+CMD ["xivo-websocketd", "-fd"]

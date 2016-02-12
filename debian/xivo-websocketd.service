@@ -6,12 +6,10 @@ Before=monit.service
 Wants=rabbitmq-server.service xivo-auth.service
 
 [Service]
-Type=simple
-User=xivo-websocketd
-Group=www-data
-PermissionsStartOnly=yes
+Type=forking
 ExecStartPre=/usr/bin/install -d -o xivo-websocketd -g www-data /var/run/xivo-websocketd
 ExecStart=/usr/bin/python3 -u /usr/bin/xivo-websocketd
+PIDFile=/var/run/xivo-websocketd/xivo-websocketd.pid
 
 [Install]
 WantedBy=multi-user.target
