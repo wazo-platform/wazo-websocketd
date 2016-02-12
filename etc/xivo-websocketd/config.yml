@@ -15,6 +15,9 @@
 ## Log level.
 #log_level: info
 
+## User to run process as.
+#user: xivo-websocketd
+
 ## PID file.
 #pid_file: /var/run/xivo-websocketd/xivo-websocketd.pid
 
