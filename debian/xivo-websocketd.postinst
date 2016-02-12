@@ -3,6 +3,7 @@
 set -e
 
 LOG_FILENAME='/var/log/xivo-websocketd.log'
+PID_DIR='/var/run/xivo-websocketd'
 USER='xivo-websocketd'
 GROUP='www-data'
 
@@ -18,6 +19,7 @@ case "$1" in
             touch "$LOG_FILENAME"
         fi
         chown "$USER:$GROUP" "$LOG_FILENAME"
+        chown "$USER:$GROUP" "$PID_DIR"
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
