@@ -2,6 +2,10 @@ FROM python:3.4.2
 
 ADD . /usr/src/xivo-websocketd
 ADD ./contribs/docker/certs /usr/share/xivo-certs
+ADD etc/xivo-websocketd/config.yml /etc/xivo-websocketd/
+RUN mkdir /etc/xivo-websocketd/conf.d/
+RUN mkdir /var/run/xivo-websocketd/
+
 WORKDIR /usr/src/xivo-websocketd
 
 RUN pip install -r requirements.txt
