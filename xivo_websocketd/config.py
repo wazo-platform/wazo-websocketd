@@ -13,10 +13,10 @@ _DEFAULT_CONFIG = {
     'config_file': '/etc/xivo-websocketd/config.yml',
     'extra_config_files': '/etc/xivo-websocketd/conf.d/',
     'debug': False,
+    'foreground': False,
     'log_level': 'info',
     'log_file': '/var/log/xivo-websocketd.log',
     'pid_file': '/var/run/xivo-websocketd/xivo-websocketd.pid',
-    'foreground': False,
     'auth': {
         'host': 'localhost',
         'verify_certificate': '/usr/share/xivo-certs/server.crt',
