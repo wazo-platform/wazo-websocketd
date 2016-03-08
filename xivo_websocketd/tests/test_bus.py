@@ -20,7 +20,7 @@ class TestBusEvent(unittest.TestCase):
         self.bus_msg = Mock()
 
     def test_bus_msg(self):
-        self.bus_msg.body = b'{"name": "foo", "acl": "some.acl"}'
+        self.bus_msg.body = b'{"name": "foo", "required_acl": "some.acl"}'
 
         bus_event = _decode_bus_msg(self.bus_msg)
 
@@ -36,8 +36,8 @@ class TestBusEvent(unittest.TestCase):
 
         assert_that(bus_event.has_acl, equal_to(False))
 
-    def test_bus_msg_null_acl(self):
-        self.bus_msg.body = b'{"name": "foo", "acl": null}'
+    def test_bus_msg_null_required_acl(self):
+        self.bus_msg.body = b'{"name": "foo", "required_acl": null}'
 
         bus_event = _decode_bus_msg(self.bus_msg)
 
@@ -69,8 +69,8 @@ class TestBusEvent(unittest.TestCase):
 
         self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
 
-    def test_bus_msg_wrong_acl_type(self):
-        self.bus_msg.body = b'{"name": "foo", "acl": 2}'
+    def test_bus_msg_wrong_required_acl_type(self):
+        self.bus_msg.body = b'{"name": "foo", "required_acl": 2}'
 
         self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
 

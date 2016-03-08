@@ -15,7 +15,7 @@ class TestBus(IntegrationTest):
 
     def setUp(self):
         super().setUp()
-        self.event = {'name': 'foo', 'acl': None}
+        self.event = {'name': 'foo', 'required_acl': None}
         self.subscribe_event_name = self.event['name']
 
     @run_with_loop
@@ -28,7 +28,7 @@ class TestBus(IntegrationTest):
 
     @run_with_loop
     def test_receive_message_with_matching_acl(self):
-        self.event['acl'] = 'event.foo'
+        self.event['required_acl'] = 'event.foo'
         yield from self._prepare()
 
         event = yield from self.websocketd_client.recv_msg()
@@ -44,14 +44,14 @@ class TestBus(IntegrationTest):
 
     @run_with_loop
     def test_dont_receive_message_with_no_acl_defined(self):
-        del self.event['acl']
+        del self.event['required_acl']
         yield from self._prepare()
 
         yield from self.websocketd_client.wait_for_nothing()
 
     @run_with_loop
     def test_dont_receive_message_with_non_matching_acl(self):
-        self.event['acl'] = 'token.doesnt.have.this.acl'
+        self.event['required_acl'] = 'token.doesnt.have.this.acl'
         yield from self._prepare()
 
         yield from self.websocketd_client.wait_for_nothing()
@@ -91,7 +91,7 @@ class TestRabbitMQRestart(IntegrationTest):
 
     def setUp(self):
         super().setUp()
-        self.event = {'name': 'foo', 'acl': None}
+        self.event = {'name': 'foo', 'required_acl': None}
 
     @run_with_loop
     def test_can_connect_after_rabbitmq_restart(self):

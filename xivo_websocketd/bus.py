@@ -207,11 +207,11 @@ def _decode_bus_msg(bus_msg):
     name = obj['name']
     if not isinstance(name, str):
         raise ValueError('object "name" value is not a string')
-    if 'acl' in obj:
+    if 'required_acl' in obj:
         has_acl = True
-        acl = obj['acl']
+        acl = obj['required_acl']
         if acl is not None and not isinstance(acl, str):
-            raise ValueError('object "acl" value is not a string nor null')
+            raise ValueError('object "required_acl" value is not a string nor null')
     else:
         has_acl = False
         acl = None
