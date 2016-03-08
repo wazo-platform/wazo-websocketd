@@ -126,6 +126,12 @@ class Session(object):
         self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
 
     @asyncio.coroutine
+    def _do_ws_subscribe(self, msg):
+        self._bus_event_consumer.subscribe_to_event(msg.event_name)
+        if not self._started:
+            yield from self._ws.send(self._protocol_encoder.encode_subscribe())
+
+    @asyncio.coroutine
     def _do_ws_start(self, msg):
         if self._started:
             return
