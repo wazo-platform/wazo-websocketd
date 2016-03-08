@@ -40,41 +40,18 @@ class WebSocketdClient(object):
     @asyncio.coroutine
     def connect_and_wait_for_init(self, token_id):
         yield from self.connect(token_id)
-        try:
-            yield from self.wait_for_init()
-        except Exception:
-            yield from self.close()
-            raise
+        yield from self.wait_for_init()
 
     @asyncio.coroutine
-    def recv(self, timeout=_TIMEOUT):
-        task = self._loop.create_task(self._websocket.recv())
-        yield from asyncio.wait([task], loop=self._loop, timeout=timeout)
-        if not task.done():
-            task.cancel()
-            raise WebSocketdTimeoutError('recv() did not return in {} seconds'.format(timeout))
-        return task.result()
-
-    @asyncio.coroutine
-    def recv_msg(self, timeout=_TIMEOUT):
-        raw_msg = yield from self.recv(timeout)
-        return json.loads(raw_msg)
-
-    @asyncio.coroutine
-    def _expect_msg(self, op, timeout=_TIMEOUT):
-        msg = yield from self.recv_msg(timeout)
-        if msg['op'] != op:
-            raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
-
-    @asyncio.coroutine
-    def _send_msg(self, msg):
-        yield from self._websocket.send(json.dumps(msg))
+    def connect_and_wait_for_close(self, token_id, code=None):
+        yield from self.connect(token_id)
+        yield from self.wait_for_close(code)
 
     @asyncio.coroutine
     def wait_for_close(self, code=None, timeout=_TIMEOUT):
         # close code are defined in the "constants" module
         try:
-            data = yield from self.recv(timeout)
+            data = yield from self._recv(timeout)
         except websockets.ConnectionClosed as e:
             if code is not None and e.code != code:
                 raise AssertionError('expected close code {}: got {}'.format(code, e.code))
@@ -90,11 +67,31 @@ class WebSocketdClient(object):
     def wait_for_nothing(self, timeout=_TIMEOUT):
         # Raise an exception if data is received during the next "timeout" seconds
         try:
-            data = yield from self.recv(timeout)
+            data = yield from self._recv(timeout)
         except WebSocketdTimeoutError:
             pass
         else:
             raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
+
+    @asyncio.coroutine
+    def recv_msg(self, timeout=_TIMEOUT):
+        raw_msg = yield from self._recv(timeout)
+        return json.loads(raw_msg)
+
+    @asyncio.coroutine
+    def _recv(self, timeout=_TIMEOUT):
+        task = self._loop.create_task(self._websocket.recv())
+        yield from asyncio.wait([task], loop=self._loop, timeout=timeout)
+        if not task.done():
+            task.cancel()
+            raise WebSocketdTimeoutError('recv() did not return in {} seconds'.format(timeout))
+        return task.result()
+
+    @asyncio.coroutine
+    def _expect_msg(self, op, timeout=_TIMEOUT):
+        msg = yield from self.recv_msg(timeout)
+        if msg['op'] != op:
+            raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
 
     @asyncio.coroutine
     def op_start(self):
@@ -112,17 +109,5 @@ class WebSocketdClient(object):
         yield from self._expect_msg('subscribe')
 
     @asyncio.coroutine
-    def test_connect_success(self, token_id):
-        yield from self.connect(token_id)
-        try:
-            yield from self.wait_for_init()
-        finally:
-            yield from self.close()
-
-    @asyncio.coroutine
-    def test_connect_failure(self, token_id, code=None):
-        yield from self.connect(token_id)
-        try:
-            yield from self.wait_for_close(code)
-        finally:
-            yield from self.close()
+    def _send_msg(self, msg):
+        yield from self._websocket.send(json.dumps(msg))

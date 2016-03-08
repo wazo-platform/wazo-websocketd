@@ -12,22 +12,22 @@ class TestAuthentication(IntegrationTest):
 
     @run_with_loop
     def test_no_token_closes_websocket(self):
-        yield from self.websocketd_client.test_connect_failure(None,
-                                                               CLOSE_CODE_NO_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_close(None,
+                                                                     CLOSE_CODE_NO_TOKEN_ID)
 
     @run_with_loop
     def test_valid_auth_gives_result(self):
-        yield from self.websocketd_client.test_connect_success(VALID_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
 
     @run_with_loop
     def test_invalid_auth_closes_websocket(self):
-        yield from self.websocketd_client.test_connect_failure(INVALID_TOKEN_ID,
-                                                               CLOSE_CODE_AUTH_FAILED)
+        yield from self.websocketd_client.connect_and_wait_for_close(INVALID_TOKEN_ID,
+                                                                     CLOSE_CODE_AUTH_FAILED)
 
     @run_with_loop
     def test_unauthorized_auth_closes_websocket(self):
-        yield from self.websocketd_client.test_connect_failure(UNAUTHORIZED_TOKEN_ID,
-                                                               CLOSE_CODE_AUTH_FAILED)
+        yield from self.websocketd_client.connect_and_wait_for_close(UNAUTHORIZED_TOKEN_ID,
+                                                                     CLOSE_CODE_AUTH_FAILED)
 
 
 class TestNoXivoAuth(IntegrationTest):
@@ -36,7 +36,7 @@ class TestNoXivoAuth(IntegrationTest):
 
     @run_with_loop
     def test_no_auth_server_closes_websocket(self):
-        yield from self.websocketd_client.test_connect_failure(VALID_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_close(VALID_TOKEN_ID)
 
 
 class TestTokenExpiration(IntegrationTest):
@@ -54,9 +54,6 @@ class TestTokenExpiration(IntegrationTest):
         yield from self.auth_server.put_token(self.token_id)
 
         yield from self.websocketd_client.connect_and_wait_for_init(self.token_id)
-        try:
-            yield from self.auth_server.remove_token(self.token_id)
-            yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED,
-                                                             timeout=self._TIMEOUT)
-        finally:
-            yield from self.websocketd_client.close()
+        yield from self.auth_server.remove_token(self.token_id)
+        yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED,
+                                                         timeout=self._TIMEOUT)
