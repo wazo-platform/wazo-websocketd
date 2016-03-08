@@ -31,7 +31,4 @@ class BusClient(object):
     def publish_event(self, event, routing_key=None):
         if routing_key is None:
             routing_key = event['name']
-        self.publish(json.dumps(event), routing_key)
-
-    def publish(self, body, routing_key):
-        self._exchange.publish(asynqp.Message(body), routing_key, mandatory=False)
+        self._exchange.publish(asynqp.Message(json.dumps(event)), routing_key, mandatory=False)
