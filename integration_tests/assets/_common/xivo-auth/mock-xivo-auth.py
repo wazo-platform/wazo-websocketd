@@ -15,7 +15,7 @@ valid_tokens = {
     'valid-token': {
         'token': 'valid-token',
         'auth_id': '123-456',
-        'acls': [],
+        'acls': ['event.foo'],
     }
 }
 unauthorized_tokens = [

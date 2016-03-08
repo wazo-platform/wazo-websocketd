@@ -21,6 +21,7 @@ class WebSocketdClient(object):
     def __init__(self, loop):
         self._loop = loop
         self._websocket = None
+        self._started = False
 
     @asyncio.coroutine
     def close(self):
@@ -55,6 +56,21 @@ class WebSocketdClient(object):
         return task.result()
 
     @asyncio.coroutine
+    def recv_msg(self, timeout=_TIMEOUT):
+        raw_msg = yield from self.recv(timeout)
+        return json.loads(raw_msg)
+
+    @asyncio.coroutine
+    def _expect_msg(self, op, timeout=_TIMEOUT):
+        msg = yield from self.recv_msg(timeout)
+        if msg['op'] != op:
+            raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
+
+    @asyncio.coroutine
+    def _send_msg(self, msg):
+        yield from self._websocket.send(json.dumps(msg))
+
+    @asyncio.coroutine
     def wait_for_close(self, code=None, timeout=_TIMEOUT):
         # close code are defined in the "constants" module
         try:
@@ -68,24 +84,32 @@ class WebSocketdClient(object):
 
     @asyncio.coroutine
     def wait_for_init(self, timeout=_TIMEOUT):
+        yield from self._expect_msg('init', timeout)
+
+    @asyncio.coroutine
+    def wait_for_nothing(self, timeout=_TIMEOUT):
+        # Raise an exception if data is received during the next "timeout" seconds
         try:
             data = yield from self.recv(timeout)
         except WebSocketdTimeoutError:
-            return
+            pass
         else:
-            msg = json.loads(data)
-            if msg['op'] != 'init':
-                raise AssertionError('expected op "init": got op "{}"'.format(msg['op']))
+            raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
 
     @asyncio.coroutine
     def op_start(self):
-        data = json.dumps({'op': 'start'})
-        yield from self._websocket.send(data)
-        # XXX if the connection is already started, we won't receive a reply
-        response_data = yield from self.recv()
-        response = json.loads(response_data)
-        if response['op'] != 'start':
-            raise AssertionError('expected op "start": got op "{}"'.format(response['op']))
+        yield from self._send_msg({'op': 'start'})
+        if self._started:
+            return
+        self._started = True
+        yield from self._expect_msg('start')
+
+    @asyncio.coroutine
+    def op_subscribe(self, event_name):
+        yield from self._send_msg({'op': 'subscribe', 'data': {'event_name': event_name}})
+        if self._started:
+            return
+        yield from self._expect_msg('subscribe')
 
     @asyncio.coroutine
     def test_connect_success(self, token_id):
