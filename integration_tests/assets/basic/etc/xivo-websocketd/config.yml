@@ -7,11 +7,4 @@ auth:
   verify_certificate: /usr/local/share/ssl/auth/server.crt
 
 bus:
-  username: guest
-  password: guest
   host: rabbitmq
-
-exchanges:
-  potato:
-    type: direct
-    durable: false
