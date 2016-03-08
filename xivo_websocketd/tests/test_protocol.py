@@ -6,15 +6,15 @@ import unittest
 
 from hamcrest import assert_that, equal_to
 
-from xivo_websocketd.protocol import _SessionProtocolEncoder,\
-    _SessionProtocolDecoder
+from xivo_websocketd.protocol import SessionProtocolEncoder,\
+    SessionProtocolDecoder
 from xivo_websocketd.exception import SessionProtocolError
 
 
 class TestProtocolEncoder(unittest.TestCase):
 
     def setUp(self):
-        self.encoder = _SessionProtocolEncoder()
+        self.encoder = SessionProtocolEncoder()
 
     def test_encode_init(self):
         expected = {
@@ -42,7 +42,7 @@ class TestProtocolEncoder(unittest.TestCase):
 class TestProtocolDecoder(unittest.TestCase):
 
     def setUp(self):
-        self.decoder = _SessionProtocolDecoder()
+        self.decoder = SessionProtocolDecoder()
 
     def test_decode_wrong_type(self):
         data = b'invalid'

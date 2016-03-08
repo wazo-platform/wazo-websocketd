@@ -12,6 +12,8 @@ from xivo_websocketd.auth import new_authenticator
 from xivo_websocketd.bus import BusServiceFactory
 from xivo_websocketd.config import load_config
 from xivo_websocketd.controller import Controller
+from xivo_websocketd.protocol import SessionProtocolEncoder,\
+    SessionProtocolDecoder
 from xivo_websocketd.session import SessionFactory
 
 
@@ -27,7 +29,10 @@ def main():
     loop = asyncio.get_event_loop()
     authenticator = new_authenticator(config, loop)
     bus_service_factory = BusServiceFactory(config, loop)
-    session_factory = SessionFactory(config, loop, authenticator, bus_service_factory)
+    protocol_encoder = SessionProtocolEncoder()
+    protocol_decoder = SessionProtocolDecoder()
+    session_factory = SessionFactory(config, loop, authenticator, bus_service_factory,
+                                     protocol_encoder, protocol_decoder)
     controller = Controller(config, loop, session_factory)
 
     with pidfile_context(config['pid_file'],  config['foreground']):
