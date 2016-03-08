@@ -155,8 +155,11 @@ class _BusEventDispatcher(object):
 
     def dispatch_event(self, bus_event):
         if bus_event.has_acl:
+            logger.debug('dispatching event "%s" with ACL "%s"', bus_event.name, bus_event.acl)
             for bus_event_consumer in self._bus_event_consumers:
                 bus_event_consumer._on_event(bus_event)
+        else:
+            logger.debug('not dispatching event "%s": event has no ACL', bus_event.name)
 
 
 class _BusEventConsumer(object):

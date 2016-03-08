@@ -127,6 +127,7 @@ class Session(object):
 
     @asyncio.coroutine
     def _do_ws_subscribe(self, msg):
+        logger.debug('subscribing to event "%s"', msg.event_name)
         self._bus_event_consumer.subscribe_to_event(msg.event_name)
         if not self._started:
             yield from self._ws.send(self._protocol_encoder.encode_subscribe())
@@ -144,7 +145,7 @@ class Session(object):
         if self._started:
             yield from self._ws.send(bus_event.msg_body)
         else:
-            logger.debug('not sending bus msg to websocket: session not started')
+            logger.debug('not sending bus event to websocket: session not started')
         self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
 
 
