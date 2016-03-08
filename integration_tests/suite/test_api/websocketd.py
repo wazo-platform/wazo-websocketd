@@ -78,17 +78,6 @@ class WebSocketdClient(object):
                 raise AssertionError('expected op "init": got op "{}"'.format(msg['op']))
 
     @asyncio.coroutine
-    def op_bind(self, exchange_name, routing_key):
-        data = json.dumps({'op': 'bind', 'data': {'exchange_name': exchange_name, 'routing_key': routing_key}})
-        yield from self._websocket.send(data)
-        response_data = yield from self.recv()
-        response = json.loads(response_data)
-        if response['op'] != 'bind':
-            raise AssertionError('expected op "bind": got op "{}"'.format(response['op']))
-        if response['code'] != 0:
-            raise AssertionError('error binding to {} with routing key {}'.format(exchange_name, routing_key))
-
-    @asyncio.coroutine
     def op_start(self):
         data = json.dumps({'op': 'start'})
         yield from self._websocket.send(data)
@@ -96,7 +85,7 @@ class WebSocketdClient(object):
         response_data = yield from self.recv()
         response = json.loads(response_data)
         if response['op'] != 'start':
-            raise AssertionError('expected op "bind": got op "{}"'.format(response['op']))
+            raise AssertionError('expected op "start": got op "{}"'.format(response['op']))
 
     @asyncio.coroutine
     def test_connect_success(self, token_id):

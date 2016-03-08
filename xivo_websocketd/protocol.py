@@ -51,13 +51,6 @@ class _SessionProtocol(object):
         yield from func(msg)
 
     @asyncio.coroutine
-    def _do_ws_bind(self, msg):
-        success = yield from self._bus_service.bind(msg.exchange_name, msg.routing_key)
-        if self._started:
-            return
-        yield from self._ws.send(self._encoder.encode_bind(success))
-
-    @asyncio.coroutine
     def _do_ws_start(self, msg):
         if self._started:
             return
@@ -69,15 +62,6 @@ class _SessionProtocolEncoder(object):
 
     _CODE_OK = 0
     _MSG_OK = ''
-
-    def encode_bind(self, success):
-        if success:
-            code = self._CODE_OK
-            msg = self._MSG_OK
-        else:
-            code = 1
-            msg = 'unknown exchange'
-        return self._encode('bind', code, msg)
 
     def encode_init(self):
         return self._encode('init')
@@ -113,13 +97,5 @@ class _SessionProtocolDecoder(object):
     def _decode(self, operation, deserialized_data):
         return _Message(operation)
 
-    def _decode_bind(self, operation, deserialized_data):
-        # TODO add checks so that a correct (and informative...) exception is raised
-        #      when message is invalid
-        exchange_name = deserialized_data['data']['exchange_name']
-        routing_key = deserialized_data['data']['routing_key']
-        return _BindMesage(operation, exchange_name, routing_key)
-
 
 _Message = collections.namedtuple('_Message', ['op'])
-_BindMesage = collections.namedtuple('_BindMessage', ['op', 'exchange_name', 'routing_key'])

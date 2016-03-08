@@ -16,28 +16,6 @@ class TestProtocolEncoder(unittest.TestCase):
     def setUp(self):
         self.encoder = _SessionProtocolEncoder()
 
-    def test_encode_bind_success(self):
-        expected = {
-            'op': 'bind',
-            'code': 0,
-            'msg': '',
-        }
-
-        data = self.encoder.encode_bind(True)
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_bind_no_success(self):
-        expected = {
-            'op': 'bind',
-            'code': 1,
-            'msg': 'unknown exchange',
-        }
-
-        data = self.encoder.encode_bind(False)
-
-        assert_that(json.loads(data), equal_to(expected))
-
     def test_encode_init(self):
         expected = {
             'op': 'init',
@@ -92,15 +70,6 @@ class TestProtocolDecoder(unittest.TestCase):
         msg = self.decoder.decode(data)
 
         assert_that(msg.op, equal_to('foo'))
-
-    def test_decode_bind(self):
-        data = '{"op": "bind", "data": {"exchange_name": "foo", "routing_key": "bar.*"}}'
-
-        msg = self.decoder.decode(data)
-
-        assert_that(msg.op, equal_to('bind'))
-        assert_that(msg.exchange_name, equal_to('foo'))
-        assert_that(msg.routing_key, equal_to('bar.*'))
 
     def test_decode_start(self):
         data = '{"op": "start"}'
