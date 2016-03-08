@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 class Controller(object):
 
-    def __init__(self, config, loop, session_factory):
+    def __init__(self, config, loop, bus_event_service, session_factory):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']
         self._ws_ssl = config['websocket']['ssl']
         self._loop = loop
+        self._bus_event_service = bus_event_service
         self._session_factory = session_factory
 
     def setup(self):
@@ -32,14 +33,14 @@ class Controller(object):
         try:
             self._loop.run_forever()
         finally:
-            logger.info('xivo-websocketd stopping...')
+            logger.info('xivo-websocketd stopped')
             self._loop.close()
 
     def _exception_handler(self, loop, context):
         exception = context.get('exception')
         if isinstance(exception, asynqp.exceptions.ConnectionLostError):
             logger.warning('bus connection has been lost')
-            self._session_factory.on_bus_connection_lost()
+            self._bus_event_service.on_connection_lost()
         elif isinstance(exception, asynqp.exceptions.ConnectionClosedError):
             # this happens when we close a bus connection
             logger.debug('bus connection has been closed')
@@ -47,10 +48,12 @@ class Controller(object):
             loop.default_exception_handler(context)
 
     def _stop(self):
+        logger.info('xivo-websocketd stopping...')
         self._ws_server.close()
-        self._loop.create_task(self._wait_closed())
+        self._loop.create_task(self._coro_stop())
 
     @asyncio.coroutine
-    def _wait_closed(self):
+    def _coro_stop(self):
         yield from self._ws_server.wait_closed()
+        yield from self._bus_event_service.close()
         self._loop.stop()

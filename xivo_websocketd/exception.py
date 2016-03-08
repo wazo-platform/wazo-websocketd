@@ -18,5 +18,9 @@ class SessionProtocolError(Exception):
     pass
 
 
-class BusConnectionLostError(Exception):
+class BusConnectionError(Exception):
+    pass
+
+
+class BusConnectionLostError(BusConnectionError):
     pass
