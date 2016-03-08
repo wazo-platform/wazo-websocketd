@@ -18,6 +18,9 @@ class SessionProtocolEncoder(object):
     def encode_init(self):
         return self._encode('init')
 
+    def encode_subscribe(self):
+        return self._encode('subscribe')
+
     def encode_start(self):
         return self._encode('start')
 
@@ -49,5 +52,18 @@ class SessionProtocolDecoder(object):
     def _decode(self, operation, deserialized_data):
         return _Message(operation)
 
+    def _decode_subscribe(self, operation, deserialized_data):
+        if 'data' not in deserialized_data:
+            raise SessionProtocolError('object is missing required "data" key')
+        if not isinstance(deserialized_data['data'], dict):
+            raise SessionProtocolError('object "data" value is not an object')
+        if 'event_name' not in deserialized_data['data']:
+            raise SessionProtocolError('object "data" is missing required "event_name" key')
+        event_name = deserialized_data['data']['event_name']
+        if not isinstance(event_name, str):
+            raise SessionProtocolError('object data "event_name" value is not a string')
+        return _SubscribeMessage(operation, event_name)
+
 
 _Message = collections.namedtuple('_Message', ['op'])
+_SubscribeMessage = collections.namedtuple('_SubscribeMessage', ['op', 'event_name'])

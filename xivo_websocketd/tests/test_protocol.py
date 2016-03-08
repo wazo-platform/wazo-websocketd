@@ -27,6 +27,17 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
+    def test_encode_subscribe(self):
+        expected = {
+            'op': 'subscribe',
+            'code': 0,
+            'msg': '',
+        }
+
+        data = self.encoder.encode_subscribe()
+
+        assert_that(json.loads(data), equal_to(expected))
+
     def test_encode_start(self):
         expected = {
             'op': 'start',
@@ -70,6 +81,34 @@ class TestProtocolDecoder(unittest.TestCase):
         msg = self.decoder.decode(data)
 
         assert_that(msg.op, equal_to('foo'))
+
+    def test_decode_subscribe(self):
+        data = '{"op": "subscribe", "data": {"event_name": "foo"}}'
+
+        msg = self.decoder.decode(data)
+
+        assert_that(msg.op, equal_to('subscribe'))
+        assert_that(msg.event_name, equal_to('foo'))
+
+    def test_decode_subscribe_missing_data_key(self):
+        data = '{"op": "subscribe"}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_invalid_data_type(self):
+        data = '{"op": "subscribe", "data": 2}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_missing_event_name_key(self):
+        data = '{"op": "subscribe", "data": {}}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_invalid_event_name_type(self):
+        data = '{"op": "subscribe", "data": {"event_name": 1}}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
 
     def test_decode_start(self):
         data = '{"op": "start"}'
