@@ -14,7 +14,7 @@ class WebSocketdTimeoutError(Exception):
 
 class WebSocketdClient(object):
 
-    _TIMEOUT = 5
+    _DEFAULT_TIMEOUT = 5
     _SSL_CONTEXT = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     _SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
@@ -22,6 +22,7 @@ class WebSocketdClient(object):
         self._loop = loop
         self._websocket = None
         self._started = False
+        self.timeout = self._DEFAULT_TIMEOUT
 
     @asyncio.coroutine
     def close(self):
@@ -48,10 +49,10 @@ class WebSocketdClient(object):
         yield from self.wait_for_close(code)
 
     @asyncio.coroutine
-    def wait_for_close(self, code=None, timeout=_TIMEOUT):
+    def wait_for_close(self, code=None):
         # close code are defined in the "constants" module
         try:
-            data = yield from self._recv(timeout)
+            data = yield from self._recv()
         except websockets.ConnectionClosed as e:
             if code is not None and e.code != code:
                 raise AssertionError('expected close code {}: got {}'.format(code, e.code))
@@ -60,26 +61,27 @@ class WebSocketdClient(object):
             raise AssertionError('got unexpected data: {!r}'.format(data))
 
     @asyncio.coroutine
-    def wait_for_init(self, timeout=_TIMEOUT):
-        yield from self._expect_msg('init', timeout)
+    def wait_for_init(self):
+        yield from self._expect_msg('init')
 
     @asyncio.coroutine
-    def wait_for_nothing(self, timeout=_TIMEOUT):
-        # Raise an exception if data is received during the next "timeout" seconds
+    def wait_for_nothing(self):
+        # Raise an exception if data is received during the next "self.timeout" seconds
         try:
-            data = yield from self._recv(timeout)
+            data = yield from self._recv()
         except WebSocketdTimeoutError:
             pass
         else:
             raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
 
     @asyncio.coroutine
-    def recv_msg(self, timeout=_TIMEOUT):
-        raw_msg = yield from self._recv(timeout)
+    def recv_msg(self):
+        raw_msg = yield from self._recv()
         return json.loads(raw_msg)
 
     @asyncio.coroutine
-    def _recv(self, timeout=_TIMEOUT):
+    def _recv(self):
+        timeout = self.timeout
         task = self._loop.create_task(self._websocket.recv())
         yield from asyncio.wait([task], loop=self._loop, timeout=timeout)
         if not task.done():
@@ -88,8 +90,8 @@ class WebSocketdClient(object):
         return task.result()
 
     @asyncio.coroutine
-    def _expect_msg(self, op, timeout=_TIMEOUT):
-        msg = yield from self.recv_msg(timeout)
+    def _expect_msg(self, op):
+        msg = yield from self.recv_msg()
         if msg['op'] != op:
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
 

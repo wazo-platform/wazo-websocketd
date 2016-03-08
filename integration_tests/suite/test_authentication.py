@@ -55,5 +55,5 @@ class TestTokenExpiration(IntegrationTest):
 
         yield from self.websocketd_client.connect_and_wait_for_init(self.token_id)
         yield from self.auth_server.remove_token(self.token_id)
-        yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED,
-                                                         timeout=self._TIMEOUT)
+        self.websocketd_client.timeout = self._TIMEOUT
+        yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
