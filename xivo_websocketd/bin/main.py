@@ -31,7 +31,7 @@ def main():
     bus_event_service = new_bus_event_service(config, loop)
     protocol_encoder = SessionProtocolEncoder()
     protocol_decoder = SessionProtocolDecoder()
-    session_factory = SessionFactory(config, loop, authenticator, bus_service_factory,
+    session_factory = SessionFactory(config, loop, authenticator, bus_event_service,
                                      protocol_encoder, protocol_decoder)
     controller = Controller(config, loop, bus_event_service, session_factory)
 

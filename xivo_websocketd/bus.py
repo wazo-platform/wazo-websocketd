@@ -106,10 +106,11 @@ class _BusEventService(object):
         self._bus_event_dispatcher.dispatch_connection_lost()
 
     def _on_msg_received(self, bus_msg):
+        logger.debug('bus message received')
         try:
             bus_event = _decode_bus_msg(bus_msg)
-        except ValueError:
-            logger.debug('ignoring bus message: not a bus event')
+        except ValueError as e:
+            logger.debug('ignoring bus message: not a bus event: %s', e)
         else:
             self._bus_event_dispatcher.dispatch_event(bus_event)
 
