@@ -113,7 +113,7 @@ class TestRabbitMQRestart(IntegrationTest):
     @asyncio.coroutine
     def _try_connect(self):
         # might not work on the first try since rabbitmq might not be ready
-        for _ in range(5):
+        for _ in range(10):
             try:
                 yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
             except websockets.ConnectionClosed:
