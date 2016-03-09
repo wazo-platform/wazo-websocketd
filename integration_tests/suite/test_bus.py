@@ -3,9 +3,10 @@
 
 import asyncio
 
+import websockets
+
 from .test_api.base import IntegrationTest, run_with_loop
 from .test_api.constants import VALID_TOKEN_ID
-from .test_api.websocketd import WebSocketdTimeoutError
 
 
 class TestBus(IntegrationTest):
@@ -14,61 +15,108 @@ class TestBus(IntegrationTest):
 
     def setUp(self):
         super().setUp()
-        self.exchange_name = 'xivo'
-        self.exchange_type = 'topic'
-        self.exchange_durable = True
-        self.binding_key = 'foo'
-        self.routing_key = self.binding_key
-        self.body = 'hello'
+        self.event = {'name': 'foo', 'required_acl': None}
+        self.subscribe_event_name = self.event['name']
 
     @run_with_loop
-    def test_receive_message_with_matching_routing_key(self):
+    def test_receive_message_with_matching_event_name(self):
         yield from self._prepare()
 
-        data = yield from self.websocketd_client.recv()
+        event = yield from self.websocketd_client.recv_msg()
 
-        self.assertEqual(data, self.body)
+        self.assertEqual(event, self.event)
 
     @run_with_loop
-    def test_dont_receive_message_with_non_matching_routing_key(self):
-        self.routing_key = 'bar'
+    def test_receive_message_with_matching_acl(self):
+        self.event['required_acl'] = 'event.foo'
         yield from self._prepare()
 
-        try:
-            data = yield from self.websocketd_client.recv()
-        except WebSocketdTimeoutError:
-            pass
-        else:
-            raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
+        event = yield from self.websocketd_client.recv_msg()
+
+        self.assertEqual(event, self.event)
 
     @run_with_loop
-    def test_receive_message_on_another_configured_exchange(self):
-        self.exchange_name = 'potato'
-        self.exchange_type = 'direct'
-        self.exchange_durable = False
+    def test_dont_receive_message_with_non_matching_event_name(self):
+        self.subscribe_event_name = 'bar'
         yield from self._prepare()
 
-        data = yield from self.websocketd_client.recv()
+        yield from self.websocketd_client.wait_for_nothing()
 
-        self.assertEqual(data, self.body)
+    @run_with_loop
+    def test_dont_receive_message_with_no_acl_defined(self):
+        del self.event['required_acl']
+        yield from self._prepare()
+
+        yield from self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    def test_dont_receive_message_with_non_matching_acl(self):
+        self.event['required_acl'] = 'token.doesnt.have.this.acl'
+        yield from self._prepare()
+
+        yield from self.websocketd_client.wait_for_nothing()
 
     @run_with_loop
     def test_dont_receive_message_before_start(self):
         yield from self._prepare(skip_start=True)
 
-        try:
-            data = yield from self.websocketd_client.recv()
-        except WebSocketdTimeoutError:
-            pass
-        else:
-            raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
+        yield from self.websocketd_client.wait_for_nothing()
 
     @asyncio.coroutine
     def _prepare(self, skip_start=False):
         yield from self.bus_client.connect()
-        yield from self.bus_client.declare_exchange(self.exchange_name, self.exchange_type, self.exchange_durable)
         yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
-        yield from self.websocketd_client.op_bind(self.exchange_name, self.binding_key)
         if not skip_start:
             yield from self.websocketd_client.op_start()
-        self.bus_client.publish(self.exchange_name, self.routing_key, self.body)
+        yield from self.websocketd_client.op_subscribe(self.subscribe_event_name)
+        self.bus_client.publish_event(self.event)
+
+
+class TestBusConnectionLost(IntegrationTest):
+
+    asset = 'basic'
+
+    @run_with_loop
+    def test_ws_connection_is_closed_when_bus_connection_is_lost(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        yield from self.websocketd_client.op_subscribe('foo')
+        self.stop_service('rabbitmq')
+
+        yield from self.websocketd_client.wait_for_close(code=1011)
+
+
+class TestRabbitMQRestart(IntegrationTest):
+
+    asset = 'basic'
+
+    def setUp(self):
+        super().setUp()
+        self.event = {'name': 'foo', 'required_acl': None}
+
+    @run_with_loop
+    def test_can_connect_after_rabbitmq_restart(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        yield from self.websocketd_client.op_subscribe('foo')
+        self.restart_service('rabbitmq')
+        yield from self.websocketd_client.wait_for_close(code=1011)
+        yield from self.websocketd_client.close()
+        yield from self._try_connect()
+        yield from self.websocketd_client.op_subscribe('foo')
+        yield from self.websocketd_client.op_start()
+        yield from self.bus_client.connect()
+        self.bus_client.publish_event(self.event)
+
+        event = yield from self.websocketd_client.recv_msg()
+
+        self.assertEqual(event, self.event)
+
+    @asyncio.coroutine
+    def _try_connect(self):
+        # might not work on the first try since rabbitmq might not be ready
+        for _ in range(5):
+            try:
+                yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+            except websockets.ConnectionClosed:
+                yield from asyncio.sleep(1, loop=self.loop)
+            else:
+                return

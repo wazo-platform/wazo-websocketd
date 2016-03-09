@@ -10,39 +10,30 @@ import websockets
 
 from xivo_websocketd.exception import AuthenticationError,\
     NoTokenError, SessionProtocolError, BusConnectionLostError,\
-    AuthenticationExpiredError
+    AuthenticationExpiredError, BusConnectionError
 from xivo_websocketd.multiplexer import Multiplexer
-from xivo_websocketd.protocol import SessionProtocolFactory
 
 logger = logging.getLogger(__name__)
 
 
 class SessionFactory(object):
 
-    def __init__(self, config, loop, authenticator, bus_service_factory):
+    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder):
         self._config = config
         self._loop = loop
         self._authenticator = authenticator
-        self._bus_service_factory = bus_service_factory
-        self._session_protocol_factory = SessionProtocolFactory()
-        self._sessions = []
-
-    def on_bus_connection_lost(self):
-        for session in self._sessions:
-            session.on_bus_connection_lost()
+        self._bus_event_service = bus_event_service
+        self._protocol_encoder = protocol_encoder
+        self._protocol_decoder = protocol_decoder
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
         logger.info('websocket connection accepted %s', ws.remote_address)
-        bus_service = self._bus_service_factory.new_bus_service()
-        session_protocol = self._session_protocol_factory.new_session_protocol(bus_service, ws)
-        session = Session(self._config, self._loop, self._authenticator, bus_service,
-                          session_protocol, ws, path)
-        self._sessions.append(session)
+        session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
+                          self._protocol_encoder, self._protocol_decoder, ws, path)
         try:
             yield from session.run()
         finally:
-            self._sessions.remove(session)
             logger.info('websocket session terminated %s', ws.remote_address)
 
 
@@ -53,17 +44,17 @@ class Session(object):
     _CLOSE_CODE_AUTH_EXPIRED = 4003
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
-    def __init__(self, config, loop, authenticator, bus_service, session_protocol, ws, path):
+    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder, ws, path):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
-        self._bus_service = bus_service
-        self._bus_service.set_callback(self.on_bus_msg_received)
-        self._session_protocol = session_protocol
+        self._bus_event_service = bus_event_service
+        self._protocol_encoder = protocol_encoder
+        self._protocol_decoder = protocol_decoder
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
-        self._bus_connection_lost = False
+        self._started = False
 
     @asyncio.coroutine
     def run(self):
@@ -84,6 +75,9 @@ class Session(object):
         except BusConnectionLostError:
             logger.info('closing websocket connection: bus connection lost')
             yield from self._ws.close(1011, 'bus connection lost')
+        except BusConnectionError:
+            logger.info('closing websocket connection: bus connection error')
+            yield from self._ws.close(1011, 'bus connection error')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info('websocket connection closed with code %s', e.code)
@@ -95,19 +89,18 @@ class Session(object):
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
         token = yield from self._authenticator.get_token(token_id)
-        yield from self._bus_service.connect()
+        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(token)
+
         try:
-            yield from self._session_protocol.on_init_completed()
+            yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
             self._multiplexer.call_when_done(self._authenticator.run_check(token), self._on_authenticator_check)
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
+            self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
             yield from self._multiplexer.run()
         finally:
-            # only close bus_service if connection has not been lost, otherwise it hangs the coroutine
-            # XXX this logic of "closing if no exception happened" could be moved inside the bus module
-            if not self._bus_connection_lost:
-                yield from self._bus_service.close()
+            self._bus_event_consumer.close()
             yield from self._multiplexer.close()
 
     @asyncio.coroutine
@@ -124,21 +117,36 @@ class Session(object):
     @asyncio.coroutine
     def _on_ws_recv(self, future):
         data = future.result()
-        yield from self._session_protocol.on_ws_data_received(data)
+        msg = self._protocol_decoder.decode(data)
+        func_name = '_do_ws_{}'.format(msg.op)
+        func = getattr(self, func_name, None)
+        if func is None:
+            raise SessionProtocolError('unknown operation "{}"'.format(msg.op))
+        yield from func(msg)
         self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
 
-    def on_bus_connection_lost(self):
-        # This might be called multiple time, since when having multiple
-        # connections with asynqp, it's not possible to distinguish which
-        # one was closed
-        if self._bus_connection_lost:
+    @asyncio.coroutine
+    def _do_ws_subscribe(self, msg):
+        logger.debug('subscribing to event "%s"', msg.event_name)
+        self._bus_event_consumer.subscribe_to_event(msg.event_name)
+        if not self._started:
+            yield from self._ws.send(self._protocol_encoder.encode_subscribe())
+
+    @asyncio.coroutine
+    def _do_ws_start(self, msg):
+        if self._started:
             return
+        self._started = True
+        yield from self._ws.send(self._protocol_encoder.encode_start())
 
-        self._bus_connection_lost = True
-        self._multiplexer.raise_exception(BusConnectionLostError())
-
-    def on_bus_msg_received(self, msg):
-        self._multiplexer.call_soon(self._session_protocol.on_bus_msg_received, msg)
+    @asyncio.coroutine
+    def _on_bus_event(self, future):
+        bus_event = future.result()
+        if self._started:
+            yield from self._ws.send(bus_event.msg_body)
+        else:
+            logger.debug('not sending bus event to websocket: session not started')
+        self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
 
 
 def _extract_token_id(ws, path):

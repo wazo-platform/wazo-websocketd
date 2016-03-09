@@ -1,7 +1,6 @@
 # Copyright 2016 Avencall
 # SPDX-License-Identifier: GPL-3.0+
 
-import asyncio
 import collections
 import json
 import logging
@@ -11,76 +10,16 @@ from xivo_websocketd.exception import SessionProtocolError
 logger = logging.getLogger(__name__)
 
 
-class SessionProtocolFactory(object):
-
-    def __init__(self):
-        self._encoder = _SessionProtocolEncoder()
-        self._decoder = _SessionProtocolDecoder()
-
-    def new_session_protocol(self, bus_service, ws):
-        return _SessionProtocol(bus_service, ws, self._encoder, self._decoder)
-
-
-class _SessionProtocol(object):
-
-    def __init__(self, bus_service, ws, encoder, decoder):
-        self._bus_service = bus_service
-        self._ws = ws
-        self._encoder = encoder
-        self._decoder = decoder
-        self._started = False
-
-    @asyncio.coroutine
-    def on_init_completed(self):
-        yield from self._ws.send(self._encoder.encode_init())
-
-    @asyncio.coroutine
-    def on_bus_msg_received(self, msg):
-        if self._started:
-            yield from self._ws.send(msg.body.decode('utf-8'))
-        else:
-            logger.debug('not sending bus msg to websocket: session not started')
-
-    @asyncio.coroutine
-    def on_ws_data_received(self, data):
-        msg = self._decoder.decode(data)
-        func_name = '_do_ws_{}'.format(msg.op)
-        func = getattr(self, func_name, None)
-        if func is None:
-            raise SessionProtocolError('unknown operation "{}"'.format(msg.op))
-        yield from func(msg)
-
-    @asyncio.coroutine
-    def _do_ws_bind(self, msg):
-        success = yield from self._bus_service.bind(msg.exchange_name, msg.routing_key)
-        if self._started:
-            return
-        yield from self._ws.send(self._encoder.encode_bind(success))
-
-    @asyncio.coroutine
-    def _do_ws_start(self, msg):
-        if self._started:
-            return
-        self._started = True
-        yield from self._ws.send(self._encoder.encode_start())
-
-
-class _SessionProtocolEncoder(object):
+class SessionProtocolEncoder(object):
 
     _CODE_OK = 0
     _MSG_OK = ''
 
-    def encode_bind(self, success):
-        if success:
-            code = self._CODE_OK
-            msg = self._MSG_OK
-        else:
-            code = 1
-            msg = 'unknown exchange'
-        return self._encode('bind', code, msg)
-
     def encode_init(self):
         return self._encode('init')
+
+    def encode_subscribe(self):
+        return self._encode('subscribe')
 
     def encode_start(self):
         return self._encode('start')
@@ -89,7 +28,7 @@ class _SessionProtocolEncoder(object):
         return json.dumps({'op': operation, 'code': code, 'msg': msg})
 
 
-class _SessionProtocolDecoder(object):
+class SessionProtocolDecoder(object):
 
     def decode(self, data):
         if not isinstance(data, str):
@@ -113,13 +52,18 @@ class _SessionProtocolDecoder(object):
     def _decode(self, operation, deserialized_data):
         return _Message(operation)
 
-    def _decode_bind(self, operation, deserialized_data):
-        # TODO add checks so that a correct (and informative...) exception is raised
-        #      when message is invalid
-        exchange_name = deserialized_data['data']['exchange_name']
-        routing_key = deserialized_data['data']['routing_key']
-        return _BindMesage(operation, exchange_name, routing_key)
+    def _decode_subscribe(self, operation, deserialized_data):
+        if 'data' not in deserialized_data:
+            raise SessionProtocolError('object is missing required "data" key')
+        if not isinstance(deserialized_data['data'], dict):
+            raise SessionProtocolError('object "data" value is not an object')
+        if 'event_name' not in deserialized_data['data']:
+            raise SessionProtocolError('object "data" is missing required "event_name" key')
+        event_name = deserialized_data['data']['event_name']
+        if not isinstance(event_name, str):
+            raise SessionProtocolError('object data "event_name" value is not a string')
+        return _SubscribeMessage(operation, event_name)
 
 
 _Message = collections.namedtuple('_Message', ['op'])
-_BindMesage = collections.namedtuple('_BindMessage', ['op', 'exchange_name', 'routing_key'])
+_SubscribeMessage = collections.namedtuple('_SubscribeMessage', ['op', 'event_name'])

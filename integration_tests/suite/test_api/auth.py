@@ -19,12 +19,16 @@ class AuthServer(object):
         disable_warnings()
 
     @asyncio.coroutine
-    def put_token(self, token_id):
-        return (yield from self._loop.run_in_executor(None, self._sync_put_token, token_id))
+    def put_token(self, token_id, auth_id='123-456', acls=[]):
+        token = {
+            'token': token_id,
+            'auth_id': auth_id,
+            'acls': acls,
+        }
+        return (yield from self._loop.run_in_executor(None, self._sync_put_token, token))
 
-    def _sync_put_token(self, token_id):
-        url = '{}/token/{}'.format(self._base_url, token_id)
-        token = {'token': token_id}
+    def _sync_put_token(self, token):
+        url = '{}/token/{}'.format(self._base_url, token['token'])
         headers = {'Content-Type': 'application/json'}
         r = self._session.put(url, headers=headers, data=json.dumps(token))
         if r.status_code != 204:

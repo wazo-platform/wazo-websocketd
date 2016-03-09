@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
+import json
 
 import asynqp
 
@@ -11,12 +12,13 @@ class BusClient(object):
     def __init__(self, loop):
         self._loop = loop
         self._connection = None
-        self._exchanges = {}
+        self._exchange = None
 
     @asyncio.coroutine
     def connect(self):
         self._connection = yield from asynqp.connect('localhost', loop=self._loop)
         self._channel = yield from self._connection.open_channel()
+        self._exchange = yield from self._channel.declare_exchange('xivo', 'topic', durable=True)
 
     @asyncio.coroutine
     def close(self):
@@ -26,14 +28,7 @@ class BusClient(object):
             self._channel = None
             self._connection = None
 
-    @asyncio.coroutine
-    def declare_exchange(self, name, type_, durable=False):
-        if name in self._exchanges:
-            return
-        exchange = yield from self._channel.declare_exchange(name, type_, durable=durable)
-        self._exchanges[name] = exchange
-
-    def publish(self, exchange_name, routing_key, body):
-        msg = asynqp.Message(body)
-        exchange = self._exchanges[exchange_name]
-        exchange.publish(msg, routing_key, mandatory=False)
+    def publish_event(self, event, routing_key=None):
+        if routing_key is None:
+            routing_key = event['name']
+        self._exchange.publish(asynqp.Message(json.dumps(event)), routing_key, mandatory=False)

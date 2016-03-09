@@ -29,12 +29,8 @@ _DEFAULT_CONFIG = {
         'port': 5672,
         'username': 'guest',
         'password': 'guest',
-    },
-    'exchanges': {
-        'xivo': {
-            'type': 'topic',
-            'durable': True,
-        },
+        'exchange_name': 'xivo',
+        'exchange_type': 'topic',
     },
     'websocket': {
         'listen': '0.0.0.0',

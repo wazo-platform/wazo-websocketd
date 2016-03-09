@@ -47,14 +47,8 @@
 #  port: 5672
 #  username: guest
 #  password: guest
-
-## Exchanges definitions. WebSockets clients will be able to bind to
-## any exchange defined here. The "xivo" exchange is always defined
-## and there's no way to disable it currently.
-#exchanges:
-#  xivo:
-#    type: topic
-#    durable: true
+#  exchange_name: xivo
+#  exchange_type: topic
 
 ## Developer options -- do not use them
 #auth_check_strategy: static

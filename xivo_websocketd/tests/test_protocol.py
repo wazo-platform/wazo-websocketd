@@ -6,37 +6,15 @@ import unittest
 
 from hamcrest import assert_that, equal_to
 
-from xivo_websocketd.protocol import _SessionProtocolEncoder,\
-    _SessionProtocolDecoder
+from xivo_websocketd.protocol import SessionProtocolEncoder,\
+    SessionProtocolDecoder
 from xivo_websocketd.exception import SessionProtocolError
 
 
 class TestProtocolEncoder(unittest.TestCase):
 
     def setUp(self):
-        self.encoder = _SessionProtocolEncoder()
-
-    def test_encode_bind_success(self):
-        expected = {
-            'op': 'bind',
-            'code': 0,
-            'msg': '',
-        }
-
-        data = self.encoder.encode_bind(True)
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_bind_no_success(self):
-        expected = {
-            'op': 'bind',
-            'code': 1,
-            'msg': 'unknown exchange',
-        }
-
-        data = self.encoder.encode_bind(False)
-
-        assert_that(json.loads(data), equal_to(expected))
+        self.encoder = SessionProtocolEncoder()
 
     def test_encode_init(self):
         expected = {
@@ -46,6 +24,17 @@ class TestProtocolEncoder(unittest.TestCase):
         }
 
         data = self.encoder.encode_init()
+
+        assert_that(json.loads(data), equal_to(expected))
+
+    def test_encode_subscribe(self):
+        expected = {
+            'op': 'subscribe',
+            'code': 0,
+            'msg': '',
+        }
+
+        data = self.encoder.encode_subscribe()
 
         assert_that(json.loads(data), equal_to(expected))
 
@@ -64,7 +53,7 @@ class TestProtocolEncoder(unittest.TestCase):
 class TestProtocolDecoder(unittest.TestCase):
 
     def setUp(self):
-        self.decoder = _SessionProtocolDecoder()
+        self.decoder = SessionProtocolDecoder()
 
     def test_decode_wrong_type(self):
         data = b'invalid'
@@ -93,14 +82,33 @@ class TestProtocolDecoder(unittest.TestCase):
 
         assert_that(msg.op, equal_to('foo'))
 
-    def test_decode_bind(self):
-        data = '{"op": "bind", "data": {"exchange_name": "foo", "routing_key": "bar.*"}}'
+    def test_decode_subscribe(self):
+        data = '{"op": "subscribe", "data": {"event_name": "foo"}}'
 
         msg = self.decoder.decode(data)
 
-        assert_that(msg.op, equal_to('bind'))
-        assert_that(msg.exchange_name, equal_to('foo'))
-        assert_that(msg.routing_key, equal_to('bar.*'))
+        assert_that(msg.op, equal_to('subscribe'))
+        assert_that(msg.event_name, equal_to('foo'))
+
+    def test_decode_subscribe_missing_data_key(self):
+        data = '{"op": "subscribe"}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_invalid_data_type(self):
+        data = '{"op": "subscribe", "data": 2}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_missing_event_name_key(self):
+        data = '{"op": "subscribe", "data": {}}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
+
+    def test_decode_subscribe_invalid_event_name_type(self):
+        data = '{"op": "subscribe", "data": {"event_name": 1}}'
+
+        self.assertRaises(SessionProtocolError, self.decoder.decode, data)
 
     def test_decode_start(self):
         data = '{"op": "start"}'

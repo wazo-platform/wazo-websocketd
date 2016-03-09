@@ -14,6 +14,8 @@ context = ('/usr/local/share/ssl/auth/server.crt', '/usr/local/share/ssl/auth/se
 valid_tokens = {
     'valid-token': {
         'token': 'valid-token',
+        'auth_id': '123-456',
+        'acls': ['event.foo'],
     }
 }
 unauthorized_tokens = [
