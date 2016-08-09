@@ -12,6 +12,7 @@ Architecture: all
 Depends:
  ${python3:Depends},
  ${misc:Depends},
+ adduser,
  python3-asynqp,
  python3-websockets,
  python3-yaml,

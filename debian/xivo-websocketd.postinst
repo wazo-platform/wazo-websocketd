@@ -8,13 +8,19 @@ GROUP='www-data'
 
 case "$1" in
     configure)
-        if ! getent passwd "$USER" > /dev/null; then
-            echo "Adding system user for $USER" 1>&2
-            adduser --system --group --quiet \
-                --home / --no-create-home "$USER"
+        # add/update user
+        if ! getent passwd $USER > /dev/null; then
+            echo "Adding system user $USER" 1>&2
+            adduser --quiet --system --group --no-create-home \
+                    --home /var/lib/xivo-websocketd \
+                    $USER
+        else
+            if dpkg --compare-versions "$2" lt '16.12~'; then
+                usermod --home /var/lib/xivo-websocketd $USER
+            fi
         fi
 
-        usermod -G www-data xivo-websocketd
+        adduser --quiet $USER www-data
 
         if [ ! -e "$LOG_FILENAME" ]; then
             touch "$LOG_FILENAME"
