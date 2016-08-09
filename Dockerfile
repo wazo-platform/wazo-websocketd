@@ -4,7 +4,7 @@ ADD . /usr/src/xivo-websocketd
 ADD ./contribs/docker/certs /usr/share/xivo-certs
 ADD etc/xivo-websocketd/config.yml /etc/xivo-websocketd/
 RUN mkdir /etc/xivo-websocketd/conf.d/
-RUN adduser --system --group --quiet --home / --no-create-home xivo-websocketd
+RUN adduser --quiet --system --group --no-create-home --home /var/lib/xivo-websocketd xivo-websocketd
 RUN install -d -o xivo-websocketd -g www-data /var/run/xivo-websocketd/
 
 WORKDIR /usr/src/xivo-websocketd
