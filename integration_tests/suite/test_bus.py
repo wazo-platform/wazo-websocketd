@@ -69,6 +69,7 @@ class TestBus(IntegrationTest):
         if not skip_start:
             yield from self.websocketd_client.op_start()
         yield from self.websocketd_client.op_subscribe(self.subscribe_event_name)
+        yield from asyncio.sleep(1, loop=self.loop)
         self.bus_client.publish_event(self.event)
 
 
