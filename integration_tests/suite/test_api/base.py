@@ -6,7 +6,7 @@ import functools
 
 import asynqp
 
-from xivo_test_helpers.asset_launching_test_case import AssetLaunchingTestCase
+from xivo_test_helpers import asset_launching_test_case
 
 from .auth import AuthServer
 from .bus import BusClient
@@ -14,7 +14,7 @@ from .constants import ASSET_ROOT
 from .websocketd import WebSocketdClient
 
 
-class IntegrationTest(AssetLaunchingTestCase):
+class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
 
     assets_root = ASSET_ROOT
     service = 'websocketd'
@@ -29,9 +29,9 @@ class IntegrationTest(AssetLaunchingTestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.__exception_handler)
-        self.websocketd_client = WebSocketdClient(self.loop)
-        self.auth_server = AuthServer(self.loop)
-        self.bus_client = BusClient(self.loop)
+        self.websocketd_client = self.new_websocketd_client()
+        self.auth_server = self.new_auth_server()
+        self.bus_client = self.new_bus_client()
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())
@@ -46,6 +46,21 @@ class IntegrationTest(AssetLaunchingTestCase):
             print('debug: got asynqp ConnectionClosedError')
         else:
             loop.default_exception_handler(context)
+
+    def new_websocketd_client(self):
+        websocketd_port = self.service_port(9502, 'websocketd')
+        return WebSocketdClient(self.loop, websocketd_port)
+
+    def new_auth_server(self):
+        try:
+            auth_port = self.service_port(9497, 'auth')
+        except (asset_launching_test_case.NoSuchPort, asset_launching_test_case.NoSuchService):
+            auth_port = None
+        return AuthServer(self.loop, auth_port)
+
+    def new_bus_client(self):
+        bus_port = self.service_port(5672, 'rabbitmq')
+        return BusClient(self.loop, bus_port)
 
 
 def run_with_loop(f):

@@ -8,7 +8,7 @@ import ssl
 import websockets
 
 
-class WebSocketdTimeoutError(Exception):    
+class WebSocketdTimeoutError(Exception):
     pass
 
 
@@ -18,8 +18,9 @@ class WebSocketdClient(object):
     _SSL_CONTEXT = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     _SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
-    def __init__(self, loop):
+    def __init__(self, loop, port):
         self._loop = loop
+        self._port = port
         self._websocket = None
         self._started = False
         self.timeout = self._DEFAULT_TIMEOUT
@@ -32,7 +33,7 @@ class WebSocketdClient(object):
 
     @asyncio.coroutine
     def connect(self, token_id):
-        url = 'wss://localhost:9502/'
+        url = 'wss://localhost:{port}/'.format(port=self._port)
         if token_id is not None:
             url = url + '?token={}'.format(token_id)
 

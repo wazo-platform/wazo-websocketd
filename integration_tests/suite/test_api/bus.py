@@ -9,14 +9,15 @@ import asynqp
 
 class BusClient(object):
 
-    def __init__(self, loop):
+    def __init__(self, loop, port):
         self._loop = loop
+        self._port = port
         self._connection = None
         self._exchange = None
 
     @asyncio.coroutine
     def connect(self):
-        self._connection = yield from asynqp.connect('localhost', loop=self._loop)
+        self._connection = yield from asynqp.connect('localhost', loop=self._loop, port=self._port)
         self._channel = yield from self._connection.open_channel()
         self._exchange = yield from self._channel.declare_exchange('xivo', 'topic', durable=True)
 
