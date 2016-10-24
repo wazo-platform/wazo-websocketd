@@ -11,9 +11,9 @@ from requests.packages.urllib3 import disable_warnings
 
 class AuthServer(object):
 
-    def __init__(self, loop):
-        self._base_url = 'https://localhost:9497/_control'
+    def __init__(self, loop, port):
         self._loop = loop
+        self._base_url = 'https://localhost:{port}/_control'.format(port=port)
         self._session = requests.Session()
         self._session.verify = False
         disable_warnings()

@@ -104,6 +104,7 @@ class TestRabbitMQRestart(IntegrationTest):
         yield from self._try_connect()
         yield from self.websocketd_client.op_subscribe('foo')
         yield from self.websocketd_client.op_start()
+        self.bus_client = self.new_bus_client()
         yield from self.bus_client.connect()
         self.bus_client.publish_event(self.event)
 

@@ -10,7 +10,7 @@ sync:
 rabbitmq:
   image: rabbitmq
   ports:
-    - "5672:5672"
+    - "5672"
 
 websocketd:
   image: xivo-websocketd-test
@@ -18,6 +18,6 @@ websocketd:
     - "./etc/xivo-websocketd:/etc/xivo-websocketd"
     - "./ssl:/usr/local/share/ssl"
   ports:
-    - "9502:9502"
+    - "9502"
   links:
     - rabbitmq
