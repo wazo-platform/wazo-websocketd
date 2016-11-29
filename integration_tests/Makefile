@@ -5,7 +5,7 @@ test-setup: egg-info
 	docker pull p0bailey/docker-flask
 	docker pull n3llyb0y/wait
 	docker pull rabbitmq
-	docker build -t xivo/xivo-websocketd ..
+	docker build -t wazopbx/xivo-websocketd ..
 	docker build --no-cache -t xivo-websocketd-test -f docker/Dockerfile-websocketd-test ..
 
 egg-info:
