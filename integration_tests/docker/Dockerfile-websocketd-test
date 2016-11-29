@@ -1,4 +1,4 @@
-FROM xivo/xivo-websocketd
+FROM wazopbx/xivo-websocketd
 
 ADD . /usr/src/xivo-websocketd
 WORKDIR /usr/src/xivo-websocketd
