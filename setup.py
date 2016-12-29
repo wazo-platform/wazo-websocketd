@@ -9,9 +9,9 @@ from setuptools import find_packages
 setup(
     name='xivo-websocketd',
     version='1.0',
-    author='Avencall',
-    author_email='xivo-dev@lists.proformatique.com',
-    url='http://www.xivo.io/',
+    author='Wazo Authors',
+    author_email='dev.wazo@gmail.com',
+    url='http://wazo.community',
     packages=find_packages(),
     scripts=['bin/xivo-websocketd'],
 )
