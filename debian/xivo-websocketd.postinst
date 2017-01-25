@@ -5,6 +5,7 @@ set -e
 LOG_FILENAME='/var/log/xivo-websocketd.log'
 USER='xivo-websocketd'
 GROUP='www-data'
+DAEMONNAME='xivo-websocketd'
 
 case "$1" in
     configure)
@@ -26,6 +27,12 @@ case "$1" in
             touch "$LOG_FILENAME"
         fi
         chown "$USER:$GROUP" "$LOG_FILENAME"
+
+        if dpkg --compare-versions "$2" lt '17.03'; then
+            ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
+                    /etc/nginx/locations/https-enabled/$DAEMONNAME
+        fi
+
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
