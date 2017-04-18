@@ -2,5 +2,5 @@ git+https://github.com/wazo-pbx/xivo-test-helpers.git
 asynqp
 docker-compose
 nose
-requests<2.7
+requests
 websockets
