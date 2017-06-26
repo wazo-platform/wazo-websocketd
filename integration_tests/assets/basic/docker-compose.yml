@@ -18,7 +18,7 @@ auth:
     - "9497"
 
 rabbitmq:
-  image: rabbitmq
+  image: rabbitmq:3.6.6
   ports:
     - "5672"
 
