@@ -37,7 +37,6 @@ _DEFAULT_CONFIG = {
         'port': 9502,
         'certificate': '/usr/share/xivo-certs/server.crt',
         'private_key': '/usr/share/xivo-certs/server.key',
-        'ciphers': 'ALL:!aNULL:!eNULL:!LOW:!EXP:!RC4:!3DES:!SEED:+HIGH:+MEDIUM',
         'ping_interval': 60,
     },
 }
@@ -88,7 +87,6 @@ def _get_reinterpreted_raw_values(config):
 
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
     ssl_context.load_cert_chain(config['websocket']['certificate'], config['websocket']['private_key'])
-    ssl_context.set_ciphers(config['websocket']['ciphers'])
     result['websocket']['ssl'] = ssl_context
 
     result['log_level'] = get_log_level_by_name(config['log_level'])
