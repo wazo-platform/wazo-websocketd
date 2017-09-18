@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
@@ -28,13 +28,14 @@ class SessionFactory(object):
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
-        logger.info('websocket connection accepted %s', ws.remote_address)
+        remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
+        logger.info('websocket connection accepted %s', remote_address)
         session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
                           self._protocol_encoder, self._protocol_decoder, ws, path)
         try:
             yield from session.run()
         finally:
-            logger.info('websocket session terminated %s', ws.remote_address)
+            logger.info('websocket session terminated %s', remote_address)
 
 
 class Session(object):
