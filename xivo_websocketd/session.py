@@ -29,7 +29,7 @@ class SessionFactory(object):
     @asyncio.coroutine
     def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
-        logger.info('websocket connection accepted %s', remote_address)
+        logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
                           self._protocol_encoder, self._protocol_decoder, ws, path)
         try:
