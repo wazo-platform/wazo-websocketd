@@ -1,17 +1,17 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import re
 
 # TODO
 # - move into it's own module that is used by both websocketd
-#   and xivo-auth
+#   and wazo-auth
 # - also move the test module
 # - make sure it's python 2 AND python3 compatible
 # - modify it so it "user_acl_regex.match" instead of "re.match"
 #   and transform the ACL to regex only once (lazily so that we
-#   have a similar behaviour for xivo-auth?)
-# - use it in xivo-auth
+#   have a similar behaviour for wazo-auth?)
+# - use it in wazo-auth
 
 
 class ACLCheck(object):

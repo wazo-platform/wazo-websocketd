@@ -4,8 +4,8 @@
 # Provides:          xivo-websocketd
 # Required-Start:    $local_fs $remote_fs $network $syslog
 # Required-Stop:     $local_fs $remote_fs $network $syslog
-# Should-Start:      rabbitmq-server xivo-auth
-# Should-Stop:       rabbitmq-server xivo-auth
+# Should-Start:      rabbitmq-server wazo-auth
+# Should-Stop:       rabbitmq-server wazo-auth
 # Default-Start:     2 3 4 5
 # Default-Stop:      0 1 6
 # Short-Description: Startup daemon script for xivo-websocketd
