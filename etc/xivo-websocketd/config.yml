@@ -35,7 +35,7 @@
 #
 #  ping_interval: 60
 
-## xivo-auth (authentication daemon) connection informations.
+## wazo-auth (authentication daemon) connection informations.
 #auth:
 #  host: localhost
 #  verify_certificate: /usr/share/xivo-certs/server.crt

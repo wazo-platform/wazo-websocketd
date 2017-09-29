@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
@@ -38,7 +38,7 @@ class _WebSocketdAuthClient(object):
 
     @asyncio.coroutine
     def get_token(self, token_id):
-        logger.debug('getting token from xivo-auth')
+        logger.debug('getting token from wazo-auth')
         try:
             return (yield from self._loop.run_in_executor(None, self._auth_client.token.get, token_id, self._ACL))
         except requests.RequestException as e:
@@ -49,7 +49,7 @@ class _WebSocketdAuthClient(object):
 
     @asyncio.coroutine
     def is_valid_token(self, token_id):
-        logger.debug('checking token validity from xivo-auth')
+        logger.debug('checking token validity from wazo-auth')
         return (yield from self._loop.run_in_executor(None, self._auth_client.token.is_valid, token_id, self._ACL))
 
 
@@ -99,9 +99,9 @@ class _DynamicIntervalAuthCheck(object):
     def run(self, token):
         token_id = token['token']
         while True:
-            # FIXME if xivo-websocketd and xivo-auth are not in the same
+            # FIXME if xivo-websocketd and wazo-auth are not in the same
             #       timezone, this doesn't work -- but this needs to be fixed
-            #       in xivo-auth, which should returns data in UTC instead of
+            #       in wazo-auth, which should returns data in UTC instead of
             #       in local time
             now = datetime.datetime.now()
             expires_at = datetime.datetime.strptime(token['expires_at'], self._ISO_DATETIME)
