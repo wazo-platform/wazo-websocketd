@@ -17,7 +17,8 @@ class ClientXMPPWrapper():
         self._handlers = []
         self._client = None
 
-    def connect(self, username, password):
+    @asyncio.coroutine
+    def connect(self, username, password, loop):
         if not username or not password:
             logger.warning('cannot create XMPP session: missing username/password')
         jid = '{}@localhost'.format(username)
@@ -25,6 +26,15 @@ class ClientXMPPWrapper():
         for handler in self._handlers:
             self._client.add_event_handler(*handler)
         self._client.connect((self._host, self._port))
+        yield from self.wait_until_connected(loop)
+
+    @asyncio.coroutine
+    def wait_until_connected(self, loop):
+        # If and error occurs during the connection, then connection_error_handler
+        # is executed. So we don't care to set a timeout or reattempt, we just
+        # want to block the coroutine from loop object
+        while not self._client.is_connected():
+            yield from asyncio.sleep(0.5, loop=loop)
 
     def close(self):
         if self._client is None:

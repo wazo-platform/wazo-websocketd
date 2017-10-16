@@ -1,0 +1,37 @@
+version: '3'
+services:
+  sync:
+    image: waisbrot/wait
+    links:
+      - auth
+      - rabbitmq
+      - websocketd
+    environment:
+      TARGETS: "auth:9497,rabbitmq:5672,websocketd:9502"
+      TIMEOUT: "5"
+
+  auth:
+    image: p0bailey/docker-flask
+    volumes:
+      - "./xivo-auth:/usr/local/share/xivo-auth"
+      - "./ssl:/usr/local/share/ssl"
+    command: "python /usr/local/share/xivo-auth/mock-xivo-auth.py 9497"
+    expose:
+      - "9497"
+
+  rabbitmq:
+    image: rabbitmq:3.6.6
+    ports:
+      - "5672"
+
+  websocketd:
+    image: xivo-websocketd-test
+    volumes:
+      - "../../..:/usr/src/xivo-websocketd"
+      - "./etc/xivo-websocketd:/etc/xivo-websocketd"
+      - "./ssl:/usr/local/share/ssl"
+    ports:
+      - "9502"
+    links:
+      - auth
+      - rabbitmq

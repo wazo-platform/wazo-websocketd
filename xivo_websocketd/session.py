@@ -93,10 +93,11 @@ class Session(object):
         token_id = _extract_token_id(self._ws, self._path)
         token = yield from self._authenticator.get_token(token_id)
         self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(token)
+
         self._xmpp.connection_error_handler(self._close_session)
+        yield from self._xmpp.connect(token['auth_id'], token['token'], self._loop)
 
         try:
-            self._xmpp.connect(token['auth_id'], token['token'])
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
