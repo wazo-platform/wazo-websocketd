@@ -37,6 +37,7 @@ services:
   websocketd:
     image: xivo-websocketd-test
     volumes:
+      - "../../..:/usr/src/xivo-websocketd"
       - "./etc/xivo-websocketd:/etc/xivo-websocketd"
       - "./ssl:/usr/local/share/ssl"
     ports:
