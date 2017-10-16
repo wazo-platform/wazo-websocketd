@@ -9,4 +9,7 @@ auth:
 bus:
   host: rabbitmq
 
+mongooseim:
+  host: mongooseim
+
 auth_check_static_interval: 10

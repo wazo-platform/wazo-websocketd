@@ -5,4 +5,5 @@ websockets==3.0
 pyyaml==3.11
 asynqp
 requests==2.4.3
+slixmpp==1.2.2
 stevedore==1.17.1

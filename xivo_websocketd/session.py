@@ -12,6 +12,7 @@ from xivo_websocketd.exception import AuthenticationError,\
     NoTokenError, SessionProtocolError, BusConnectionLostError,\
     AuthenticationExpiredError, BusConnectionError
 from xivo_websocketd.multiplexer import Multiplexer
+from .xmpp import ClientXMPPWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ class Session(object):
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
+        self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
 
     @asyncio.coroutine
@@ -91,8 +93,10 @@ class Session(object):
         token_id = _extract_token_id(self._ws, self._path)
         token = yield from self._authenticator.get_token(token_id)
         self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(token)
+        self._xmpp.connection_error_handler(self._close_session)
 
         try:
+            self._xmpp.connect(token['auth_id'], token['token'])
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
@@ -103,6 +107,21 @@ class Session(object):
         finally:
             self._bus_event_consumer.close()
             yield from self._multiplexer.close()
+            self._xmpp.close()
+
+    @asyncio.coroutine
+    def _close_session(self, event):
+        # FIXME Use something like Observer or somekind of asyncio
+        #       handler (if exists) to avoid duplicate code. If an
+        #       error is raised here, nothing will catch it
+        # FIXME Maybe something of weird can occurs if we close() while
+        #       the code is running in other context
+        logger.info('closing websocket connection: xmpp connection error')
+        self._bus_event_consumer.close()
+        self._multiplexer.stop()
+        yield from self._multiplexer.close()
+        self._xmpp.close()
+        yield from self._ws.close(1011, 'xmpp connection error')
 
     @asyncio.coroutine
     def _send_ping(self):
