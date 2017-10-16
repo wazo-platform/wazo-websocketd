@@ -1,23 +1,25 @@
-sync:
-  image: n3llyb0y/wait
-  links:
-    - rabbitmq
-    - websocketd
-  environment:
-    PORTS: "5672 9502"
-    TIMEOUT: "5"
+version: '3'
+services:
+  sync:
+    image: waisbrot/wait
+    links:
+      - rabbitmq
+      - websocketd
+    environment:
+      TARGETS: "rabbitmq:5672,websocketd:9502"
+      TIMEOUT: "5"
 
-rabbitmq:
-  image: rabbitmq:3.6.6
-  ports:
-    - "5672"
+  rabbitmq:
+    image: rabbitmq:3.6.6
+    ports:
+      - "5672"
 
-websocketd:
-  image: xivo-websocketd-test
-  volumes:
-    - "./etc/xivo-websocketd:/etc/xivo-websocketd"
-    - "./ssl:/usr/local/share/ssl"
-  ports:
-    - "9502"
-  links:
-    - rabbitmq
+  websocketd:
+    image: xivo-websocketd-test
+    volumes:
+      - "./etc/xivo-websocketd:/etc/xivo-websocketd"
+      - "./ssl:/usr/local/share/ssl"
+    ports:
+      - "9502"
+    links:
+      - rabbitmq
