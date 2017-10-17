@@ -25,6 +25,8 @@ services:
     hostname: mongooseim-1
     expose:
       - 5222
+    ports:
+      - 8088
     volumes:
       - ./etc/mongooseim:/member
       - ./mongooseim:/tmp/mongooseim

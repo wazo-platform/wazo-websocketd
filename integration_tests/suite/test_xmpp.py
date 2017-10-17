@@ -18,7 +18,7 @@ class TestNoMongooseIM(IntegrationTest):
         yield from self.websocketd_client.connect_and_wait_for_close(VALID_TOKEN_ID)
 
 
-class TestMongooseIMStopped(IntegrationTest):
+class TestXMPPConnection(IntegrationTest):
 
     asset = 'basic'
 
@@ -33,3 +33,11 @@ class TestMongooseIMStopped(IntegrationTest):
         self.stop_service('mongooseim', timeout=30)
         yield
         self.start_service('mongooseim')
+
+    @run_with_loop
+    def test_client_disconnect(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        yield from self.websocketd_client.close()
+        sessions = self.mongooseim_client.sessions()
+        if sessions:
+            raise AssertionError('xmpp server contains openned sessions: {}'.format(sessions))
