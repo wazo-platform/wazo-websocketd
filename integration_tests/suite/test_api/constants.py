@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import os.path
@@ -6,6 +6,7 @@ import os.path
 ASSET_ROOT = os.path.join(os.path.dirname(__file__), '..', '..', 'assets')
 
 VALID_TOKEN_ID = 'valid-token'
+VALID_TOKEN_XIVO_USER_UUID = '123-456'
 INVALID_TOKEN_ID = 'invalid-token'
 UNAUTHORIZED_TOKEN_ID = 'unauthorized-token'
 

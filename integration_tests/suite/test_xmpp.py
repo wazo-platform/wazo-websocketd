@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from .test_api.base import IntegrationTest, run_with_loop
 from .test_api.constants import (
     VALID_TOKEN_ID,
+    VALID_TOKEN_XIVO_USER_UUID,
 )
 
 
@@ -41,3 +42,32 @@ class TestXMPPConnection(IntegrationTest):
         sessions = self.mongooseim_client.sessions()
         if sessions:
             raise AssertionError('xmpp server contains openned sessions: {}'.format(sessions))
+
+
+class TestWebsocketOperation(IntegrationTest):
+
+    asset = 'basic'
+
+    @run_with_loop
+    def test_presence_when_no_acl_for_presence(self):
+        token = 'only-valid-for-connection'
+        yield from self.auth_server.put_token(token)
+        yield from self.websocketd_client.connect_and_wait_for_init(token)
+        yield from self.auth_server.remove_token(token)
+        msg = yield from self.websocketd_client.op_presence('123-456', 'dnd')
+        self.assertEqual(msg['code'], 401)
+
+    @run_with_loop
+    def test_presence_when_no_user_connected(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        msg = yield from self.websocketd_client.op_presence('random-uuid', 'dnd')
+        self.assertEqual(msg['code'], 404)
+
+    @run_with_loop
+    def test_presence(self):
+        other_client = self.new_websocketd_client()
+        other_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        msg = yield from self.websocketd_client.op_presence(VALID_TOKEN_XIVO_USER_UUID, 'dnd')
+        self.assertEqual(msg['code'], 0)
+        yield from other_client.close()

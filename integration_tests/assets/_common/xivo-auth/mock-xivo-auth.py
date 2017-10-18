@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 20162017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import sys
@@ -15,6 +15,7 @@ valid_tokens = {
     'valid-token': {
         'token': 'valid-token',
         'auth_id': '123-456',
+        'xivo_user_uuid': '123-456',
         'acls': ['event.foo'],
     }
 }

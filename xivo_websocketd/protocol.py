@@ -30,6 +30,9 @@ class SessionProtocolEncoder(object):
     def encode_presence_unauthorized(self):
         return self._encode('presence', 401, 'unauthorized')
 
+    def encode_presence_user_not_connected(self):
+        return self._encode('presence', 404, 'user not connected')
+
     def _encode(self, operation, code=_CODE_OK, msg=_MSG_OK):
         return json.dumps({'op': operation, 'code': code, 'msg': msg})
 
