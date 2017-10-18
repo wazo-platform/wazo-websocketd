@@ -48,9 +48,9 @@ class _WebSocketdAuthClient(object):
             raise AuthenticationError(e)
 
     @asyncio.coroutine
-    def is_valid_token(self, token_id):
+    def is_valid_token(self, token_id, acl=_ACL):
         logger.debug('checking token validity from wazo-auth')
-        return (yield from self._loop.run_in_executor(None, self._auth_client.token.is_valid, token_id, self._ACL))
+        return (yield from self._loop.run_in_executor(None, self._auth_client.token.is_valid, token_id, acl))
 
 
 class _Authenticator(object):
@@ -62,6 +62,10 @@ class _Authenticator(object):
     def get_token(self, token_id):
         # This function returns a coroutine.
         return self._websocketd_auth_client.get_token(token_id)
+
+    def is_valid_token(self, token_id, acl=None):
+        # This function returns a coroutine.
+        return self._websocketd_auth_client.is_valid_token(token_id, acl)
 
     def run_check(self, token):
         # This function returns a coroutine that raise an AuthenticationExpiredError exception

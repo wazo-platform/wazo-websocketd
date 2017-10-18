@@ -58,6 +58,7 @@ class Session(object):
         self._multiplexer = Multiplexer(self._loop)
         self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
+        self._token = None
 
     @asyncio.coroutine
     def run(self):
@@ -81,6 +82,8 @@ class Session(object):
         except BusConnectionError:
             logger.info('closing websocket connection: bus connection error')
             yield from self._ws.close(1011, 'bus connection error')
+        except AuthenticationExpiredError as e:
+            logger.info('closing websocket connection: authentication expired')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info('websocket connection closed with code %s', e.code)
@@ -91,17 +94,17 @@ class Session(object):
     @asyncio.coroutine
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
-        token = yield from self._authenticator.get_token(token_id)
-        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(token)
+        self._token = yield from self._authenticator.get_token(token_id)
+        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
 
         self._xmpp.connection_error_handler(self._close_session)
-        yield from self._xmpp.connect(token['auth_id'], token['token'], self._loop)
+        yield from self._xmpp.connect(self._token['auth_id'], self._token['token'], self._loop)
 
         try:
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
-            self._multiplexer.call_when_done(self._authenticator.run_check(token), self._on_authenticator_check)
+            self._multiplexer.call_when_done(self._authenticator.run_check(self._token), self._on_authenticator_check)
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
             self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
             yield from self._multiplexer.run()
@@ -159,6 +162,17 @@ class Session(object):
             return
         self._started = True
         yield from self._ws.send(self._protocol_encoder.encode_start())
+
+    @asyncio.coroutine
+    def _do_ws_presence(self, msg):
+        acl = 'ctid-ng.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
+        is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
+        if not is_valid:
+            yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
+
+        logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
+        # TODO: Find session with the good user_uuid
+        yield from self._ws.send(self._protocol_encoder.encode_presence())
 
     @asyncio.coroutine
     def _on_bus_event(self, future):

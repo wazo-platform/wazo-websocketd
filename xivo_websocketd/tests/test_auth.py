@@ -66,6 +66,12 @@ class TestAuthenticator(unittest.TestCase):
         assert_that(coro, same_instance(self.websocketd_auth_client.get_token.return_value))
         self.websocketd_auth_client.get_token.assert_called_once_with(sentinel.token_id)
 
+    def test_is_valid_token(self):
+        coro = self.authenticator.is_valid_token(sentinel.token_id, sentinel.acl)
+
+        assert_that(coro, same_instance(self.websocketd_auth_client.is_valid_token.return_value))
+        self.websocketd_auth_client.is_valid_token.assert_called_once_with(sentinel.token_id, sentinel.acl)
+
 
 class TestStaticIntervalAuthCheck(unittest.TestCase):
 
