@@ -25,15 +25,18 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         super().setUpClass()
         # There is bugs in asynqp 0.4 that prevent from setting the event_loop
         # to None
-        #asyncio.set_event_loop(None)
+        # asyncio.set_event_loop(None)
 
     def setUp(self):
+        self.valid_token_id = '123-456'
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.__exception_handler)
         self.websocketd_client = self.new_websocketd_client()
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
         self.mongooseim_client = self.new_mongooseim_client()
+        if self.auth_server:
+            self.loop.run_until_complete(self.auth_server.put_token(self.valid_token_id))
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())
@@ -57,7 +60,7 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         try:
             auth_port = self.service_port(9497, 'auth')
         except (asset_launching_test_case.NoSuchPort, asset_launching_test_case.NoSuchService):
-            auth_port = None
+            return None
         return AuthServer(self.loop, auth_port)
 
     def new_bus_client(self):

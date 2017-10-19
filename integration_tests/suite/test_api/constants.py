@@ -5,10 +5,8 @@ import os.path
 
 ASSET_ROOT = os.path.join(os.path.dirname(__file__), '..', '..', 'assets')
 
-VALID_TOKEN_ID = 'valid-token'
-VALID_TOKEN_XIVO_USER_UUID = '123-456'
 INVALID_TOKEN_ID = 'invalid-token'
-UNAUTHORIZED_TOKEN_ID = 'unauthorized-token'
+UNAUTHORIZED_TOKEN_ID = 'invalid-acl-token'
 
 CLOSE_CODE_NO_TOKEN_ID = 4001
 CLOSE_CODE_AUTH_FAILED = 4002
