@@ -1,9 +1,15 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 from .test_api.base import IntegrationTest, run_with_loop
-from .test_api.constants import VALID_TOKEN_ID, INVALID_TOKEN_ID, UNAUTHORIZED_TOKEN_ID,\
-    CLOSE_CODE_AUTH_FAILED, CLOSE_CODE_AUTH_EXPIRED, CLOSE_CODE_NO_TOKEN_ID
+from .test_api.constants import (
+    VALID_TOKEN_ID,
+    INVALID_TOKEN_ID,
+    UNAUTHORIZED_TOKEN_ID,
+    CLOSE_CODE_AUTH_FAILED,
+    CLOSE_CODE_AUTH_EXPIRED,
+    CLOSE_CODE_NO_TOKEN_ID,
+)
 
 
 class TestAuthentication(IntegrationTest):

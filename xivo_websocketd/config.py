@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import argparse
@@ -38,6 +38,10 @@ _DEFAULT_CONFIG = {
         'certificate': '/usr/share/xivo-certs/server.crt',
         'private_key': '/usr/share/xivo-certs/server.key',
         'ping_interval': 60,
+    },
+    'mongooseim': {
+        'host': '127.0.0.1',  # Ignore the DNS request
+        'xmpp_port': 5222,
     },
 }
 

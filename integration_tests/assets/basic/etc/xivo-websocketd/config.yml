@@ -8,3 +8,6 @@ auth:
 
 bus:
   host: rabbitmq
+
+mongooseim:
+  host: mongooseim
