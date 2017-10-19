@@ -13,6 +13,7 @@ Depends:
  ${misc:Depends},
  adduser,
  python3-asynqp,
+ python3-slixmpp,
  python3-websockets,
  python3-yaml,
  xivo-auth-client-python3,
