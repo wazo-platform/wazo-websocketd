@@ -69,3 +69,5 @@ class TestWebsocketOperation(IntegrationTest):
         msg = yield from self.websocketd_client.op_presence('other-xivo-user-uuid', 'dnd')
         self.assertEqual(msg['code'], 0)
         yield from other_client.close()
+
+        # FIXME: check that the presence really changed, when get_presence is implemented
