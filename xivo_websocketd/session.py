@@ -17,25 +17,36 @@ from .xmpp import ClientXMPPWrapper
 logger = logging.getLogger(__name__)
 
 
+class SessionCollection(set):
+
+    def find_by_user_uuid(self, user_uuid):
+        for session in self:
+            if session.user_uuid == user_uuid:
+                return session
+
+
 class SessionFactory(object):
 
-    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder):
+    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder, sessions):
         self._config = config
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
+        self._sessions = sessions
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
         logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
-                          self._protocol_encoder, self._protocol_decoder, ws, path)
+                          self._protocol_encoder, self._protocol_decoder, self._sessions, ws, path)
+        self._sessions.add(session)
         try:
             yield from session.run()
         finally:
+            self._sessions.remove(session)
             logger.info('websocket session terminated %s', remote_address)
 
 
@@ -46,18 +57,22 @@ class Session(object):
     _CLOSE_CODE_AUTH_EXPIRED = 4003
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
-    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder, ws, path):
+    def __init__(self, config, loop, authenticator, bus_event_service,
+                 protocol_encoder, protocol_decoder, sessions, ws, path):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
+        self._sessions = sessions
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
         self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
+        self._token = None
+        self.user_uuid = None
 
     @asyncio.coroutine
     def run(self):
@@ -81,6 +96,8 @@ class Session(object):
         except BusConnectionError:
             logger.info('closing websocket connection: bus connection error')
             yield from self._ws.close(1011, 'bus connection error')
+        except AuthenticationExpiredError as e:
+            logger.info('closing websocket connection: authentication expired')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info('websocket connection closed with code %s', e.code)
@@ -91,17 +108,18 @@ class Session(object):
     @asyncio.coroutine
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
-        token = yield from self._authenticator.get_token(token_id)
-        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(token)
+        self._token = yield from self._authenticator.get_token(token_id)
+        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
+        self.user_uuid = self._token.get('xivo_user_uuid')
 
         self._xmpp.connection_error_handler(self._close_session)
-        yield from self._xmpp.connect(token['auth_id'], token['token'], self._loop)
+        yield from self._xmpp.connect(self._token['auth_id'], self._token['token'], self._loop)
 
         try:
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
-            self._multiplexer.call_when_done(self._authenticator.run_check(token), self._on_authenticator_check)
+            self._multiplexer.call_when_done(self._authenticator.run_check(self._token), self._on_authenticator_check)
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
             self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
             yield from self._multiplexer.run()
@@ -112,11 +130,8 @@ class Session(object):
 
     @asyncio.coroutine
     def _close_session(self, event):
-        # FIXME Use something like Observer or somekind of asyncio
-        #       handler (if exists) to avoid duplicate code. If an
-        #       error is raised here, nothing will catch it
-        # FIXME Maybe something of weird can occurs if we close() while
-        #       the code is running in other context
+        # this coroutine is called by the xmpp received message coroutine
+        # at undetermined time
         logger.info('closing websocket connection: xmpp connection error')
         self._bus_event_consumer.close()
         self._multiplexer.stop()
@@ -159,6 +174,21 @@ class Session(object):
             return
         self._started = True
         yield from self._ws.send(self._protocol_encoder.encode_start())
+
+    @asyncio.coroutine
+    def _do_ws_presence(self, msg):
+        acl = 'ctid-ng.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
+        is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
+        if not is_valid:
+            yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
+
+        logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
+        session = self._sessions.find_by_user_uuid(msg.user_uuid)
+        if session:
+            session._xmpp.send_presence(msg.presence)
+            yield from self._ws.send(self._protocol_encoder.encode_presence())
+        else:
+            yield from self._ws.send(self._protocol_encoder.encode_presence_user_not_connected())
 
     @asyncio.coroutine
     def _on_bus_event(self, future):

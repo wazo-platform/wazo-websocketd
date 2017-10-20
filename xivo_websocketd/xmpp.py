@@ -54,6 +54,9 @@ class ClientXMPPWrapper():
         self._handlers.append(['session_end', func])
         self._handlers.append(['connection_failed', func])
 
+    def send_presence(self, presence):
+        self._client.send_presence(pstatus=presence)
+
 
 class _ClientXMPP(ClientXMPP):
 

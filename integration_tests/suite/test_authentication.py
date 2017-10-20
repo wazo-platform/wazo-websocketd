@@ -3,7 +3,6 @@
 
 from .test_api.base import IntegrationTest, run_with_loop
 from .test_api.constants import (
-    VALID_TOKEN_ID,
     INVALID_TOKEN_ID,
     UNAUTHORIZED_TOKEN_ID,
     CLOSE_CODE_AUTH_FAILED,
@@ -23,7 +22,7 @@ class TestAuthentication(IntegrationTest):
 
     @run_with_loop
     def test_valid_auth_gives_result(self):
-        yield from self.websocketd_client.connect_and_wait_for_init(VALID_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
 
     @run_with_loop
     def test_invalid_auth_closes_websocket(self):
@@ -42,7 +41,7 @@ class TestNoXivoAuth(IntegrationTest):
 
     @run_with_loop
     def test_no_auth_server_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(VALID_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_close(self.valid_token_id)
 
 
 class TestTokenExpiration(IntegrationTest):

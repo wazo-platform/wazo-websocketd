@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import json
@@ -46,6 +46,28 @@ class TestProtocolEncoder(unittest.TestCase):
         }
 
         data = self.encoder.encode_start()
+
+        assert_that(json.loads(data), equal_to(expected))
+
+    def test_encode_presence(self):
+        expected = {
+            'op': 'presence',
+            'code': 0,
+            'msg': '',
+        }
+
+        data = self.encoder.encode_presence()
+
+        assert_that(json.loads(data), equal_to(expected))
+
+    def test_encode_presence_unauthorized(self):
+        expected = {
+            'op': 'presence',
+            'code': 401,
+            'msg': 'unauthorized',
+        }
+
+        data = self.encoder.encode_presence_unauthorized()
 
         assert_that(json.loads(data), equal_to(expected))
 

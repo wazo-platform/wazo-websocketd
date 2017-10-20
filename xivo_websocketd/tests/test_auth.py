@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
@@ -38,7 +38,9 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
         self.auth_client.token.get._is_coroutine = False
 
-        self.assertRaises(AuthenticationError, self.loop.run_until_complete, self.websocketd_auth_client.get_token(sentinel.token_id))
+        self.assertRaises(AuthenticationError,
+                          self.loop.run_until_complete,
+                          self.websocketd_auth_client.get_token(sentinel.token_id))
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
     def test_is_valid_token(self):
@@ -63,6 +65,12 @@ class TestAuthenticator(unittest.TestCase):
 
         assert_that(coro, same_instance(self.websocketd_auth_client.get_token.return_value))
         self.websocketd_auth_client.get_token.assert_called_once_with(sentinel.token_id)
+
+    def test_is_valid_token(self):
+        coro = self.authenticator.is_valid_token(sentinel.token_id, sentinel.acl)
+
+        assert_that(coro, same_instance(self.websocketd_auth_client.is_valid_token.return_value))
+        self.websocketd_auth_client.is_valid_token.assert_called_once_with(sentinel.token_id, sentinel.acl)
 
 
 class TestStaticIntervalAuthCheck(unittest.TestCase):

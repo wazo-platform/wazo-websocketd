@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import asyncio
@@ -95,6 +95,7 @@ class WebSocketdClient(object):
         msg = yield from self.recv_msg()
         if msg['op'] != op:
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
+        return msg
 
     @asyncio.coroutine
     def op_start(self):
@@ -110,6 +111,13 @@ class WebSocketdClient(object):
         if self._started:
             return
         yield from self._expect_msg('subscribe')
+
+    @asyncio.coroutine
+    def op_presence(self, user_uuid, presence):
+        yield from self._send_msg({'op': 'presence', 'data': {'user_uuid': user_uuid, 'presence': presence}})
+        if self._started:
+            return
+        return (yield from self._expect_msg('presence'))
 
     @asyncio.coroutine
     def _send_msg(self, msg):
