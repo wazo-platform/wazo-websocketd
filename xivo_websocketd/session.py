@@ -130,11 +130,8 @@ class Session(object):
 
     @asyncio.coroutine
     def _close_session(self, event):
-        # FIXME Use something like Observer or somekind of asyncio
-        #       handler (if exists) to avoid duplicate code. If an
-        #       error is raised here, nothing will catch it
-        # FIXME Maybe something of weird can occurs if we close() while
-        #       the code is running in other context
+        # this coroutine is called by the xmpp received message coroutine
+        # at undetermined time
         logger.info('closing websocket connection: xmpp connection error')
         self._bus_event_consumer.close()
         self._multiplexer.stop()
@@ -188,7 +185,6 @@ class Session(object):
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
         session = self._sessions.find_by_user_uuid(msg.user_uuid)
         if session:
-            # FIXME Do some check to validate that xmpp server has received and accepted presence
             session._xmpp.send_presence(msg.presence)
             yield from self._ws.send(self._protocol_encoder.encode_presence())
         else:
