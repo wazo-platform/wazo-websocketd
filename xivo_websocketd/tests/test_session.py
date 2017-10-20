@@ -5,7 +5,7 @@ import unittest
 
 from unittest.mock import Mock
 
-from hamcrest import assert_that, equal_to, not_
+from hamcrest import assert_that, equal_to, is_
 
 from xivo_websocketd.exception import NoTokenError
 from xivo_websocketd.session import _extract_token_id
@@ -63,12 +63,13 @@ class TestSessionCollection(unittest.TestCase):
         self.sessions.add(session)
 
         session = self.sessions.find_by_user_uuid('123-456')
-        assert_that(session, not_(None))
+        assert_that(session, is_(session))
 
-    def test_find_by_user_uuid_when_same_session(self):
-        session = Mock(user_uuid='123-456')
-        self.sessions.add(session)
-        self.sessions.add(session)
+    def test_find_by_user_uuid_when_multiple_sessions(self):
+        session1 = Mock(user_uuid='123-456')
+        session2 = Mock(user_uuid='789-012')
+        self.sessions.add(session2)
+        self.sessions.add(session1)
 
         session = self.sessions.find_by_user_uuid('123-456')
-        assert_that(session, not_(None))
+        assert_that(session, is_(session1))
