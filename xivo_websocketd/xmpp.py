@@ -16,11 +16,13 @@ class ClientXMPPWrapper():
         self._port = xmpp_port
         self._handlers = []
         self._client = None
+        self.username = None
 
     @asyncio.coroutine
     def connect(self, username, password, loop):
         if not username or not password:
             logger.warning('cannot create XMPP session: missing username/password')
+        self.username = username
         jid = '{}@localhost'.format(username)
         self._client = _ClientXMPP(jid, password)
         for handler in self._handlers:

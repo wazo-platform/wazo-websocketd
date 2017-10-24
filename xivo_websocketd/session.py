@@ -17,36 +17,35 @@ from .xmpp import ClientXMPPWrapper
 logger = logging.getLogger(__name__)
 
 
-class SessionCollection(set):
+class XMPPSessionCollection(set):
 
-    def find_by_user_uuid(self, user_uuid):
+    def find_by_username(self, username):
         for session in self:
-            if session.user_uuid == user_uuid:
+            if session.username == username:
                 return session
 
 
 class SessionFactory(object):
 
-    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder, sessions):
+    def __init__(self, config, loop, authenticator, bus_event_service,
+                 protocol_encoder, protocol_decoder, xmpp_sessions):
         self._config = config
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
-        self._sessions = sessions
+        self._xmpp_sessions = xmpp_sessions
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
         logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
-                          self._protocol_encoder, self._protocol_decoder, self._sessions, ws, path)
-        self._sessions.add(session)
+                          self._protocol_encoder, self._protocol_decoder, self._xmpp_sessions, ws, path)
         try:
             yield from session.run()
         finally:
-            self._sessions.remove(session)
             logger.info('websocket session terminated %s', remote_address)
 
 
@@ -58,21 +57,20 @@ class Session(object):
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
     def __init__(self, config, loop, authenticator, bus_event_service,
-                 protocol_encoder, protocol_decoder, sessions, ws, path):
+                 protocol_encoder, protocol_decoder, xmpp_sessions, ws, path):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
-        self._sessions = sessions
+        self._xmpp_sessions = xmpp_sessions
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
         self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
         self._token = None
-        self.user_uuid = None
 
     @asyncio.coroutine
     def run(self):
@@ -110,12 +108,12 @@ class Session(object):
         token_id = _extract_token_id(self._ws, self._path)
         self._token = yield from self._authenticator.get_token(token_id)
         self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
-        self.user_uuid = self._token.get('xivo_user_uuid')
 
         self._xmpp.connection_error_handler(self._close_session)
         yield from self._xmpp.connect(self._token['auth_id'], self._token['token'], self._loop)
 
         try:
+            self._xmpp_sessions.add(self._xmpp)
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
@@ -127,6 +125,7 @@ class Session(object):
             self._bus_event_consumer.close()
             yield from self._multiplexer.close()
             self._xmpp.close()
+            self._xmpp_sessions.remove(self._xmpp)
 
     @asyncio.coroutine
     def _close_session(self, event):
@@ -183,9 +182,9 @@ class Session(object):
             yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
-        session = self._sessions.find_by_user_uuid(msg.user_uuid)
-        if session:
-            session._xmpp.send_presence(msg.presence)
+        xmpp_session = self._xmpp_sessions.find_by_username(msg.user_uuid)
+        if xmpp_session:
+            xmpp_session.send_presence(msg.presence)
             yield from self._ws.send(self._protocol_encoder.encode_presence())
         else:
             yield from self._ws.send(self._protocol_encoder.encode_presence_user_not_connected())

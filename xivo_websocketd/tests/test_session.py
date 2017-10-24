@@ -9,7 +9,7 @@ from hamcrest import assert_that, equal_to, is_
 
 from xivo_websocketd.exception import NoTokenError
 from xivo_websocketd.session import _extract_token_id
-from xivo_websocketd.session import SessionCollection
+from xivo_websocketd.session import XMPPSessionCollection
 
 
 class TestExtractTokenID(unittest.TestCase):
@@ -49,27 +49,27 @@ class TestExtractTokenID(unittest.TestCase):
         assert_that(token_id, equal_to(expected_token))
 
 
-class TestSessionCollection(unittest.TestCase):
+class TestXMPPSessionCollection(unittest.TestCase):
 
     def setUp(self):
-        self.sessions = SessionCollection()
+        self.sessions = XMPPSessionCollection()
 
-    def test_find_by_user_uuid_when_no_session(self):
-        session = self.sessions.find_by_user_uuid('123-456')
+    def test_find_by_username_when_no_session(self):
+        session = self.sessions.find_by_username('123-456')
         assert_that(session, equal_to(None))
 
     def test_find_by_user_uuid(self):
-        session = Mock(user_uuid='123-456')
+        session = Mock(username='123-456')
         self.sessions.add(session)
 
-        session = self.sessions.find_by_user_uuid('123-456')
+        session = self.sessions.find_by_username('123-456')
         assert_that(session, is_(session))
 
     def test_find_by_user_uuid_when_multiple_sessions(self):
-        session1 = Mock(user_uuid='123-456')
-        session2 = Mock(user_uuid='789-012')
+        session1 = Mock(username='123-456')
+        session2 = Mock(username='789-012')
         self.sessions.add(session2)
         self.sessions.add(session1)
 
-        session = self.sessions.find_by_user_uuid('123-456')
+        session = self.sessions.find_by_username('123-456')
         assert_that(session, is_(session1))
