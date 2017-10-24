@@ -109,8 +109,9 @@ class Session(object):
         self._token = yield from self._authenticator.get_token(token_id)
         self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
 
-        self._xmpp.connection_error_handler(self._close_session)
-        yield from self._xmpp.connect(self._token['auth_id'], self._token['token'], self._loop)
+        if self._token['xivo_user_uuid']:
+            self._xmpp.connection_error_handler(self._close_session)
+            yield from self._xmpp.connect(self._token['xivo_user_uuid'], self._token['token'], self._loop)
 
         try:
             self._xmpp_sessions.add(self._xmpp)
