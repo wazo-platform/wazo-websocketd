@@ -68,7 +68,7 @@ class Session(object):
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
-        self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
+        self._xmpp = ClientXMPPWrapper(sessions=self._xmpp_sessions, **config['mongooseim'])
         self._started = False
         self._token = None
 
@@ -114,7 +114,6 @@ class Session(object):
             yield from self._xmpp.connect(self._token['xivo_user_uuid'], self._token['token'], self._loop)
 
         try:
-            self._xmpp_sessions.add(self._xmpp)
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
@@ -126,7 +125,6 @@ class Session(object):
             self._bus_event_consumer.close()
             yield from self._multiplexer.close()
             self._xmpp.close()
-            self._xmpp_sessions.remove(self._xmpp)
 
     @asyncio.coroutine
     def _close_session(self, event):
@@ -136,7 +134,6 @@ class Session(object):
         self._bus_event_consumer.close()
         self._multiplexer.stop()
         yield from self._multiplexer.close()
-        self._xmpp.close()
         yield from self._ws.close(1011, 'xmpp connection error')
 
     @asyncio.coroutine
@@ -184,11 +181,13 @@ class Session(object):
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
         xmpp_session = self._xmpp_sessions.find_by_username(msg.user_uuid)
-        if xmpp_session:
-            xmpp_session.send_presence(msg.presence)
-            yield from self._ws.send(self._protocol_encoder.encode_presence())
-        else:
-            yield from self._ws.send(self._protocol_encoder.encode_presence_user_not_connected())
+        # TODO handle case of disconnected presence
+        if not xmpp_session:
+            xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port, self._xmpp_sessions)
+            yield from xmpp_session.connect(msg.user_uuid, self._token['token'], self._loop)
+
+        xmpp_session.send_presence(msg.presence)
+        yield from self._ws.send(self._protocol_encoder.encode_presence())
 
     @asyncio.coroutine
     def _on_bus_event(self, future):

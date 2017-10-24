@@ -57,7 +57,12 @@ class TestWebsocketOperation(IntegrationTest):
     def test_presence_when_no_user_connected(self):
         yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
         msg = yield from self.websocketd_client.op_presence('random-uuid', 'dnd')
-        self.assertEqual(msg['code'], 404)
+        yield from self.websocketd_client.close()
+
+        self.assertEqual(msg['code'], 0)
+        self.assertEqual(len(self.mongooseim_client.sessions()), 1)
+
+        # FIXME: check that the presence really changed, when get_presence is implemented
 
     @run_with_loop
     def test_presence(self):
