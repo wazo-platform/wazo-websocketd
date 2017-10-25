@@ -88,3 +88,15 @@ class TestWebsocketOperation(IntegrationTest):
         yield from other_client.close()
 
         # FIXME: check that the presence really changed, when get_presence is implemented
+
+    @run_with_loop
+    def test_presence_to_disconnected(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
+        yield from self.websocketd_client.op_presence('random-uuid', 'dnd')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 1)
+
+        yield from self.websocketd_client.op_presence('random-uuid', 'disconnected')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 0)
+
+        yield from self.websocketd_client.close()
+        # FIXME: check that the presence really changed, when get_presence is implemented

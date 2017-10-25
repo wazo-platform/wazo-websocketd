@@ -181,7 +181,6 @@ class Session(object):
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
         xmpp_session = self._xmpp_sessions.find_by_username(msg.user_uuid)
-        # TODO handle case of disconnected presence
         if not xmpp_session:
             xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port, self._xmpp_sessions)
             yield from xmpp_session.connect(msg.user_uuid, self._token['token'], self._loop)

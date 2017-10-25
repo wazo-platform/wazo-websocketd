@@ -66,6 +66,9 @@ class ClientXMPPWrapper():
         self._handlers.append(['connection_failed', func])
 
     def send_presence(self, presence):
+        if presence == 'disconnected':
+            self.close()
+            return
         self._client.send_presence(pstatus=presence)
 
 
