@@ -65,6 +65,18 @@ class TestWebsocketOperation(IntegrationTest):
         # FIXME: check that the presence really changed, when get_presence is implemented
 
     @run_with_loop
+    def test_no_remained_xmpp_session_when_websocketd_stopped(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
+        yield from self.websocketd_client.op_presence('random-uuid', 'dnd')  # To create XMPP session
+        yield from self.websocketd_client.close()
+
+        self.assertEqual(len(self.mongooseim_client.sessions()), 1)
+        self.stop_service('websocketd')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 0)
+
+        self.start_service('websocketd')
+
+    @run_with_loop
     def test_presence(self):
         yield from self.auth_server.put_token('other-token-id', xivo_user_uuid='other-xivo-user-uuid')
         other_client = self.new_websocketd_client()
