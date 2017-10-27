@@ -104,7 +104,9 @@ class MongooseIMClient(object):
     entrypoint = '/usr/bin/mongooseimctl'
 
     def __init__(self):
-        # TODO: add xivo-websocketd to mongooseim group
+        # When running "mongooseimctl", erlang creates a ".erlang.cookie" to set
+        # the cluster on which the command must run. In our case, we don't care
+        # of this file, but we must set the variable HOME to use "mongooseimctl"
         os.environ["HOME"] = "/var/lib/mongooseim"
 
     @asyncio.coroutine
