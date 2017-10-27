@@ -184,7 +184,7 @@ class Session(object):
         mongooseim_client = MongooseIMClient()
         user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
         if not user_resources:
-            xmpp_session = yield from self._start_self_xmpp_session(msg.user_uuid, self._token)
+            xmpp_session = yield from self._start_xmpp_session(msg.user_uuid, self._token)
             if xmpp_session:
                 user_resources.append(xmpp_session.resource)
 
