@@ -12,7 +12,7 @@ from xivo_websocketd.exception import AuthenticationError,\
     NoTokenError, SessionProtocolError, BusConnectionLostError,\
     AuthenticationExpiredError, BusConnectionError
 from xivo_websocketd.multiplexer import Multiplexer
-from .xmpp import ClientXMPPWrapper
+from .xmpp import ClientXMPPWrapper, MongooseIMClient
 
 logger = logging.getLogger(__name__)
 
@@ -180,13 +180,29 @@ class Session(object):
             yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
-        xmpp_session = self._xmpp_sessions.find_by_username(msg.user_uuid)
-        if not xmpp_session:
-            xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port, self._xmpp_sessions)
-            yield from xmpp_session.connect(msg.user_uuid, self._token['token'], self._loop)
+        # TODO Remove the concept of xmpp_sessions
+        mongooseim_client = MongooseIMClient()
+        user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
+        if not user_resources:
+            xmpp_session = yield from self._start_self_xmpp_session(msg.user_uuid, self._token)
+            if xmpp_session:
+                user_resources.append(xmpp_session.resource)
 
-        xmpp_session.send_presence(msg.presence)
+        for resource in user_resources:
+            yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)
+
         yield from self._ws.send(self._protocol_encoder.encode_presence())
+
+    @asyncio.coroutine
+    def _start_xmpp_session(self, user_uuid, token):
+        # Cannot start xmpp session if the token do not belongs to the
+        # user_uuid of the message
+        if token['xivo_user_uuid'] != user_uuid:
+            return
+
+        xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port, self._xmpp_sessions)
+        yield from xmpp_session.connect(user_uuid, self._token['token'], self._loop)
+        return xmpp_session
 
     @asyncio.coroutine
     def _on_bus_event(self, future):

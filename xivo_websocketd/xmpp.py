@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import os
 
 from slixmpp import ClientXMPP
 
@@ -71,6 +72,12 @@ class ClientXMPPWrapper():
             return
         self._client.send_presence(pstatus=presence)
 
+    @property
+    def resource(self):
+        if not self._client:
+            return
+        return self._client.boundjid.resource
+
 
 class _ClientXMPP(ClientXMPP):
 
@@ -89,3 +96,77 @@ class _ClientXMPP(ClientXMPP):
     @asyncio.coroutine
     def start(self, event):
         self.send_presence()
+
+
+class MongooseIMClient(object):
+
+    domain = 'localhost'
+    entrypoint = '/usr/bin/mongooseimctl'
+
+    def __init__(self):
+        # TODO: add xivo-websocketd to mongooseim group
+        os.environ["HOME"] = "/var/lib/mongooseim"
+
+    @asyncio.coroutine
+    def set_presence(self, username, resource, presence):
+        if presence == 'disconnected':
+            reason = ""
+            cmd = [self.entrypoint, 'kick_session', username, self.domain, resource, reason]
+            logger.debug('disconnecting "{}@{}/{}"'.format(username, self.domain, resource))
+        else:
+            type_, show, priority = '', '', ''
+            status = presence
+            cmd = [self.entrypoint, 'set_presence', username, self.domain, resource, type_, show, status, priority]
+            logger.debug('updating "{}@{}/{}" with presence "{}"'.format(username, self.domain, resource, presence))
+        process = yield from self._stream_subprocess(cmd)
+        error = yield from self._stream_stderr(process.stderr)
+        if error:
+            logger.warning('setting "{}@{}/{}" presence to "{}" raise: {}:'.format(username,
+                                                                                   self.domain,
+                                                                                   resource,
+                                                                                   presence,
+                                                                                   error))
+
+    @asyncio.coroutine
+    def get_user_resources(self, username):
+        cmd = [self.entrypoint, 'user_resources', username, self.domain]
+        process = yield from self._stream_subprocess(cmd)
+        resources = yield from self._process_stdout_user_resources(process.stdout)
+        logger.debug('user "{}" has the following connected resources: {}'.format(username, resources))
+        error = yield from self._stream_stderr(process.stderr)
+        if error:
+            logger.warning('getting "{}@{}" resource raise: {}'.format(username, self.domain, error))
+        return resources
+
+    @asyncio.coroutine
+    def _process_stdout_user_resources(self, stream):
+        resources = []
+        while True:
+            line = yield from stream.readline()
+            if line:
+                line = line.decode('utf-8')
+                line = line.strip()
+                resources.append(line)
+            else:
+                break
+        return resources
+
+    @asyncio.coroutine
+    def _stream_stderr(self, stream):
+        lines = []
+        while True:
+            line = yield from stream.readline()
+            if line:
+                line = line.decode('utf-8')
+                lines.append(line)
+            else:
+                break
+        return '\n'.join(lines)
+
+    @asyncio.coroutine
+    def _stream_subprocess(self, cmd):
+        process = yield from asyncio.create_subprocess_exec(*cmd,
+                                                            stdout=asyncio.subprocess.PIPE,
+                                                            stderr=asyncio.subprocess.PIPE)
+        yield from process.wait()
+        return process
