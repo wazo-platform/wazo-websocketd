@@ -12,13 +12,12 @@ logger = logging.getLogger(__name__)
 
 class ClientXMPPWrapper():
 
-    def __init__(self, host, xmpp_port, sessions, **kwargs):
+    def __init__(self, host, xmpp_port, **kwargs):
         self._host = host
         self._port = xmpp_port
         self._handlers = []
         self._client = None
         self.username = None
-        self._sessions = sessions
 
     @asyncio.coroutine
     def connect(self, username, password, loop):
@@ -32,8 +31,6 @@ class ClientXMPPWrapper():
             self._client.add_event_handler(*handler)
         self._client.connect((self._host, self._port))
         yield from self.wait_until_connected(loop)
-
-        self._sessions.add(self)
 
     @asyncio.coroutine
     def wait_until_connected(self, loop):
@@ -52,7 +49,6 @@ class ClientXMPPWrapper():
     @asyncio.coroutine
     def _close_callback(self, event):
         self.close()
-        self._sessions.remove(self)
 
     def _stop_connect_coroutine(self):
         # slixmpp always start a new coroutine on OSError to retry to reconnect.

@@ -17,32 +17,22 @@ from .xmpp import ClientXMPPWrapper, MongooseIMClient
 logger = logging.getLogger(__name__)
 
 
-class XMPPSessionCollection(set):
-
-    def find_by_username(self, username):
-        for session in self:
-            if session.username == username:
-                return session
-
-
 class SessionFactory(object):
 
-    def __init__(self, config, loop, authenticator, bus_event_service,
-                 protocol_encoder, protocol_decoder, xmpp_sessions):
+    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder):
         self._config = config
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
-        self._xmpp_sessions = xmpp_sessions
 
     @asyncio.coroutine
     def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
         logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
-                          self._protocol_encoder, self._protocol_decoder, self._xmpp_sessions, ws, path)
+                          self._protocol_encoder, self._protocol_decoder, ws, path)
         try:
             yield from session.run()
         finally:
@@ -57,18 +47,17 @@ class Session(object):
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
     def __init__(self, config, loop, authenticator, bus_event_service,
-                 protocol_encoder, protocol_decoder, xmpp_sessions, ws, path):
+                 protocol_encoder, protocol_decoder, ws, path):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
-        self._xmpp_sessions = xmpp_sessions
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
-        self._xmpp = ClientXMPPWrapper(sessions=self._xmpp_sessions, **config['mongooseim'])
+        self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
         self._token = None
 
@@ -180,7 +169,6 @@ class Session(object):
             yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
-        # TODO Remove the concept of xmpp_sessions
         mongooseim_client = MongooseIMClient()
         user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
         if not user_resources:
@@ -200,7 +188,7 @@ class Session(object):
         if token['xivo_user_uuid'] != user_uuid:
             return
 
-        xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port, self._xmpp_sessions)
+        xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port)
         yield from xmpp_session.connect(user_uuid, self._token['token'], self._loop)
         return xmpp_session
 
