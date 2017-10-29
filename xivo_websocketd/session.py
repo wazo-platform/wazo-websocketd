@@ -182,6 +182,18 @@ class Session(object):
         yield from self._ws.send(self._protocol_encoder.encode_presence())
 
     @asyncio.coroutine
+    def _do_ws_get_presence(self, msg):
+        acl = 'ctid-ng.users.{user_uuid}.presences.read'.format(user_uuid=msg.user_uuid)
+        is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
+        if not is_valid:
+            yield from self._ws.send(self._protocol_encoder.encode_get_presence_unauthorized())
+
+        logger.debug('getting presence for user "%s"', msg.user_uuid)
+        mongooseim_client = MongooseIMClient()
+        presence = yield from mongooseim_client.get_presence(msg.user_uuid)
+        yield from self._ws.send(self._protocol_encoder.encode_get_presence(msg.user_uuid, presence))
+
+    @asyncio.coroutine
     def _start_xmpp_session(self, user_uuid, token):
         # Cannot start xmpp session if the token do not belongs to the
         # user_uuid of the message

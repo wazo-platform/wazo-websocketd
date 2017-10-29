@@ -71,6 +71,29 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
+    def test_encode_get_presence(self):
+        expected = {
+            'op': 'get_presence',
+            'code': 0,
+            'msg': {'user_uuid': '123',
+                    'presence': 'dnd'},
+        }
+
+        data = self.encoder.encode_get_presence('123', 'dnd')
+
+        assert_that(json.loads(data), equal_to(expected))
+
+    def test_encode_get_presence_unauthorized(self):
+        expected = {
+            'op': 'get_presence',
+            'code': 401,
+            'msg': 'unauthorized',
+        }
+
+        data = self.encoder.encode_get_presence_unauthorized()
+
+        assert_that(json.loads(data), equal_to(expected))
+
 
 class TestProtocolDecoder(unittest.TestCase):
 
@@ -140,6 +163,14 @@ class TestProtocolDecoder(unittest.TestCase):
         assert_that(msg.op, equal_to('presence'))
         assert_that(msg.user_uuid, equal_to('123'))
         assert_that(msg.presence, equal_to('dnd'))
+
+    def test_decode_get_presence(self):
+        data = '{"op": "get_presence", "data": {"user_uuid": "123"}}'
+
+        msg = self.decoder.decode(data)
+
+        assert_that(msg.op, equal_to('get_presence'))
+        assert_that(msg.user_uuid, equal_to('123'))
 
     def test_decode_start(self):
         data = '{"op": "start"}'
