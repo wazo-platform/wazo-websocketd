@@ -132,6 +132,15 @@ class TestProtocolDecoder(unittest.TestCase):
 
         self.assertRaises(SessionProtocolError, self.decoder.decode, data)
 
+    def test_decode_presence(self):
+        data = '{"op": "presence", "data": {"user_uuid": "123", "presence": "dnd"}}'
+
+        msg = self.decoder.decode(data)
+
+        assert_that(msg.op, equal_to('presence'))
+        assert_that(msg.user_uuid, equal_to('123'))
+        assert_that(msg.presence, equal_to('dnd'))
+
     def test_decode_start(self):
         data = '{"op": "start"}'
 
