@@ -98,10 +98,6 @@ class Session(object):
         self._token = yield from self._authenticator.get_token(token_id)
         self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
 
-        if self._token['xivo_user_uuid']:
-            self._xmpp.connection_error_handler(self._close_session)
-            yield from self._xmpp.connect(self._token['xivo_user_uuid'], self._token['token'], self._loop)
-
         try:
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
@@ -158,6 +154,11 @@ class Session(object):
     def _do_ws_start(self, msg):
         if self._started:
             return
+
+        if self._token['xivo_user_uuid']:
+            self._xmpp.connection_error_handler(self._close_session)
+            yield from self._xmpp.connect(self._token['xivo_user_uuid'], self._token['token'], self._loop)
+
         self._started = True
         yield from self._ws.send(self._protocol_encoder.encode_start())
 
