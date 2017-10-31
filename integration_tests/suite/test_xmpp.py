@@ -1,6 +1,8 @@
 # Copyright 2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
+import time
+
 from contextlib import contextmanager
 
 from .test_api.base import IntegrationTest, run_with_loop
@@ -36,6 +38,7 @@ class TestXMPPConnection(IntegrationTest):
         self.stop_service('mongooseim', timeout=30)
         yield
         self.start_service('mongooseim')
+        time.sleep(2)  # initiliaze MongooseIM
 
     @run_with_loop
     def test_client_disconnect(self):
