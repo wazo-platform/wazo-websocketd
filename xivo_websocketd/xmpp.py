@@ -3,6 +3,7 @@
 
 import asyncio
 import logging
+import os
 
 from slixmpp import ClientXMPP
 
@@ -16,13 +17,16 @@ class ClientXMPPWrapper():
         self._port = xmpp_port
         self._handlers = []
         self._client = None
+        self.username = None
 
     @asyncio.coroutine
     def connect(self, username, password, loop):
         if not username or not password:
             logger.warning('cannot create XMPP session: missing username/password')
+        self.username = username
         jid = '{}@localhost'.format(username)
         self._client = _ClientXMPP(jid, password)
+        self.connection_error_handler(self._close_callback)
         for handler in self._handlers:
             self._client.add_event_handler(*handler)
         self._client.connect((self._host, self._port))
@@ -42,6 +46,10 @@ class ClientXMPPWrapper():
         self._client.disconnect()
         self._stop_connect_coroutine()
 
+    @asyncio.coroutine
+    def _close_callback(self, event):
+        self.close()
+
     def _stop_connect_coroutine(self):
         # slixmpp always start a new coroutine on OSError to retry to reconnect.
         # But if xmpp server is down and client try to connect, then there will
@@ -55,7 +63,16 @@ class ClientXMPPWrapper():
         self._handlers.append(['connection_failed', func])
 
     def send_presence(self, presence):
+        if presence == 'disconnected':
+            self.close()
+            return
         self._client.send_presence(pstatus=presence)
+
+    @property
+    def resource(self):
+        if not self._client:
+            return
+        return self._client.boundjid.resource
 
 
 class _ClientXMPP(ClientXMPP):
@@ -75,3 +92,69 @@ class _ClientXMPP(ClientXMPP):
     @asyncio.coroutine
     def start(self, event):
         self.send_presence()
+
+
+class MongooseIMClient(object):
+
+    domain = 'localhost'
+    entrypoint = '/usr/bin/mongooseimctl'
+
+    def __init__(self):
+        # When running "mongooseimctl", erlang creates a ".erlang.cookie" to set
+        # the cluster on which the command must run. In our case, we don't care
+        # of this file, but we must set the variable HOME to use "mongooseimctl"
+        os.environ["HOME"] = "/var/lib/mongooseim"
+
+    @asyncio.coroutine
+    def set_presence(self, username, resource, presence):
+        if presence == 'disconnected':
+            reason = ""
+            cmd = [self.entrypoint, 'kick_session', username, self.domain, resource, reason]
+            logger.debug('disconnecting "{}@{}/{}"'.format(username, self.domain, resource))
+        else:
+            type_, show, priority = '', '', ''
+            status = presence
+            cmd = [self.entrypoint, 'set_presence', username, self.domain, resource, type_, show, status, priority]
+            logger.debug('updating "{}@{}/{}" with presence "{}"'.format(username, self.domain, resource, presence))
+        process = yield from self._stream_subprocess(cmd)
+        error = yield from self._stream_stderr(process.stderr)
+        if error:
+            logger.warning('setting "{}@{}/{}" presence to "{}" raise: {}:'.format(username,
+                                                                                   self.domain,
+                                                                                   resource,
+                                                                                   presence,
+                                                                                   error))
+
+    @asyncio.coroutine
+    def get_user_resources(self, username):
+        cmd = [self.entrypoint, 'user_resources', username, self.domain]
+        process = yield from self._stream_subprocess(cmd)
+        resources = yield from self._process_stdout_user_resources(process.stdout)
+        logger.debug('user "{}" has the following connected resources: {}'.format(username, resources))
+        error = yield from self._stream_stderr(process.stderr)
+        if error:
+            logger.warning('getting "{}@{}" resource raise: {}'.format(username, self.domain, error))
+        return resources
+
+    @asyncio.coroutine
+    def _process_stdout_user_resources(self, stream):
+        return list(self._stream_to_list(stream))
+
+    @asyncio.coroutine
+    def _stream_stderr(self, stream):
+        return '\n'.join(self._stream_to_list(stream))
+
+    def _stream_to_list(self, stream):
+        while True:
+            line = yield from stream.readline()
+            if not line:
+                return
+            yield line.decode('utf-8')
+
+    @asyncio.coroutine
+    def _stream_subprocess(self, cmd):
+        process = yield from asyncio.create_subprocess_exec(*cmd,
+                                                            stdout=asyncio.subprocess.PIPE,
+                                                            stderr=asyncio.subprocess.PIPE)
+        yield from process.wait()
+        return process

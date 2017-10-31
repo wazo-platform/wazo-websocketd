@@ -39,6 +39,18 @@ class TestXMPPConnection(IntegrationTest):
         if sessions:
             raise AssertionError('xmpp server contains openned sessions: {}'.format(sessions))
 
+    @run_with_loop
+    def test_no_remained_xmpp_session_when_websocketd_stopped(self):
+        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
+        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 1)
+
+        self.stop_service('websocketd')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 0)
+
+        yield from self.websocketd_client.close()
+        self.start_service('websocketd')
+
 
 class TestWebsocketOperation(IntegrationTest):
 
@@ -52,22 +64,3 @@ class TestWebsocketOperation(IntegrationTest):
         yield from self.auth_server.remove_token(token)
         msg = yield from self.websocketd_client.op_presence('123-456', 'dnd')
         self.assertEqual(msg['code'], 401)
-
-    @run_with_loop
-    def test_presence_when_no_user_connected(self):
-        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
-        msg = yield from self.websocketd_client.op_presence('random-uuid', 'dnd')
-        self.assertEqual(msg['code'], 404)
-
-    @run_with_loop
-    def test_presence(self):
-        yield from self.auth_server.put_token('other-token-id', xivo_user_uuid='other-xivo-user-uuid')
-        other_client = self.new_websocketd_client()
-        yield from other_client.connect_and_wait_for_init('other-token-id')
-
-        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
-        msg = yield from self.websocketd_client.op_presence('other-xivo-user-uuid', 'dnd')
-        self.assertEqual(msg['code'], 0)
-        yield from other_client.close()
-
-        # FIXME: check that the presence really changed, when get_presence is implemented
