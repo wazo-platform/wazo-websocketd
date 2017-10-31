@@ -187,6 +187,7 @@ class Session(object):
         is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
         if not is_valid:
             yield from self._ws.send(self._protocol_encoder.encode_get_presence_unauthorized())
+            return
 
         logger.debug('getting presence for user "%s"', msg.user_uuid)
         mongooseim_client = MongooseIMClient()
