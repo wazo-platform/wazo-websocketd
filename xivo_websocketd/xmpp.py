@@ -106,6 +106,16 @@ class MongooseIMClient(object):
         os.environ["HOME"] = "/var/lib/mongooseim"
 
     @asyncio.coroutine
+    def get_presence(self, username):
+        cmd = [self.entrypoint, 'get_presence', username, self.domain]
+        process = yield from self._stream_subprocess(cmd)
+        presence = yield from self._process_stdout_get_presence(process.stdout)
+        error = yield from self._stream_stderr(process.stderr)
+        if error:
+            logger.warning('getting presence of user "{}@{}" raise: {}:'.format(username, self.domain, error))
+        return presence
+
+    @asyncio.coroutine
     def set_presence(self, username, resource, presence):
         if presence == 'disconnected':
             reason = ""
@@ -139,6 +149,15 @@ class MongooseIMClient(object):
     @asyncio.coroutine
     def _process_stdout_user_resources(self, stream):
         return list(self._stream_to_list(stream))
+
+    @asyncio.coroutine
+    def _process_stdout_get_presence(self, stream):
+        first_line = yield from stream.readline()
+        result = first_line.decode('utf-8').split()  # [jid, show, status]
+        if len(result) > 2:
+            return result[2]  # status
+        elif len(result) == 2:
+            return result[1]  # show
 
     @asyncio.coroutine
     def _stream_stderr(self, stream):
