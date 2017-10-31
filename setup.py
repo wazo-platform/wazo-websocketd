@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2016 Avencall
+# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 from setuptools import setup
@@ -10,7 +10,7 @@ setup(
     name='xivo-websocketd',
     version='1.0',
     author='Wazo Authors',
-    author_email='dev.wazo@gmail.com',
+    author_email='dev@wazo.community',
     url='http://wazo.community',
     packages=find_packages(),
     scripts=['bin/xivo-websocketd'],
