@@ -12,7 +12,11 @@ class TestNoMongooseIM(IntegrationTest):
 
     @run_with_loop
     def test_no_mongooseim_server_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(self.valid_token_id)
+        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
+        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        self.websocketd_client._started = True
+        yield from self.websocketd_client.op_start()
+        yield from self.websocketd_client.wait_for_close()
 
 
 class TestXMPPConnection(IntegrationTest):
@@ -21,7 +25,9 @@ class TestXMPPConnection(IntegrationTest):
 
     @run_with_loop
     def test_mongooseim_stop_after_connected(self):
-        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
+        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
+        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.op_start()
         with self.mongooseim_stopped():
             yield from self.websocketd_client.wait_for_close()
 
@@ -33,7 +39,9 @@ class TestXMPPConnection(IntegrationTest):
 
     @run_with_loop
     def test_client_disconnect(self):
-        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
+        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
+        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.op_start()
         yield from self.websocketd_client.close()
         sessions = self.mongooseim_client.sessions()
         if sessions:
@@ -43,6 +51,7 @@ class TestXMPPConnection(IntegrationTest):
     def test_no_remained_xmpp_session_when_websocketd_stopped(self):
         yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
         yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.op_start()
         self.assertEqual(len(self.mongooseim_client.sessions()), 1)
 
         self.stop_service('websocketd')
