@@ -138,28 +138,18 @@ class MongooseIMClient(object):
 
     @asyncio.coroutine
     def _process_stdout_user_resources(self, stream):
-        resources = []
-        while True:
-            line = yield from stream.readline()
-            if line:
-                line = line.decode('utf-8')
-                line = line.strip()
-                resources.append(line)
-            else:
-                break
-        return resources
+        return list(self._stream_to_list(stream))
 
     @asyncio.coroutine
     def _stream_stderr(self, stream):
-        lines = []
+        return '\n'.join(self._stream_to_list(stream))
+
+    def _stream_to_list(self, stream):
         while True:
             line = yield from stream.readline()
-            if line:
-                line = line.decode('utf-8')
-                lines.append(line)
-            else:
-                break
-        return '\n'.join(lines)
+            if not line:
+                return
+            yield line.decode('utf-8')
 
     @asyncio.coroutine
     def _stream_subprocess(self, cmd):
