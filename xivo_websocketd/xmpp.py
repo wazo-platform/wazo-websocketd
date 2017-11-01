@@ -168,7 +168,7 @@ class MongooseIMClient(object):
             line = yield from stream.readline()
             if not line:
                 return
-            yield line.decode('utf-8')
+            yield line.decode('utf-8').strip()
 
     @asyncio.coroutine
     def _stream_subprocess(self, cmd):
