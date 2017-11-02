@@ -5,6 +5,9 @@ import os.path
 
 ASSET_ROOT = os.path.join(os.path.dirname(__file__), '..', '..', 'assets')
 
+VALID_USER_CONNECTED = 'valid-user-connected'
+VALID_USER_DISCONNECTED = 'valid-user-disconnected'
+
 INVALID_TOKEN_ID = 'invalid-token'
 UNAUTHORIZED_TOKEN_ID = 'invalid-acl-token'
 

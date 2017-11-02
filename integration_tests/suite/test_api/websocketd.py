@@ -113,6 +113,13 @@ class WebSocketdClient(object):
         yield from self._expect_msg('subscribe')
 
     @asyncio.coroutine
+    def op_get_presence(self, user_uuid):
+        yield from self._send_msg({'op': 'get_presence', 'data': {'user_uuid': user_uuid}})
+        if self._started:
+            return
+        return (yield from self._expect_msg('get_presence'))
+
+    @asyncio.coroutine
     def op_set_presence(self, user_uuid, presence):
         yield from self._send_msg({'op': 'set_presence', 'data': {'user_uuid': user_uuid, 'presence': presence}})
         if self._started:
