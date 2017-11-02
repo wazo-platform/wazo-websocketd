@@ -38,7 +38,7 @@ class TestXMPPConnection(IntegrationTest):
         self.stop_service('mongooseim', timeout=30)
         yield
         self.start_service('mongooseim')
-        time.sleep(2)  # initiliaze MongooseIM
+        time.sleep(3)  # initiliaze MongooseIM
 
     @run_with_loop
     def test_client_disconnect(self):
