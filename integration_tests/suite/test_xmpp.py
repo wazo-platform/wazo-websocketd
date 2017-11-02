@@ -69,10 +69,10 @@ class TestWebsocketOperation(IntegrationTest):
     asset = 'basic'
 
     @run_with_loop
-    def test_presence_when_no_acl_for_presence(self):
+    def test_set_presence_when_no_acl_for_presence(self):
         token = 'only-valid-for-connection'
         yield from self.auth_server.put_token(token, acls=[])
         yield from self.websocketd_client.connect_and_wait_for_init(token)
         yield from self.auth_server.remove_token(token)
-        msg = yield from self.websocketd_client.op_presence('123-456', 'dnd')
+        msg = yield from self.websocketd_client.op_set_presence('123-456', 'dnd')
         self.assertEqual(msg['code'], 401)

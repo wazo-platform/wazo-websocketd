@@ -155,9 +155,15 @@ class MongooseIMClient(object):
         first_line = yield from stream.readline()
         result = first_line.decode('utf-8').split()  # [jid, show, status]
         if len(result) > 2:
-            return result[2]  # status
+            presence = result[2]  # status
         elif len(result) == 2:
-            return result[1]  # show
+            presence = result[1]  # show
+        else:
+            presence = 'disconnected'
+
+        if presence == 'unavailable':
+            presence = 'disconnected'
+        return presence
 
     @asyncio.coroutine
     def _stream_stderr(self, stream):

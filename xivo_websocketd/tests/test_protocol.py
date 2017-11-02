@@ -49,25 +49,25 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
-    def test_encode_presence(self):
+    def test_encode_set_presence(self):
         expected = {
-            'op': 'presence',
+            'op': 'set_presence',
             'code': 0,
             'msg': '',
         }
 
-        data = self.encoder.encode_presence()
+        data = self.encoder.encode_set_presence()
 
         assert_that(json.loads(data), equal_to(expected))
 
-    def test_encode_presence_unauthorized(self):
+    def test_encode_set_presence_unauthorized(self):
         expected = {
-            'op': 'presence',
+            'op': 'set_presence',
             'code': 401,
             'msg': 'unauthorized',
         }
 
-        data = self.encoder.encode_presence_unauthorized()
+        data = self.encoder.encode_set_presence_unauthorized()
 
         assert_that(json.loads(data), equal_to(expected))
 
@@ -155,12 +155,12 @@ class TestProtocolDecoder(unittest.TestCase):
 
         self.assertRaises(SessionProtocolError, self.decoder.decode, data)
 
-    def test_decode_presence(self):
-        data = '{"op": "presence", "data": {"user_uuid": "123", "presence": "dnd"}}'
+    def test_decode_set_presence(self):
+        data = '{"op": "set_presence", "data": {"user_uuid": "123", "presence": "dnd"}}'
 
         msg = self.decoder.decode(data)
 
-        assert_that(msg.op, equal_to('presence'))
+        assert_that(msg.op, equal_to('set_presence'))
         assert_that(msg.user_uuid, equal_to('123'))
         assert_that(msg.presence, equal_to('dnd'))
 
