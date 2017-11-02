@@ -164,7 +164,7 @@ class Session(object):
 
     @asyncio.coroutine
     def _do_ws_set_presence(self, msg):
-        acl = 'ctid-ng.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
+        acl = 'websocketd.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
         is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
         if not is_valid:
             yield from self._ws.send(self._protocol_encoder.encode_set_presence_unauthorized())
@@ -185,7 +185,7 @@ class Session(object):
 
     @asyncio.coroutine
     def _do_ws_get_presence(self, msg):
-        acl = 'ctid-ng.users.{user_uuid}.presences.read'.format(user_uuid=msg.user_uuid)
+        acl = 'websocketd.users.{user_uuid}.presences.read'.format(user_uuid=msg.user_uuid)
         is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
         if not is_valid:
             yield from self._ws.send(self._protocol_encoder.encode_get_presence_unauthorized())
