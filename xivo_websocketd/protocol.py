@@ -24,11 +24,11 @@ class SessionProtocolEncoder(object):
     def encode_start(self):
         return self._encode('start')
 
-    def encode_presence(self):
-        return self._encode('presence')
+    def encode_set_presence(self):
+        return self._encode('set_presence')
 
-    def encode_presence_unauthorized(self):
-        return self._encode('presence', 401, 'unauthorized')
+    def encode_set_presence_unauthorized(self):
+        return self._encode('set_presence', 401, 'unauthorized')
 
     def encode_get_presence(self, user_uuid, presence):
         return self._encode('get_presence', msg={'user_uuid': user_uuid,
@@ -77,7 +77,7 @@ class SessionProtocolDecoder(object):
             raise SessionProtocolError('object data "event_name" value is not a string')
         return _SubscribeMessage(operation, event_name)
 
-    def _decode_presence(self, operation, deserialized_data):
+    def _decode_set_presence(self, operation, deserialized_data):
         if 'data' not in deserialized_data:
             raise SessionProtocolError('object is missing required "data" key')
         if not isinstance(deserialized_data['data'], dict):

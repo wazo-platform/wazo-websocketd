@@ -163,11 +163,11 @@ class Session(object):
         yield from self._ws.send(self._protocol_encoder.encode_start())
 
     @asyncio.coroutine
-    def _do_ws_presence(self, msg):
+    def _do_ws_set_presence(self, msg):
         acl = 'ctid-ng.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
         is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
         if not is_valid:
-            yield from self._ws.send(self._protocol_encoder.encode_presence_unauthorized())
+            yield from self._ws.send(self._protocol_encoder.encode_set_presence_unauthorized())
             return
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
@@ -181,7 +181,7 @@ class Session(object):
         for resource in user_resources:
             yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)
 
-        yield from self._ws.send(self._protocol_encoder.encode_presence())
+        yield from self._ws.send(self._protocol_encoder.encode_set_presence())
 
     @asyncio.coroutine
     def _do_ws_get_presence(self, msg):
