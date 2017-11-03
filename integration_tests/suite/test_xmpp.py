@@ -15,8 +15,7 @@ class TestNoMongooseIM(IntegrationTest):
 
     @run_with_loop
     def test_no_mongooseim_server_closes_websocket(self):
-        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
-        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
         self.websocketd_client._started = True
         yield from self.websocketd_client.op_start()
         yield from self.websocketd_client.wait_for_close()
@@ -28,8 +27,7 @@ class TestXMPPConnection(IntegrationTest):
 
     @run_with_loop
     def test_mongooseim_stop_after_connected(self):
-        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
-        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
         yield from self.websocketd_client.op_start()
         with self.mongooseim_stopped():
             yield from self.websocketd_client.wait_for_close()
@@ -43,8 +41,7 @@ class TestXMPPConnection(IntegrationTest):
 
     @run_with_loop
     def test_client_disconnect(self):
-        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
-        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
         yield from self.websocketd_client.op_start()
         yield from self.websocketd_client.close()
         sessions = self.mongooseim_client.sessions()
@@ -53,8 +50,7 @@ class TestXMPPConnection(IntegrationTest):
 
     @run_with_loop
     def test_no_remained_xmpp_session_when_websocketd_stopped(self):
-        yield from self.auth_server.put_token('my-token-id', xivo_user_uuid='my-user-uuid')
-        yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
         yield from self.websocketd_client.op_start()
         self.assertEqual(len(self.mongooseim_client.sessions()), 1)
 
@@ -73,36 +69,30 @@ class TestWebsocketOperation(IntegrationTest):
     def test_get_presence_when_no_acl_for_presence(self):
         yield from self.auth_server.put_token('token-id')
         yield from self.websocketd_client.connect_and_wait_for_init('token-id')
-        yield from self.auth_server.remove_token('token-id')
         msg = yield from self.websocketd_client.op_get_presence(VALID_USER_CONNECTED)
         self.assertEqual(msg['code'], 401)
 
     @run_with_loop
     def test_get_presence_with_user_connected(self):
-        yield from self.auth_server.put_token('token-id')
-        yield from self.websocketd_client.connect_and_wait_for_init('token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
         msg = yield from self.websocketd_client.op_get_presence(VALID_USER_CONNECTED)
         self.assertEqual(msg['msg']['presence'], 'available')
 
     @run_with_loop
     def test_get_presence_with_user_disconnected(self):
-        yield from self.auth_server.put_token('token-id')
-        yield from self.websocketd_client.connect_and_wait_for_init('token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
         msg = yield from self.websocketd_client.op_get_presence(VALID_USER_DISCONNECTED)
         self.assertEqual(msg['msg']['presence'], 'disconnected')
 
     @run_with_loop
     def test_set_presence_when_no_acl_for_presence(self):
-        token = 'only-valid-for-connection'
-        yield from self.auth_server.put_token(token)
-        yield from self.websocketd_client.connect_and_wait_for_init(token)
-        yield from self.auth_server.remove_token(token)
+        yield from self.auth_server.put_token('token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init('token-id')
         msg = yield from self.websocketd_client.op_set_presence('123-456', 'dnd')
         self.assertEqual(msg['code'], 401)
 
     @run_with_loop
     def test_set_presence(self):
-        yield from self.auth_server.put_token('token-id')
-        yield from self.websocketd_client.connect_and_wait_for_init('token-id')
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
         msg = yield from self.websocketd_client.op_set_presence(VALID_USER_CONNECTED, 'dnd')
         self.assertEqual(msg['code'], 0)
