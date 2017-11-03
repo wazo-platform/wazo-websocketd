@@ -71,6 +71,17 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
+    def test_encode_set_presence_error(self):
+        expected = {
+            'op': 'set_presence',
+            'code': 503,
+            'msg': 'error',
+        }
+
+        data = self.encoder.encode_set_presence_error('error')
+
+        assert_that(json.loads(data), equal_to(expected))
+
     def test_encode_get_presence(self):
         expected = {
             'op': 'get_presence',
@@ -91,6 +102,17 @@ class TestProtocolEncoder(unittest.TestCase):
         }
 
         data = self.encoder.encode_get_presence_unauthorized()
+
+        assert_that(json.loads(data), equal_to(expected))
+
+    def test_encode_get_presence_error(self):
+        expected = {
+            'op': 'get_presence',
+            'code': 503,
+            'msg': 'error',
+        }
+
+        data = self.encoder.encode_get_presence_error('error')
 
         assert_that(json.loads(data), equal_to(expected))
 

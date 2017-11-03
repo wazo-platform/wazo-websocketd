@@ -20,6 +20,12 @@ class TestNoMongooseIM(IntegrationTest):
         yield from self.websocketd_client.op_start()
         yield from self.websocketd_client.wait_for_close()
 
+    @run_with_loop
+    def test_set_presence_return_error(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
+        msg = yield from self.websocketd_client.op_set_presence(VALID_USER_CONNECTED, 'dnd')
+        self.assertEqual(msg['code'], 503)
+
 
 class TestXMPPConnection(IntegrationTest):
 

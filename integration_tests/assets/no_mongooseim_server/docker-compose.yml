@@ -28,8 +28,11 @@ services:
       - "../../..:/usr/src/xivo-websocketd"
       - "./etc/xivo-websocketd:/etc/xivo-websocketd"
       - "./ssl:/usr/local/share/ssl"
+      - "./mongooseimctl:/usr/bin/mongooseimctl"
     ports:
       - "9502"
+    environment:
+      HOME: "/usr/src/xivo-websocketd"
     links:
       - auth
       - rabbitmq

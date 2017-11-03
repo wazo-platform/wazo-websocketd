@@ -30,12 +30,18 @@ class SessionProtocolEncoder(object):
     def encode_set_presence_unauthorized(self):
         return self._encode('set_presence', 401, 'unauthorized')
 
+    def encode_set_presence_error(self, msg):
+        return self._encode('set_presence', 503, msg)
+
     def encode_get_presence(self, user_uuid, presence):
         return self._encode('get_presence', msg={'user_uuid': user_uuid,
                                                  'presence': presence})
 
     def encode_get_presence_unauthorized(self):
         return self._encode('get_presence', 401, 'unauthorized')
+
+    def encode_get_presence_error(self, msg):
+        return self._encode('get_presence', 503, msg)
 
     def _encode(self, operation, code=_CODE_OK, msg=_MSG_OK):
         return json.dumps({'op': operation, 'code': code, 'msg': msg})
