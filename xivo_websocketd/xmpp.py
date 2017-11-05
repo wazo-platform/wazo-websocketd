@@ -143,7 +143,13 @@ class MongooseIMClient(object):
 
     @asyncio.coroutine
     def _process_stdout_user_resources(self, stream):
-        return list(self._stream_to_list(stream))
+        resources = []
+        while True:
+            line = yield from stream.readline()
+            if not line:
+                break
+            resources.append(line.decode('utf-8').strip())
+        return resources
 
     @asyncio.coroutine
     def _process_stdout_get_presence(self, stream):
@@ -159,13 +165,6 @@ class MongooseIMClient(object):
         if presence == 'unavailable':
             presence = 'disconnected'
         return presence
-
-    def _stream_to_list(self, stream):
-        while True:
-            line = yield from stream.readline()
-            if not line:
-                return
-            yield line.decode('utf-8').strip()
 
     @asyncio.coroutine
     def _stream_subprocess(self, cmd):
