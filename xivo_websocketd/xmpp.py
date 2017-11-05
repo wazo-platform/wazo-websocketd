@@ -6,6 +6,7 @@ import logging
 import os
 
 from slixmpp import ClientXMPP
+from .exception import MongooseIMError
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +111,8 @@ class MongooseIMClient(object):
         cmd = [self.entrypoint, 'get_presence', username, self.domain]
         process = yield from self._stream_subprocess(cmd)
         presence = yield from self._process_stdout_get_presence(process.stdout)
-        error = yield from self._stream_stderr(process.stderr)
-        if error:
-            logger.warning('getting presence of user "{}@{}" raise: {}:'.format(username, self.domain, error))
+        if process.returncode != 0:
+            raise MongooseIMError('getting presence of user "{}@{}" failed'.format(username, self.domain))
         return presence
 
     @asyncio.coroutine
@@ -127,13 +127,9 @@ class MongooseIMClient(object):
             cmd = [self.entrypoint, 'set_presence', username, self.domain, resource, type_, show, status, priority]
             logger.debug('updating "{}@{}/{}" with presence "{}"'.format(username, self.domain, resource, presence))
         process = yield from self._stream_subprocess(cmd)
-        error = yield from self._stream_stderr(process.stderr)
-        if error:
-            logger.warning('setting "{}@{}/{}" presence to "{}" raise: {}:'.format(username,
-                                                                                   self.domain,
-                                                                                   resource,
-                                                                                   presence,
-                                                                                   error))
+        if process.returncode != 0:
+            raise MongooseIMError('setting "{}@{}/{}" presence to "{}" failed'.format(username, self.domain,
+                                                                                      resource, presence))
 
     @asyncio.coroutine
     def get_user_resources(self, username):
@@ -141,14 +137,19 @@ class MongooseIMClient(object):
         process = yield from self._stream_subprocess(cmd)
         resources = yield from self._process_stdout_user_resources(process.stdout)
         logger.debug('user "{}" has the following connected resources: {}'.format(username, resources))
-        error = yield from self._stream_stderr(process.stderr)
-        if error:
-            logger.warning('getting "{}@{}" resource raise: {}'.format(username, self.domain, error))
+        if process.returncode != 0:
+            raise MongooseIMError('getting "{}@{}" resource failed'.format(username, self.domain))
         return resources
 
     @asyncio.coroutine
     def _process_stdout_user_resources(self, stream):
-        return list(self._stream_to_list(stream))
+        resources = []
+        while True:
+            line = yield from stream.readline()
+            if not line:
+                break
+            resources.append(line.decode('utf-8').strip())
+        return resources
 
     @asyncio.coroutine
     def _process_stdout_get_presence(self, stream):
@@ -164,17 +165,6 @@ class MongooseIMClient(object):
         if presence == 'unavailable':
             presence = 'disconnected'
         return presence
-
-    @asyncio.coroutine
-    def _stream_stderr(self, stream):
-        return '\n'.join(self._stream_to_list(stream))
-
-    def _stream_to_list(self, stream):
-        while True:
-            line = yield from stream.readline()
-            if not line:
-                return
-            yield line.decode('utf-8').strip()
 
     @asyncio.coroutine
     def _stream_subprocess(self, cmd):

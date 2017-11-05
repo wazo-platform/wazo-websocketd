@@ -13,6 +13,7 @@ from xivo_websocketd.exception import AuthenticationError,\
     AuthenticationExpiredError, BusConnectionError
 from xivo_websocketd.multiplexer import Multiplexer
 from .xmpp import ClientXMPPWrapper, MongooseIMClient
+from .exception import MongooseIMError
 
 logger = logging.getLogger(__name__)
 
@@ -172,14 +173,18 @@ class Session(object):
 
         logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
         mongooseim_client = MongooseIMClient()
-        user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
-        if not user_resources:
-            xmpp_session = yield from self._start_xmpp_session(msg.user_uuid, self._token)
-            if xmpp_session:
-                user_resources.append(xmpp_session.resource)
+        try:
+            user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
+            if not user_resources:
+                xmpp_session = yield from self._start_xmpp_session(msg.user_uuid, self._token)
+                if xmpp_session:
+                    user_resources.append(xmpp_session.resource)
 
-        for resource in user_resources:
-            yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)
+            for resource in user_resources:
+                yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)
+        except MongooseIMError as e:
+            yield from self._ws.send(self._protocol_encoder.encode_set_presence_error(str(e)))
+            return
 
         yield from self._ws.send(self._protocol_encoder.encode_set_presence())
 
@@ -193,7 +198,12 @@ class Session(object):
 
         logger.debug('getting presence for user "%s"', msg.user_uuid)
         mongooseim_client = MongooseIMClient()
-        presence = yield from mongooseim_client.get_presence(msg.user_uuid)
+        try:
+            presence = yield from mongooseim_client.get_presence(msg.user_uuid)
+        except MongooseIMError as e:
+            yield from self._ws.send(self._protocol_encoder.encode_get_presence_error(str(e)))
+            return
+
         yield from self._ws.send(self._protocol_encoder.encode_get_presence(msg.user_uuid, presence))
 
     @asyncio.coroutine

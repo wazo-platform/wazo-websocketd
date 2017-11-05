@@ -63,7 +63,7 @@ class TestBus(IntegrationTest):
 
     @asyncio.coroutine
     def _prepare(self, skip_start=False):
-        yield from self.auth_server.put_token('my-token-id', acls=['event.foo'])
+        yield from self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
         yield from self.bus_client.connect()
         yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
         if not skip_start:

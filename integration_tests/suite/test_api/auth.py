@@ -19,7 +19,7 @@ class AuthServer(object):
         disable_warnings()
 
     @asyncio.coroutine
-    def put_token(self, token_id, auth_id='123-456', xivo_user_uuid=None, acls=[]):
+    def put_token(self, token_id, auth_id='123-456', xivo_user_uuid=None, acls=['websocketd']):
         token = {
             'token': token_id,
             'auth_id': auth_id,
