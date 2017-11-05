@@ -10,7 +10,12 @@ from xivo_test_helpers import asset_launching_test_case
 
 from .auth import AuthServer
 from .bus import BusClient
-from .constants import ASSET_ROOT, VALID_USER_CONNECTED, VALID_USER_DISCONNECTED
+from .constants import (
+    ASSET_ROOT,
+    VALID_USER_CONNECTED,
+    VALID_USER_DISCONNECTED,
+    VALID_USER_DISCONNECTING,
+)
 from .websocketd import WebSocketdClient
 from .mongooseim import MongooseIMClient
 
@@ -47,6 +52,8 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
                 acls=['websocketd',
                       'websocketd.users.{}.presences.read'.format(VALID_USER_CONNECTED),
                       'websocketd.users.{}.presences.update'.format(VALID_USER_CONNECTED),
+                      'websocketd.users.{}.presences.read'.format(VALID_USER_DISCONNECTING),
+                      'websocketd.users.{}.presences.update'.format(VALID_USER_DISCONNECTING),
                       'websocketd.users.{}.presences.read'.format(VALID_USER_DISCONNECTED),
                       'websocketd.users.{}.presences.update'.format(VALID_USER_DISCONNECTED)],
             ))

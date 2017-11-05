@@ -6,7 +6,11 @@ import time
 from contextlib import contextmanager
 
 from .test_api.base import IntegrationTest, run_with_loop
-from .test_api.constants import VALID_USER_CONNECTED, VALID_USER_DISCONNECTED
+from .test_api.constants import (
+    VALID_USER_CONNECTED,
+    VALID_USER_DISCONNECTED,
+    VALID_USER_DISCONNECTING,
+)
 
 
 class TestNoMongooseIM(IntegrationTest):
@@ -23,7 +27,7 @@ class TestNoMongooseIM(IntegrationTest):
     @run_with_loop
     def test_set_presence_return_error(self):
         yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
-        msg = yield from self.websocketd_client.op_set_presence(VALID_USER_CONNECTED, 'dnd')
+        msg = yield from self.websocketd_client.op_set_presence(VALID_USER_DISCONNECTING, 'dnd')
         self.assertEqual(msg['code'], 503)
 
 

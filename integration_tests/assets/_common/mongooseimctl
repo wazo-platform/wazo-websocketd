@@ -9,6 +9,9 @@ USER_CONNECTED = {'user': 'valid-user-connected',
                   'domain': 'localhost',
                   'resource': '123456789'}
 USER_DISCONNECTED = {'user': 'valid-user-disconnected'}
+USER_DISCONNECTING = {'user': 'valid-user-disconnecting',
+                      'domain': 'localhost',
+                      'resource': '6789'}
 
 
 class MongooseIMCTL(object):
@@ -20,12 +23,14 @@ class MongooseIMCTL(object):
             print('{user}@{domain}  {presence}'.format(user=user, domain=host, presence='unavailable'))
 
     def set_presence(self, user, host, resource, type_, show, status, priority):
-        if user != USER_CONNECTED['user'] or user != USER_DISCONNECTED['user']:
+        if user != USER_CONNECTED['user']:
             sys.exit(1)
 
     def user_resources(self, user, host):
         if user == USER_CONNECTED['user'] and host == USER_CONNECTED['domain']:
             print(USER_CONNECTED['resource'])
+        if user == USER_DISCONNECTING['user'] and host == USER_DISCONNECTING['domain']:
+            print(USER_DISCONNECTING['resource'])
 
 
 if __name__ == '__main__':
