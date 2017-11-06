@@ -208,11 +208,6 @@ class Session(object):
 
     @asyncio.coroutine
     def _start_xmpp_session(self, user_uuid, token):
-        # Cannot start xmpp session if the token do not belongs to the
-        # user_uuid of the message
-        if token['xivo_user_uuid'] != user_uuid:
-            return
-
         xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port)
         yield from xmpp_session.connect(user_uuid, self._token['token'], self._loop)
         return xmpp_session
