@@ -106,3 +106,9 @@ class TestWebsocketOperation(IntegrationTest):
         yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
         msg = yield from self.websocketd_client.op_set_presence(VALID_USER_CONNECTED, 'dnd')
         self.assertEqual(msg['code'], 0)
+
+    @run_with_loop
+    def test_set_presence_dynamically_connect_user(self):
+        yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id_without_user)
+        yield from self.websocketd_client.op_set_presence(VALID_USER_DISCONNECTED, 'dnd')
+        self.assertEqual(len(self.mongooseim_client.sessions()), 1)

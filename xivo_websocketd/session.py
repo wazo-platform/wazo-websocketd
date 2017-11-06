@@ -178,7 +178,7 @@ class Session(object):
             if not user_resources:
                 xmpp_session = yield from self._start_xmpp_session(msg.user_uuid, self._token)
                 if xmpp_session:
-                    user_resources.append(xmpp_session.resource)
+                    user_resources.append((yield from xmpp_session.resource(self._loop)))
 
             for resource in user_resources:
                 yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)

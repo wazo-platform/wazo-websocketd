@@ -69,10 +69,13 @@ class ClientXMPPWrapper():
             return
         self._client.send_presence(pstatus=presence)
 
-    @property
-    def resource(self):
+    @asyncio.coroutine
+    def resource(self, loop):
         if not self._client:
             return
+        # resource is populated after the connection
+        while not self._client.boundjid.resource:
+            yield from asyncio.sleep(0.1, loop=loop)
         return self._client.boundjid.resource
 
 
