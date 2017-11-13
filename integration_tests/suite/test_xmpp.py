@@ -5,8 +5,8 @@ import time
 
 from contextlib import contextmanager
 
-from .test_api.base import IntegrationTest, run_with_loop
-from .test_api.constants import (
+from .helpers.base import IntegrationTest, run_with_loop
+from .helpers.constants import (
     VALID_USER_CONNECTED,
     VALID_USER_DISCONNECTED,
     VALID_USER_DISCONNECTING,

@@ -1,8 +1,8 @@
 # Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
-from .test_api.base import IntegrationTest, run_with_loop
-from .test_api.constants import (
+from .helpers.base import IntegrationTest, run_with_loop
+from .helpers.constants import (
     INVALID_TOKEN_ID,
     UNAUTHORIZED_TOKEN_ID,
     CLOSE_CODE_AUTH_FAILED,

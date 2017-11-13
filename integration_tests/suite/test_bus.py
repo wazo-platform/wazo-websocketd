@@ -5,7 +5,7 @@ import asyncio
 
 import websockets
 
-from .test_api.base import IntegrationTest, run_with_loop
+from .helpers.base import IntegrationTest, run_with_loop
 
 
 class TestBus(IntegrationTest):
