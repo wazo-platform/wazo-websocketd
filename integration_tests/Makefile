@@ -1,7 +1,7 @@
 .PHONY: test-setup egg-info test
 
 test-setup: egg-info
-	docker pull python:3.4.2
+	docker pull python:3.5.3
 	docker pull mongooseim/mongooseim:2.1.0
 	docker pull rabbitmq:3.6.6
 	docker pull waisbrot/wait
