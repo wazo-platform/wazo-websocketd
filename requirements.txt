@@ -1,9 +1,9 @@
 git+https://github.com/wazo-pbx/xivo-lib-python.git
 git+https://github.com/wazo-pbx/xivo-lib-rest-client.git
 git+https://github.com/wazo-pbx/xivo-auth-client.git
-websockets==3.0
-pyyaml==3.11
-asynqp
-requests==2.4.3
+websockets==3.3
+pyyaml==3.12
+asynqp==0.4
+requests==2.12.4
 slixmpp==1.2.2
 stevedore==1.17.1
