@@ -1,4 +1,4 @@
-# Copyright 2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2017-2018 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
 import time
@@ -47,7 +47,7 @@ class TestXMPPConnection(IntegrationTest):
         self.stop_service('mongooseim', timeout=30)
         yield
         self.start_service('mongooseim')
-        time.sleep(3)  # initiliaze MongooseIM
+        time.sleep(5)  # initiliaze MongooseIM
 
     @run_with_loop
     def test_client_disconnect(self):
