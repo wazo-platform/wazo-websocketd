@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -9,16 +9,14 @@ DAEMONNAME='xivo-websocketd'
 
 case "$1" in
     configure)
+        previous_version="$2"
+
         # add/update user
         if ! getent passwd $USER > /dev/null; then
             echo "Adding system user $USER" 1>&2
             adduser --quiet --system --group --no-create-home \
                     --home /var/lib/xivo-websocketd \
                     $USER
-        else
-            if dpkg --compare-versions "$2" lt '16.12~'; then
-                usermod --home /var/lib/xivo-websocketd $USER
-            fi
         fi
 
         adduser --quiet $USER www-data
@@ -31,7 +29,7 @@ case "$1" in
         fi
         chown "$USER:$GROUP" "$LOG_FILENAME"
 
-        if dpkg --compare-versions "$2" lt '17.02'; then
+        if [[ -z "${previous_version}" ]]; then
             ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
                     /etc/nginx/locations/https-enabled/$DAEMONNAME
         fi
