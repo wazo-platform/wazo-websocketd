@@ -1,0 +1,2 @@
+auth:
+  host: inexisting-auth.fix-resolvd-systemd-behaviour

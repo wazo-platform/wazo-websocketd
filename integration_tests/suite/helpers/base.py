@@ -1,6 +1,7 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2018 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0+
 
+import os
 import asyncio
 import functools
 
@@ -31,6 +32,14 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         # There is bugs in asynqp 0.4 that prevent from setting the event_loop
         # to None
         # asyncio.set_event_loop(None)
+
+    @classmethod
+    def _docker_compose_options(cls):
+        return [
+            '--file', os.path.join(cls.assets_root, 'docker-compose.yml'),
+            '--file', os.path.join(cls.assets_root, 'docker-compose.{}.override.yml'.format(cls.asset)),
+            '--project-name', cls.service,
+        ]
 
     def setUp(self):
         self.valid_token_id = '123-456'

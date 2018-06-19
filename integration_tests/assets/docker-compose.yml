@@ -2,13 +2,8 @@ version: '3'
 services:
   sync:
     image: waisbrot/wait
-    links:
-      - auth
-      - rabbitmq
-      - websocketd
     environment:
-      TARGETS: "auth:9497,rabbitmq:5672,websocketd:9502"
-      TIMEOUT: "5"
+      TIMEOUT: "15"
 
   auth:
     image: wazopbx/xivo-auth-mock
@@ -16,6 +11,17 @@ services:
       - ./ssl:/usr/local/share/ssl
     ports:
       - "9497"
+
+  mongooseim:
+    image: mongooseim/mongooseim:2.1.0
+    hostname: mongooseim-1
+    expose:
+      - 5222
+    ports:
+      - 8088
+    volumes:
+      - ./etc/mongooseim:/member
+      - ./mongooseim:/tmp/mongooseim
 
   rabbitmq:
     image: rabbitmq:3.6.6
@@ -25,14 +31,11 @@ services:
   websocketd:
     image: xivo-websocketd-test
     volumes:
-      - "../../..:/usr/src/xivo-websocketd"
-      - "./etc/xivo-websocketd:/etc/xivo-websocketd"
+      - "../..:/usr/src/xivo-websocketd"
       - "./ssl:/usr/local/share/ssl"
       - "./mongooseimctl:/usr/bin/mongooseimctl"
+      - "./etc/xivo-websocketd/conf.d/50-base.yml:/etc/xivo-websocketd/conf.d/50-base.yml"
     ports:
       - "9502"
     environment:
       HOME: "/usr/src/xivo-websocketd"
-    links:
-      - auth
-      - rabbitmq
