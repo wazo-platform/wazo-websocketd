@@ -7,7 +7,3 @@ services:
       - websocketd
     environment:
       TARGETS: "auth:9497,rabbitmq:5672,websocketd:9502"
-
-  websocketd:
-    volumes:
-      - "./etc/xivo-websocketd/conf.d/config.no_mongooseim_server.yml:/etc/xivo-websocketd/conf.d/config.yml"
