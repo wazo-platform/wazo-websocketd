@@ -2,7 +2,7 @@ version: '3'
 services:
   sync:
     image: waisbrot/wait
-    links:
+    depends_on:
       - auth
       - mongooseim
       - rabbitmq
@@ -40,7 +40,3 @@ services:
       - "./ssl:/usr/local/share/ssl"
     ports:
       - "9502"
-    links:
-      - auth
-      - mongooseim
-      - rabbitmq

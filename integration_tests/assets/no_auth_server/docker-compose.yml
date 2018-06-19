@@ -2,7 +2,7 @@ version: '3'
 services:
   sync:
     image: waisbrot/wait
-    links:
+    depends_on:
       - rabbitmq
       - websocketd
     environment:
@@ -22,5 +22,3 @@ services:
       - "./ssl:/usr/local/share/ssl"
     ports:
       - "9502"
-    links:
-      - rabbitmq

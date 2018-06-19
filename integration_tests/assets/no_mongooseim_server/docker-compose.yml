@@ -2,7 +2,7 @@ version: '3'
 services:
   sync:
     image: waisbrot/wait
-    links:
+    depends_on:
       - auth
       - rabbitmq
       - websocketd
@@ -33,6 +33,3 @@ services:
       - "9502"
     environment:
       HOME: "/usr/src/xivo-websocketd"
-    links:
-      - auth
-      - rabbitmq
