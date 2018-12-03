@@ -6,7 +6,7 @@ services:
       TIMEOUT: "15"
 
   auth:
-    image: wazopbx/xivo-auth-mock
+    image: wazopbx/wazo-auth-mock
     volumes:
       - ./ssl:/usr/local/share/ssl
     ports:

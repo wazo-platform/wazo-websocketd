@@ -5,7 +5,7 @@ test-setup: egg-info
 	docker pull mongooseim/mongooseim:2.1.0
 	docker pull rabbitmq:3.6.6
 	docker pull wazopbx/wait
-	docker pull wazopbx/xivo-auth-mock
+	docker pull wazopbx/wazo-auth-mock
 	docker build -t wazopbx/xivo-websocketd ..
 	docker build --no-cache -t xivo-websocketd-test -f Dockerfile ..
 
