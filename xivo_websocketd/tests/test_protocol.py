@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
@@ -46,73 +46,6 @@ class TestProtocolEncoder(unittest.TestCase):
         }
 
         data = self.encoder.encode_start()
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_set_presence(self):
-        expected = {
-            'op': 'set_presence',
-            'code': 0,
-            'msg': '',
-        }
-
-        data = self.encoder.encode_set_presence()
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_set_presence_unauthorized(self):
-        expected = {
-            'op': 'set_presence',
-            'code': 401,
-            'msg': 'unauthorized',
-        }
-
-        data = self.encoder.encode_set_presence_unauthorized()
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_set_presence_error(self):
-        expected = {
-            'op': 'set_presence',
-            'code': 503,
-            'msg': 'error',
-        }
-
-        data = self.encoder.encode_set_presence_error('error')
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_get_presence(self):
-        expected = {
-            'op': 'get_presence',
-            'code': 0,
-            'msg': {'user_uuid': '123',
-                    'presence': 'dnd'},
-        }
-
-        data = self.encoder.encode_get_presence('123', 'dnd')
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_get_presence_unauthorized(self):
-        expected = {
-            'op': 'get_presence',
-            'code': 401,
-            'msg': 'unauthorized',
-        }
-
-        data = self.encoder.encode_get_presence_unauthorized()
-
-        assert_that(json.loads(data), equal_to(expected))
-
-    def test_encode_get_presence_error(self):
-        expected = {
-            'op': 'get_presence',
-            'code': 503,
-            'msg': 'error',
-        }
-
-        data = self.encoder.encode_get_presence_error('error')
 
         assert_that(json.loads(data), equal_to(expected))
 
@@ -176,23 +109,6 @@ class TestProtocolDecoder(unittest.TestCase):
         data = '{"op": "subscribe", "data": {"event_name": 1}}'
 
         self.assertRaises(SessionProtocolError, self.decoder.decode, data)
-
-    def test_decode_set_presence(self):
-        data = '{"op": "set_presence", "data": {"user_uuid": "123", "presence": "dnd"}}'
-
-        msg = self.decoder.decode(data)
-
-        assert_that(msg.op, equal_to('set_presence'))
-        assert_that(msg.user_uuid, equal_to('123'))
-        assert_that(msg.presence, equal_to('dnd'))
-
-    def test_decode_get_presence(self):
-        data = '{"op": "get_presence", "data": {"user_uuid": "123"}}'
-
-        msg = self.decoder.decode(data)
-
-        assert_that(msg.op, equal_to('get_presence'))
-        assert_that(msg.user_uuid, equal_to('123'))
 
     def test_decode_start(self):
         data = '{"op": "start"}'

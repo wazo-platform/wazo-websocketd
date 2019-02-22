@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -12,8 +12,6 @@ from xivo_websocketd.exception import AuthenticationError,\
     NoTokenError, SessionProtocolError, BusConnectionLostError,\
     AuthenticationExpiredError, BusConnectionError
 from xivo_websocketd.multiplexer import Multiplexer
-from .xmpp import ClientXMPPWrapper, MongooseIMClient
-from .exception import MongooseIMError
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +56,7 @@ class Session(object):
         self._ws = ws
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
-        self._xmpp = ClientXMPPWrapper(**config['mongooseim'])
         self._started = False
-        self._token = None
 
     @asyncio.coroutine
     def run(self):
@@ -84,8 +80,6 @@ class Session(object):
         except BusConnectionError:
             logger.info('closing websocket connection: bus connection error')
             yield from self._ws.close(1011, 'bus connection error')
-        except AuthenticationExpiredError as e:
-            logger.info('closing websocket connection: authentication expired')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info('websocket connection closed with code %s', e.code)
@@ -96,31 +90,20 @@ class Session(object):
     @asyncio.coroutine
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
-        self._token = yield from self._authenticator.get_token(token_id)
-        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(self._token)
+        _token = yield from self._authenticator.get_token(token_id)
+        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(_token)
 
         try:
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
-            self._multiplexer.call_when_done(self._authenticator.run_check(self._token), self._on_authenticator_check)
+            self._multiplexer.call_when_done(self._authenticator.run_check(_token), self._on_authenticator_check)
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
             self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
             yield from self._multiplexer.run()
         finally:
             self._bus_event_consumer.close()
             yield from self._multiplexer.close()
-            self._xmpp.close()
-
-    @asyncio.coroutine
-    def _close_session(self, event):
-        # this coroutine is called by the xmpp received message coroutine
-        # at undetermined time
-        logger.info('closing websocket connection: xmpp connection error')
-        self._bus_event_consumer.close()
-        self._multiplexer.stop()
-        yield from self._multiplexer.close()
-        yield from self._ws.close(1011, 'xmpp connection error')
 
     @asyncio.coroutine
     def _send_ping(self):
@@ -156,61 +139,8 @@ class Session(object):
         if self._started:
             return
 
-        if self._token['xivo_user_uuid']:
-            self._xmpp.connection_error_handler(self._close_session)
-            yield from self._xmpp.connect(self._token['xivo_user_uuid'], self._token['token'], self._loop)
-
         self._started = True
         yield from self._ws.send(self._protocol_encoder.encode_start())
-
-    @asyncio.coroutine
-    def _do_ws_set_presence(self, msg):
-        acl = 'websocketd.users.{user_uuid}.presences.update'.format(user_uuid=msg.user_uuid)
-        is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
-        if not is_valid:
-            yield from self._ws.send(self._protocol_encoder.encode_set_presence_unauthorized())
-            return
-
-        logger.debug('setting presence "%s" to user "%s"', msg.presence, msg.user_uuid)
-        mongooseim_client = MongooseIMClient()
-        try:
-            user_resources = yield from mongooseim_client.get_user_resources(msg.user_uuid)
-            if not user_resources:
-                xmpp_session = yield from self._start_xmpp_session(msg.user_uuid, self._token)
-                if xmpp_session:
-                    user_resources.append((yield from xmpp_session.resource(self._loop)))
-
-            for resource in user_resources:
-                yield from mongooseim_client.set_presence(msg.user_uuid, resource, msg.presence)
-        except MongooseIMError as e:
-            yield from self._ws.send(self._protocol_encoder.encode_set_presence_error(str(e)))
-            return
-
-        yield from self._ws.send(self._protocol_encoder.encode_set_presence())
-
-    @asyncio.coroutine
-    def _do_ws_get_presence(self, msg):
-        acl = 'websocketd.users.{user_uuid}.presences.read'.format(user_uuid=msg.user_uuid)
-        is_valid = yield from self._authenticator.is_valid_token(self._token['token'], acl)
-        if not is_valid:
-            yield from self._ws.send(self._protocol_encoder.encode_get_presence_unauthorized())
-            return
-
-        logger.debug('getting presence for user "%s"', msg.user_uuid)
-        mongooseim_client = MongooseIMClient()
-        try:
-            presence = yield from mongooseim_client.get_presence(msg.user_uuid)
-        except MongooseIMError as e:
-            yield from self._ws.send(self._protocol_encoder.encode_get_presence_error(str(e)))
-            return
-
-        yield from self._ws.send(self._protocol_encoder.encode_get_presence(msg.user_uuid, presence))
-
-    @asyncio.coroutine
-    def _start_xmpp_session(self, user_uuid, token):
-        xmpp_session = ClientXMPPWrapper(self._xmpp._host, self._xmpp._port)
-        yield from xmpp_session.connect(user_uuid, self._token['token'], self._loop)
-        return xmpp_session
 
     @asyncio.coroutine
     def _on_bus_event(self, future):
