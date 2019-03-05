@@ -21,9 +21,6 @@ case "$1" in
 
         adduser --quiet $USER www-data
 
-        # Needed to execute "mongooseimctl"
-        adduser --quiet $USER mongooseim
-
         if [ ! -e "$LOG_FILENAME" ]; then
             touch "$LOG_FILENAME"
         fi

@@ -4,6 +4,5 @@ git+https://github.com/wazo-pbx/xivo-lib-rest-client.git
 asynqp==0.4
 pyyaml==3.12
 requests==2.20.0
-slixmpp==1.2.2
 stevedore==1.17.1
 websockets==3.3
