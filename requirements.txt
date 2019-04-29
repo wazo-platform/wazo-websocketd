@@ -3,6 +3,6 @@ git+https://github.com/wazo-pbx/xivo-lib-python.git
 git+https://github.com/wazo-pbx/xivo-lib-rest-client.git
 asynqp==0.4
 pyyaml==3.12
-requests==2.20.0
+requests==2.21.0
 stevedore==1.17.1
 websockets==3.3
