@@ -1,10 +1,10 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import unittest
 
 from hamcrest import assert_that, equal_to
-from xivo_websocketd.acl import ACLCheck
+from ..acl import ACLCheck
 
 
 class TestACLCheck(unittest.TestCase):

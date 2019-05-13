@@ -1,10 +1,10 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import unittest
 
-from xivo_websocketd.multiplexer import Multiplexer
+from ..multiplexer import Multiplexer
 
 
 class TestMultiplexer(unittest.TestCase):

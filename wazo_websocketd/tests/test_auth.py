@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -9,10 +9,16 @@ from unittest.mock import Mock, sentinel
 import requests
 from hamcrest import assert_that, equal_to, same_instance
 
-from xivo_websocketd.auth import _Authenticator, _WebSocketdAuthClient,\
-    _StaticIntervalAuthCheck, _DynamicIntervalAuthCheck
-from xivo_websocketd.exception import AuthenticationError,\
-    AuthenticationExpiredError
+from ..auth import (
+    _Authenticator,
+    _DynamicIntervalAuthCheck,
+    _StaticIntervalAuthCheck,
+    _WebSocketdAuthClient,
+)
+from ..exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+)
 
 
 class TestWebSocketdAuthClient(unittest.TestCase):

@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,10 +8,14 @@ from unittest.mock import Mock, sentinel
 
 from hamcrest import assert_that, equal_to, none, same_instance
 
-from xivo_websocketd.acl import ACLCheck
-from xivo_websocketd.bus import _BusEventConsumer, _BusEventDispatcher, \
-    _decode_bus_msg, _BusEvent
-from xivo_websocketd.exception import BusConnectionLostError
+from ..acl import ACLCheck
+from ..bus import (
+    _BusEvent,
+    _BusEventConsumer,
+    _BusEventDispatcher,
+    _decode_bus_msg,
+)
+from ..exception import BusConnectionLostError
 
 
 class TestBusEvent(unittest.TestCase):

@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import unittest
@@ -7,8 +7,8 @@ from unittest.mock import Mock
 
 from hamcrest import assert_that, equal_to
 
-from xivo_websocketd.exception import NoTokenError
-from xivo_websocketd.session import _extract_token_id
+from ..exception import NoTokenError
+from ..session import _extract_token_id
 
 
 class TestExtractTokenID(unittest.TestCase):

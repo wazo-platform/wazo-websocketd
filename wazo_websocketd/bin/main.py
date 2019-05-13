@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,13 +8,15 @@ from xivo import xivo_logging
 from xivo.daemonize import pidfile_context
 from xivo.user_rights import change_user
 
-from xivo_websocketd.auth import new_authenticator
-from xivo_websocketd.bus import new_bus_event_service
-from xivo_websocketd.config import load_config
-from xivo_websocketd.controller import Controller
-from xivo_websocketd.protocol import SessionProtocolEncoder,\
-    SessionProtocolDecoder
-from xivo_websocketd.session import SessionFactory
+from wazo_websocketd.auth import new_authenticator
+from wazo_websocketd.bus import new_bus_event_service
+from wazo_websocketd.config import load_config
+from wazo_websocketd.controller import Controller
+from wazo_websocketd.protocol import (
+    SessionProtocolEncoder,
+    SessionProtocolDecoder,
+)
+from wazo_websocketd.session import SessionFactory
 
 
 def main():

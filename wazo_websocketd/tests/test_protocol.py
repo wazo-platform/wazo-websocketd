@@ -6,9 +6,11 @@ import unittest
 
 from hamcrest import assert_that, equal_to
 
-from xivo_websocketd.protocol import SessionProtocolEncoder,\
-    SessionProtocolDecoder
-from xivo_websocketd.exception import SessionProtocolError
+from ..exception import SessionProtocolError
+from ..protocol import (
+    SessionProtocolDecoder,
+    SessionProtocolEncoder,
+)
 
 
 class TestProtocolEncoder(unittest.TestCase):

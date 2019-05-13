@@ -8,10 +8,15 @@ from urllib.parse import urlparse, parse_qsl
 
 import websockets
 
-from xivo_websocketd.exception import AuthenticationError,\
-    NoTokenError, SessionProtocolError, BusConnectionLostError,\
-    AuthenticationExpiredError, BusConnectionError
-from xivo_websocketd.multiplexer import Multiplexer
+from .exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+    BusConnectionError,
+    BusConnectionLostError,
+    NoTokenError,
+    SessionProtocolError,
+)
+from .multiplexer import Multiplexer
 
 logger = logging.getLogger(__name__)
 
