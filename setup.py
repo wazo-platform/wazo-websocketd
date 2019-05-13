@@ -13,5 +13,5 @@ setup(
     author_email='dev@wazo.community',
     url='http://wazo.community',
     packages=find_packages(),
-    scripts=['bin/xivo-websocketd'],
+    scripts=['bin/wazo-websocketd'],
 )
