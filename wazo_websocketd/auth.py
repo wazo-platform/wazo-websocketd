@@ -105,7 +105,7 @@ class _DynamicIntervalAuthCheck(object):
     def run(self, token):
         token_id = token['token']
         while True:
-            # FIXME if xivo-websocketd and wazo-auth are not in the same
+            # FIXME if wazo-websocketd and wazo-auth are not in the same
             #       timezone, this doesn't work -- but this needs to be fixed
             #       in wazo-auth, which should returns data in UTC instead of
             #       in local time

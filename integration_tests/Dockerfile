@@ -1,7 +1,7 @@
-FROM wazopbx/xivo-websocketd
+FROM wazopbx/wazo-websocketd
 
-ADD . /usr/src/xivo-websocketd
-WORKDIR /usr/src/xivo-websocketd
+ADD . /usr/src/wazo-websocketd
+WORKDIR /usr/src/wazo-websocketd
 
 ENV PYTHONDONTWRITEBYTECODE='true'
 

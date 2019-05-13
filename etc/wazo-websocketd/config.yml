@@ -4,22 +4,22 @@
 
 ## Extra configuration directory where the config files overriding this file
 ## should be.
-#extra_config_files: /etc/xivo-websocketd/conf.d
+#extra_config_files: /etc/wazo-websocketd/conf.d
 
 ## Change the log level to debug level.
 #debug: false
 
 ## Log file.
-#log_file: /var/log/xivo-websocketd.log
+#log_file: /var/log/wazo-websocketd.log
 
 ## Log level.
 #log_level: info
 
 ## User to run process as.
-#user: xivo-websocketd
+#user: wazo-websocketd
 
 ## PID file.
-#pid_file: /var/run/xivo-websocketd/xivo-websocketd.pid
+#pid_file: /var/run/wazo-websocketd/wazo-websocketd.pid
 
 ## WebSocket server
 #websocket:
