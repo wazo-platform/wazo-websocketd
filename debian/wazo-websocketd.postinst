@@ -33,7 +33,7 @@ case "$1" in
 
         # move files from xivo-websocketd
         rm -f /etc/nginx/locations/https-enabled/xivo-websocketd
-        if [ -f /var/log/xivo-websocketd ] ; then
+        if [ -f /var/log/xivo-websocketd.log ] ; then
             rename 's/xivo-websocketd/wazo-websocketd/g' /var/log/xivo-websocketd.log*
         fi
         rm -rf /var/run/xivo-websocketd
