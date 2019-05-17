@@ -43,7 +43,6 @@ case "$1" in
         fi
         if getent passwd xivo-websocketd > /dev/null; then
             deluser --quiet --system --remove-home xivo-websocketd
-            delgroup --quiet xivo-websocketd
         fi
 
     ;;
