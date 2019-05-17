@@ -6,7 +6,7 @@ import datetime
 import logging
 
 import requests
-import xivo_auth_client
+import wazo_auth_client
 
 from .exception import (
     AuthenticationError,
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def new_authenticator(config, loop):
-    auth_client = xivo_auth_client.Client(**config['auth'])
+    auth_client = wazo_auth_client.Client(**config['auth'])
     websocketd_auth_client = _WebSocketdAuthClient(loop, auth_client)
     strategy_name = config['auth_check_strategy']
     if strategy_name == 'static':
@@ -44,7 +44,7 @@ class _WebSocketdAuthClient(object):
         try:
             return (yield from self._loop.run_in_executor(None, self._auth_client.token.get, token_id, self._ACL))
         except requests.RequestException as e:
-            # there's currently no clean way with xivo_auth_client to know if the
+            # there's currently no clean way with wazo_auth_client to know if the
             # error was caused because the token is unauthorized, or unknown
             # or something else
             raise AuthenticationError(e)
