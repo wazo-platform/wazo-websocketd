@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,8 +8,10 @@ import logging
 import requests
 import xivo_auth_client
 
-from xivo_websocketd.exception import AuthenticationError,\
-    AuthenticationExpiredError
+from .exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +105,7 @@ class _DynamicIntervalAuthCheck(object):
     def run(self, token):
         token_id = token['token']
         while True:
-            # FIXME if xivo-websocketd and wazo-auth are not in the same
+            # FIXME if wazo-websocketd and wazo-auth are not in the same
             #       timezone, this doesn't work -- but this needs to be fixed
             #       in wazo-auth, which should returns data in UTC instead of
             #       in local time

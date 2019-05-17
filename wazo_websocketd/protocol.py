@@ -5,7 +5,7 @@ import collections
 import json
 import logging
 
-from xivo_websocketd.exception import SessionProtocolError
+from .exception import SessionProtocolError
 
 logger = logging.getLogger(__name__)
 

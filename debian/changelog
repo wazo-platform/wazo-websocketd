@@ -1,4 +1,10 @@
-xivo-websocketd (16.01~~) xivo-dev; urgency=medium
+wazo-websocketd (19.08) wazo-dev-stretch; urgency=medium
+
+  * Rename xivo-websocketd to wazo-websocketd
+
+ -- Wazo Maintainers <dev@wazo.community>  Mon, 13 May 2019 15:41:14 -0400
+
+xivo-websocketd (16.01~) xivo-dev; urgency=medium
 
   * Initial release.
 

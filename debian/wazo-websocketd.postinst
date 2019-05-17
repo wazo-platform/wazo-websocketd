@@ -3,9 +3,9 @@
 set -e
 
 LOG_FILENAME='/var/log/xivo-websocketd.log'
-USER='xivo-websocketd'
+USER='wazo-websocketd'
 GROUP='www-data'
-DAEMONNAME='xivo-websocketd'
+DAEMONNAME='wazo-websocketd'
 
 case "$1" in
     configure)
@@ -15,7 +15,7 @@ case "$1" in
         if ! getent passwd $USER > /dev/null; then
             echo "Adding system user $USER" 1>&2
             adduser --quiet --system --group --no-create-home \
-                    --home /var/lib/xivo-websocketd \
+                    --home /var/lib/wazo-websocketd \
                     $USER
         fi
 
@@ -29,6 +29,21 @@ case "$1" in
         if [[ -z "${previous_version}" ]]; then
             ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
                     /etc/nginx/locations/https-enabled/$DAEMONNAME
+        fi
+
+        # move files from xivo-websocketd
+        rm -f /etc/nginx/locations/https-enabled/xivo-websocketd
+        if [ -f /var/log/xivo-websocketd ] ; then
+            rename 's/xivo-websocketd/wazo-websocketd/g' /var/log/xivo-websocketd.log*
+        fi
+        rm -rf /var/run/xivo-websocketd
+        if [ -d /etc/xivo-websocketd/conf.d ] ; then
+            find /etc/xivo-websocketd/conf.d/ -mindepth 1 -exec mv {} /etc/wazo-websocketd/conf.d/ \;
+            rmdir --ignore-fail-on-non-empty -p /etc/xivo-websocketd/conf.d
+        fi
+        if getent passwd xivo-websocketd > /dev/null; then
+            deluser --quiet --system --remove-home xivo-websocketd
+            delgroup --quiet xivo-websocketd
         fi
 
     ;;

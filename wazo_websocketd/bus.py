@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,8 +8,11 @@ import json
 
 import asynqp
 
-from xivo_websocketd.acl import ACLCheck
-from xivo_websocketd.exception import BusConnectionError, BusConnectionLostError
+from .acl import ACLCheck
+from .exception import (
+    BusConnectionError,
+    BusConnectionLostError,
+)
 
 logger = logging.getLogger(__name__)
 

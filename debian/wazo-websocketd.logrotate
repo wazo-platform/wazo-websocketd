@@ -1,4 +1,4 @@
-/var/log/xivo-websocketd.log {
+/var/log/wazo-websocketd.log {
     daily
     rotate 15
     compress

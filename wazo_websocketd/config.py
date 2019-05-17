@@ -10,14 +10,14 @@ from xivo.xivo_logging import get_log_level_by_name
 
 
 _DEFAULT_CONFIG = {
-    'config_file': '/etc/xivo-websocketd/config.yml',
-    'extra_config_files': '/etc/xivo-websocketd/conf.d/',
+    'config_file': '/etc/wazo-websocketd/config.yml',
+    'extra_config_files': '/etc/wazo-websocketd/conf.d/',
     'debug': False,
     'foreground': False,
     'log_level': 'info',
-    'log_file': '/var/log/xivo-websocketd.log',
-    'user': 'xivo-websocketd',
-    'pid_file': '/var/run/xivo-websocketd/xivo-websocketd.pid',
+    'log_file': '/var/log/wazo-websocketd.log',
+    'user': 'wazo-websocketd',
+    'pid_file': '/var/run/wazo-websocketd/wazo-websocketd.pid',
     'auth': {
         'host': 'localhost',
         'verify_certificate': '/usr/share/xivo-certs/server.crt',

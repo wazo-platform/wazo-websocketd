@@ -1,0 +1,14 @@
+[Unit]
+Description=wazo-websocketd server
+ConditionPathExists=!/var/lib/xivo/disabled
+After=network.target rabbitmq-server.service wazo-auth.service
+Before=monit.service
+
+[Service]
+Type=forking
+ExecStartPre=/usr/bin/install -d -o wazo-websocketd -g www-data /var/run/wazo-websocketd
+ExecStart=/usr/bin/python3 -u /usr/bin/wazo-websocketd
+PIDFile=/var/run/wazo-websocketd/wazo-websocketd.pid
+
+[Install]
+WantedBy=multi-user.target

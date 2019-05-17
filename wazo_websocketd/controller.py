@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -29,11 +29,11 @@ class Controller(object):
         self._ws_server = self._loop.run_until_complete(start_ws_server)
 
     def run(self):
-        logger.info('xivo-websocketd starting...')
+        logger.info('wazo-websocketd starting...')
         try:
             self._loop.run_forever()
         finally:
-            logger.info('xivo-websocketd stopped')
+            logger.info('wazo-websocketd stopped')
             self._loop.close()
 
     def _exception_handler(self, loop, context):
@@ -48,7 +48,7 @@ class Controller(object):
             loop.default_exception_handler(context)
 
     def _stop(self):
-        logger.info('xivo-websocketd stopping...')
+        logger.info('wazo-websocketd stopping...')
         self._ws_server.close()
         self._loop.create_task(self._coro_stop())
 

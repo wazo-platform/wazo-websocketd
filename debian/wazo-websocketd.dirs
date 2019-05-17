@@ -1,2 +1,2 @@
 etc/nginx/locations/https-enabled
-etc/xivo-websocketd/conf.d
+etc/wazo-websocketd/conf.d
