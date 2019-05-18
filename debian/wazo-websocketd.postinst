@@ -2,7 +2,7 @@
 
 set -e
 
-LOG_FILENAME='/var/log/xivo-websocketd.log'
+LOG_FILENAME='/var/log/wazo-websocketd.log'
 USER='wazo-websocketd'
 GROUP='www-data'
 DAEMONNAME='wazo-websocketd'
