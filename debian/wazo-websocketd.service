@@ -1,6 +1,6 @@
 [Unit]
 Description=wazo-websocketd server
-ConditionPathExists=!/var/lib/xivo/disabled
+ConditionPathExists=!/var/lib/wazo/disabled
 After=network.target rabbitmq-server.service wazo-auth.service
 Before=monit.service
 
