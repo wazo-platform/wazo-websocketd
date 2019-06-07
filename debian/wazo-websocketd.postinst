@@ -21,16 +21,6 @@ case "$1" in
 
         adduser --quiet $USER www-data
 
-        if [ ! -e "$LOG_FILENAME" ]; then
-            touch "$LOG_FILENAME"
-        fi
-        chown "$USER:$GROUP" "$LOG_FILENAME"
-
-        if [[ -z "${previous_version}" ]]; then
-            ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
-                    /etc/nginx/locations/https-enabled/$DAEMONNAME
-        fi
-
         # move files from xivo-websocketd
         rm -f /etc/nginx/locations/https-enabled/xivo-websocketd
         if [ -f /var/log/xivo-websocketd.log ] ; then
@@ -43,6 +33,17 @@ case "$1" in
         fi
         if getent passwd xivo-websocketd > /dev/null; then
             deluser --quiet --system --remove-home xivo-websocketd
+        fi
+        # End of move files from xivo-websocketd
+
+        if [ ! -e "$LOG_FILENAME" ]; then
+            touch "$LOG_FILENAME"
+        fi
+        chown "$USER:$GROUP" "$LOG_FILENAME"
+
+        if [[ -z "${previous_version}" ]]; then
+            ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
+                    /etc/nginx/locations/https-enabled/$DAEMONNAME
         fi
 
     ;;
