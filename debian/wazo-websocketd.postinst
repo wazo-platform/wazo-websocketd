@@ -25,6 +25,8 @@ case "$1" in
         rm -f /etc/nginx/locations/https-enabled/xivo-websocketd
         if [ -f /var/log/xivo-websocketd.log ] ; then
             rename 's/xivo-websocketd/wazo-websocketd/g' /var/log/xivo-websocketd.log*
+            # Fix a previous version where the wazo-websocketd.log was created before renaming
+            rm -f /var/log/xivo-websocketd.log
         fi
         rm -rf /var/run/xivo-websocketd
         if [ -d /etc/xivo-websocketd/conf.d ] ; then
