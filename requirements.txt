@@ -3,6 +3,6 @@ https://github.com/wazo-pbx/xivo-lib-rest-client/archive/buster.zip
 https://github.com/wazo-pbx/wazo-auth-client/archive/buster.zip
 asynqp==0.4
 pyyaml==3.13
-requests==0.4.13
+requests==2.21.0
 stevedore==1.29.0
 websockets==7.0
