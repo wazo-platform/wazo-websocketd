@@ -162,7 +162,7 @@ def _extract_token_id(ws, path):
     if token:
         return token
 
-    token = _extract_token_id_from_headers(ws.raw_request_headers)
+    token = _extract_token_id_from_headers(ws.request_headers.raw_items())
     if token:
         return token
     raise NoTokenError()
