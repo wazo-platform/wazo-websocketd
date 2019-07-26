@@ -12,7 +12,7 @@ Depends:
  ${python3:Depends},
  ${misc:Depends},
  adduser,
- python3-asynqp,
+ python3-asynqp (>= 0.6),
  python3-websockets,
  python3-yaml,
  rename,
