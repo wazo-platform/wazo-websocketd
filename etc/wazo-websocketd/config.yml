@@ -46,8 +46,8 @@
 #  port: 5672
 #  username: guest
 #  password: guest
-#  exchange_name: xivo
-#  exchange_type: topic
+#  exchange_name: wazo-headers
+#  exchange_type: headers
 
 ## Developer options -- do not use them
 #auth_check_strategy: static

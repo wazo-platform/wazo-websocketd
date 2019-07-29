@@ -129,7 +129,9 @@ class _BusEventService(object):
         with (yield from self._lock):
             if not self._bus_connection.connected:
                 yield from self._bus_connection.connect()
-                yield from self._bus_connection.add_queue_binding('#')
+                # TODO: each connection should add new bindings according to the subscription type
+                # (user or admin). An empty routing-key with headers exchange mean all events
+                yield from self._bus_connection.add_queue_binding('')
 
         acl_check = ACLCheck(token['auth_id'], token['acls'])
         bus_event_consumer = _BusEventConsumer(self._loop, self._bus_event_dispatcher, acl_check)
@@ -202,22 +204,26 @@ class _BusEventConsumer(object):
 
 def _decode_bus_msg(bus_msg):
     msg_body = bus_msg.body.decode('utf-8')
-    obj = json.loads(msg_body)
-    if not isinstance(obj, dict):
+    if not isinstance(json.loads(msg_body), dict):
         raise ValueError('not a valid json document')
-    if 'name' not in obj:
+
+    headers = bus_msg.headers
+
+    if 'name' not in headers:
         raise ValueError('object is missing required "name" key')
-    name = obj['name']
+    name = headers['name']
     if not isinstance(name, str):
         raise ValueError('object "name" value is not a string')
-    if 'required_acl' in obj:
+
+    if 'required_acl' in headers:
         has_acl = True
-        acl = obj['required_acl']
+        acl = headers['required_acl']
         if acl is not None and not isinstance(acl, str):
             raise ValueError('object "required_acl" value is not a string nor null')
     else:
         has_acl = False
         acl = None
+
     return _BusEvent(name, has_acl, acl, msg_body)
 
 
