@@ -1,3 +1,9 @@
+*.coverage
+*.egg-info
+*.pyc
 *.swp
-*.egg-info/
-__pycache__
+*.tox
+coverage.xml
+nosetests.xml
+pycodestyle.txt
+pylint.txt
