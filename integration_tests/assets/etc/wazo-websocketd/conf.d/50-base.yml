@@ -1,3 +1,4 @@
+debug: true
 websocket:
   certificate: /usr/local/share/ssl/websocketd/server.crt
   private_key: /usr/local/share/ssl/websocketd/server.key
