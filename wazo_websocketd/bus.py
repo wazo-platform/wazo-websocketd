@@ -133,7 +133,7 @@ class _BusEventService(object):
                 # (user or admin). An empty routing-key with headers exchange mean all events
                 yield from self._bus_connection.add_queue_binding('')
 
-        acl_check = ACLCheck(token['auth_id'], token['acls'])
+        acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
         bus_event_consumer = _BusEventConsumer(self._loop, self._bus_event_dispatcher, acl_check)
         self._bus_event_dispatcher.add_event_consumer(bus_event_consumer)
         return bus_event_consumer

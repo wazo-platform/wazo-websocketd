@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import re
@@ -16,8 +16,8 @@ import re
 
 class ACLCheck(object):
 
-    def __init__(self, auth_id, acls):
-        self._auth_id = auth_id
+    def __init__(self, user_uuid, acls):
+        self._user_uuid = user_uuid
         self._acls = acls
 
     def matches_required_acl(self, required_acl):
@@ -26,9 +26,9 @@ class ACLCheck(object):
 
         for user_acl in self._acls:
             if user_acl.endswith('.me'):
-                user_acl = '{}.{}'.format(user_acl[:-3], self._auth_id)
+                user_acl = '{}.{}'.format(user_acl[:-3], self._user_uuid)
             else:
-                user_acl = user_acl.replace('.me.', '.{}.'.format(self._auth_id))
+                user_acl = user_acl.replace('.me.', '.{}.'.format(self._user_uuid))
 
             user_acl_regex = self._transform_acl_to_regex(user_acl)
             if re.match(user_acl_regex, required_acl):
