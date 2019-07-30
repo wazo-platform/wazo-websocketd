@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -19,11 +19,10 @@ class AuthServer(object):
         disable_warnings()
 
     @asyncio.coroutine
-    def put_token(self, token_id, auth_id='123-456', xivo_user_uuid=None, acls=['websocketd']):
+    def put_token(self, token_id, auth_id='123-456', acls=['websocketd']):
         token = {
             'token': token_id,
             'auth_id': auth_id,
-            'xivo_user_uuid': xivo_user_uuid,
             'acls': acls,
         }
         return (yield from self._loop.run_in_executor(None, self._sync_put_token, token))
