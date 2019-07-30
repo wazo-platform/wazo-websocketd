@@ -19,14 +19,11 @@ class AuthServer(object):
         disable_warnings()
 
     @asyncio.coroutine
-    def put_token(self, token_id, auth_id='123-456', acls=['websocketd']):
+    def put_token(self, token_id, user_uuid='123-456', acls=['websocketd']):
         token = {
             'token': token_id,
-            'auth_id': auth_id,
             'acls': acls,
-            'metadata': {
-                'uuid': xivo_user_uuid,
-            },
+            'metadata': {'uuid': user_uuid},
         }
         return (yield from self._loop.run_in_executor(None, self._sync_put_token, token))
 
