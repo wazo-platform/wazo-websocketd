@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -111,20 +111,6 @@ class WebSocketdClient(object):
         if self._started:
             return
         yield from self._expect_msg('subscribe')
-
-    @asyncio.coroutine
-    def op_get_presence(self, user_uuid):
-        yield from self._send_msg({'op': 'get_presence', 'data': {'user_uuid': user_uuid}})
-        if self._started:
-            return
-        return (yield from self._expect_msg('get_presence'))
-
-    @asyncio.coroutine
-    def op_set_presence(self, user_uuid, presence):
-        yield from self._send_msg({'op': 'set_presence', 'data': {'user_uuid': user_uuid, 'presence': presence}})
-        if self._started:
-            return
-        return (yield from self._expect_msg('set_presence'))
 
     @asyncio.coroutine
     def _send_msg(self, msg):

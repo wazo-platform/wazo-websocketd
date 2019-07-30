@@ -10,12 +10,7 @@ from xivo_test_helpers import asset_launching_test_case
 
 from .auth import AuthServer
 from .bus import BusClient
-from .constants import (
-    ASSET_ROOT,
-    VALID_USER_CONNECTED,
-    VALID_USER_DISCONNECTED,
-    VALID_USER_DISCONNECTING,
-)
+from .constants import ASSET_ROOT
 from .websocketd import WebSocketdClient
 
 
@@ -33,7 +28,6 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
 
     def setUp(self):
         self.valid_token_id = '123-456'
-        self.valid_token_id_without_user = '789-123'
         self.loop = asyncio.get_event_loop()
         self.loop.set_exception_handler(self.__exception_handler)
         self.websocketd_client = self.new_websocketd_client()
@@ -42,18 +36,7 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         if self.auth_server:
             self.loop.run_until_complete(self.auth_server.put_token(
                 self.valid_token_id,
-                xivo_user_uuid=VALID_USER_CONNECTED,
                 acls=['websocketd'],
-            ))
-            self.loop.run_until_complete(self.auth_server.put_token(
-                self.valid_token_id_without_user,
-                acls=['websocketd',
-                      'websocketd.users.{}.presences.read'.format(VALID_USER_CONNECTED),
-                      'websocketd.users.{}.presences.update'.format(VALID_USER_CONNECTED),
-                      'websocketd.users.{}.presences.read'.format(VALID_USER_DISCONNECTING),
-                      'websocketd.users.{}.presences.update'.format(VALID_USER_DISCONNECTING),
-                      'websocketd.users.{}.presences.read'.format(VALID_USER_DISCONNECTED),
-                      'websocketd.users.{}.presences.update'.format(VALID_USER_DISCONNECTED)],
             ))
 
     def tearDown(self):
