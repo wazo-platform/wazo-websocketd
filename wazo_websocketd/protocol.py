@@ -21,6 +21,12 @@ class SessionProtocolEncoder(object):
     def encode_subscribe(self):
         return self._encode('subscribe')
 
+    def encode_admin_subscribe(self):
+        return self._encode('admin_subscribe')
+
+    def encode_user_subscribe(self):
+        return self._encode('user_subscribe')
+
     def encode_start(self):
         return self._encode('start')
 
@@ -64,6 +70,17 @@ class SessionProtocolDecoder(object):
             raise SessionProtocolError('object data "event_name" value is not a string')
         return _SubscribeMessage(operation, event_name)
 
+    def _decode_user_subscribe(self, operation, deserialized_data):
+        return self._decode_subscribe(operation, deserialized_data)
+
+    def _decode_admin_subscribe(self, operation, deserialized_data):
+        msg = self._decode_subscribe(operation, deserialized_data)
+        tenant_uuid = deserialized_data['data'].get('tenant_uuid')
+        return _AdminSubscribeMessage(msg.op, msg.event_name, tenant_uuid)
+
 
 _Message = collections.namedtuple('_Message', ['op'])
 _SubscribeMessage = collections.namedtuple('_SubscribeMessage', ['op', 'event_name'])
+_AdminSubscribeMessage = collections.namedtuple(
+    '_AdminSubscribeMessage', ['op', 'event_name', 'tenant_uuid']
+)

@@ -113,5 +113,22 @@ class WebSocketdClient(object):
         yield from self._expect_msg('subscribe')
 
     @asyncio.coroutine
+    def op_admin_subscribe(self, event_name, tenant_uuid=None):
+        msg = {'op': 'admin_subscribe', 'data': {'event_name': event_name}}
+        if tenant_uuid:
+            msg['data']['tenant_uuid'] = tenant_uuid
+        yield from self._send_msg(msg)
+        if self._started:
+            return
+        yield from self._expect_msg('admin_subscribe')
+
+    @asyncio.coroutine
+    def op_user_subscribe(self, event_name):
+        yield from self._send_msg({'op': 'user_subscribe', 'data': {'event_name': event_name}})
+        if self._started:
+            return
+        yield from self._expect_msg('user_subscribe')
+
+    @asyncio.coroutine
     def _send_msg(self, msg):
         yield from self._websocket.send(json.dumps(msg))

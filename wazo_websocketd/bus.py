@@ -134,7 +134,13 @@ class _BusEventService(object):
                 yield from self._bus_connection.add_queue_binding('')
 
         acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
-        bus_event_consumer = _BusEventConsumer(self._loop, self._bus_event_dispatcher, acl_check)
+        tenant_uuid = token['metadata']['tenant_uuid']
+        bus_event_consumer = _BusEventConsumer(
+            self._loop,
+            self._bus_event_dispatcher,
+            acl_check,
+            tenant_uuid,
+        )
         self._bus_event_dispatcher.add_event_consumer(bus_event_consumer)
         return bus_event_consumer
 
@@ -169,21 +175,31 @@ class _BusEventDispatcher(object):
 
 class _BusEventConsumer(object):
 
-    def __init__(self, loop, bus_event_dispatcher, acl_check):
+    def __init__(self, loop, bus_event_dispatcher, acl_check, tenant_uuid):
         self._bus_event_dispatcher = bus_event_dispatcher
         self._acl_check = acl_check
         self._queue = asyncio.Queue(loop=loop)
-        self._event_names = set()
+        self._events = set()
         self._all_events = False
+        self._tenant_uuid = tenant_uuid
 
     def close(self):
         self._bus_event_dispatcher.remove_event_consumer(self)
 
-    def subscribe_to_event(self, event_name):
+    def _subscribe_to_event(self, event_name, tenant_uuid=None):
         if event_name == '*':
             self._all_events = True
         else:
-            self._event_names.add(event_name)
+            self._events.add((event_name, tenant_uuid))
+
+    def subscribe_to_admin_event(self, event_name, tenant_uuid=None):
+        subscribe_tenant_uuid = tenant_uuid or self._tenant_uuid
+        self._subscribe_to_event(event_name, subscribe_tenant_uuid)
+        # Since not every message has a tenant_uuid, admin need to be bound to all tenants
+        self._subscribe_to_event(event_name, None)
+
+    def subscribe_to_user_event(self, event_name):
+        self._subscribe_to_event(event_name, self._tenant_uuid)
 
     @asyncio.coroutine
     def get(self):
@@ -197,7 +213,7 @@ class _BusEventConsumer(object):
         self._queue.put_nowait(None)
 
     def _on_event(self, bus_event):
-        if self._all_events or bus_event.name in self._event_names:
+        if self._all_events or (bus_event.name, bus_event.tenant_uuid) in self._events:
             if self._acl_check.matches_required_acl(bus_event.acl):
                 self._queue.put_nowait(bus_event)
 
@@ -224,7 +240,9 @@ def _decode_bus_msg(bus_msg):
         has_acl = False
         acl = None
 
-    return _BusEvent(name, has_acl, acl, msg_body)
+    tenant_uuid = headers.get('tenant_uuid', None)
+
+    return _BusEvent(name, has_acl, acl, tenant_uuid, msg_body)
 
 
-_BusEvent = collections.namedtuple('_BusEvent', ['name', 'has_acl', 'acl', 'msg_body'])
+_BusEvent = collections.namedtuple('_BusEvent', ['name', 'has_acl', 'acl', 'tenant_uuid', 'msg_body'])

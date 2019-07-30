@@ -33,6 +33,7 @@ class BusClient(object):
         headers = {
             'name': event['name'],
             'required_acl': event.get('required_acl', event['name']),
+            'tenant_uuid': event.get('tenant_uuid', None),
         }
         routing_key = ''
         self._exchange.publish(

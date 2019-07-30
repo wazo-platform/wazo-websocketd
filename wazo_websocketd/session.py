@@ -134,10 +134,26 @@ class Session(object):
 
     @asyncio.coroutine
     def _do_ws_subscribe(self, msg):
-        logger.debug('subscribing to event "%s"', msg.event_name)
-        self._bus_event_consumer.subscribe_to_event(msg.event_name)
+        logger.debug('deprecated subscribing to event "%s"', msg.event_name)
+        self._bus_event_consumer.subscribe_to_admin_event(msg.event_name)
         if not self._started:
             yield from self._ws.send(self._protocol_encoder.encode_subscribe())
+
+    @asyncio.coroutine
+    def _do_ws_admin_subscribe(self, msg):
+        logger.debug(
+            'subscribing to admin event "%s" with tenant "%s"', msg.event_name, msg.tenant_uuid
+        )
+        self._bus_event_consumer.subscribe_to_admin_event(msg.event_name, msg.tenant_uuid)
+        if not self._started:
+            yield from self._ws.send(self._protocol_encoder.encode_admin_subscribe())
+
+    @asyncio.coroutine
+    def _do_ws_user_subscribe(self, msg):
+        logger.debug('subscribing to user event "%s"', msg.event_name)
+        self._bus_event_consumer.subscribe_to_user_event(msg.event_name)
+        if not self._started:
+            yield from self._ws.send(self._protocol_encoder.encode_user_subscribe())
 
     @asyncio.coroutine
     def _do_ws_start(self, msg):
