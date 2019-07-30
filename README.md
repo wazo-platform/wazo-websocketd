@@ -2,9 +2,6 @@
 
 wazo-websocketd is a WebSocket server that delivers Wazo related events to clients.
 
-Contrary to most other Wazo components, this is a python 3 only project. Both
-the code, the unit tests and the integration tests must be run with python 3.
-
 ## Dependencies
 
 * python >= 3.4
