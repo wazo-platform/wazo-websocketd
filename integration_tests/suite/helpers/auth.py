@@ -25,6 +25,9 @@ class AuthServer(object):
             'auth_id': auth_id,
             'xivo_user_uuid': xivo_user_uuid,
             'acls': acls,
+            'metadata': {
+                'uuid': xivo_user_uuid,
+            },
         }
         return (yield from self._loop.run_in_executor(None, self._sync_put_token, token))
 
