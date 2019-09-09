@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -19,7 +19,7 @@ class BusClient(object):
     def connect(self):
         self._connection = yield from asynqp.connect('localhost', loop=self._loop, port=self._port)
         self._channel = yield from self._connection.open_channel()
-        self._exchange = yield from self._channel.declare_exchange('xivo', 'topic', durable=True)
+        self._exchange = yield from self._channel.declare_exchange('wazo-headers', 'headers', durable=True)
 
     @asyncio.coroutine
     def close(self):
@@ -29,7 +29,14 @@ class BusClient(object):
             self._channel = None
             self._connection = None
 
-    def publish_event(self, event, routing_key=None):
-        if routing_key is None:
-            routing_key = event['name']
-        self._exchange.publish(asynqp.Message(json.dumps(event)), routing_key, mandatory=False)
+    def publish_event(self, event):
+        headers = {
+            'name': event['name'],
+            'required_acl': event.get('required_acl', event['name']),
+        }
+        routing_key = ''
+        self._exchange.publish(
+            asynqp.Message(json.dumps(event), headers=headers),
+            routing_key,
+            mandatory=False,
+        )
