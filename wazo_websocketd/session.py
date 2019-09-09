@@ -140,7 +140,7 @@ class Session(object):
             yield from self._ws.send(self._protocol_encoder.encode_subscribe())
 
     @asyncio.coroutine
-    def _do_ws_admin_subscribe(self, msg):
+    def _do_ws_admin_subscribe(self, msg):  # TODO ADD ACL CHECK
         logger.debug(
             'subscribing to admin event "%s" with tenant "%s"', msg.event_name, msg.tenant_uuid
         )

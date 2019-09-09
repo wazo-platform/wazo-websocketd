@@ -134,7 +134,7 @@ class _BusEventService(object):
                 yield from self._bus_connection.add_queue_binding('')
 
         acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
-        tenant_uuid = token['metadata']['tenant_uuid']
+        tenant_uuid = token['metadata']['tenant_uuid']  # TODO: extract from token OR headers
         bus_event_consumer = _BusEventConsumer(
             self._loop,
             self._bus_event_dispatcher,
