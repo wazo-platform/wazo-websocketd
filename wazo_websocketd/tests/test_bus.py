@@ -22,9 +22,10 @@ class TestBusEvent(unittest.TestCase):
 
     def setUp(self):
         self.bus_msg = Mock()
+        self.bus_msg.body = b'{}'
 
     def test_bus_msg(self):
-        self.bus_msg.body = b'{"name": "foo", "required_acl": "some.acl"}'
+        self.bus_msg.headers = {'name': 'foo', 'required_acl': 'some.acl'}
 
         bus_event = _decode_bus_msg(self.bus_msg)
 
@@ -33,22 +34,37 @@ class TestBusEvent(unittest.TestCase):
         assert_that(bus_event.acl, equal_to('some.acl'))
         assert_that(bus_event.msg_body, equal_to(self.bus_msg.body.decode('utf-8')))
 
-    def test_bus_msg_no_acl(self):
-        self.bus_msg.body = b'{"name": "foo"}'
-
-        bus_event = _decode_bus_msg(self.bus_msg)
-
-        assert_that(bus_event.has_acl, equal_to(False))
-
-    def test_bus_msg_null_required_acl(self):
-        self.bus_msg.body = b'{"name": "foo", "required_acl": null}'
+    def test_bus_msg_none_required_acl(self):
+        self.bus_msg.headers = {'name': 'foo', 'required_acl': None}
 
         bus_event = _decode_bus_msg(self.bus_msg)
 
         assert_that(bus_event.has_acl, equal_to(True))
         assert_that(bus_event.acl, none())
 
-    def test_bus_msg_invalid_encoding(self):
+    def test_bus_msg_missing_required_acl(self):
+        self.bus_msg.headers = {'name': 'foo'}
+
+        bus_event = _decode_bus_msg(self.bus_msg)
+
+        assert_that(bus_event.has_acl, equal_to(False))
+
+    def test_bus_msg_missing_name(self):
+        self.bus_msg.headers = {'required_acl': 'some.acl'}
+
+        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+
+    def test_bus_msg_wrong_name_type(self):
+        self.bus_msg.headers = {'name': None, 'required_acl': 'some.acl'}
+
+        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+
+    def test_bus_msg_wrong_required_acl_type(self):
+        self.bus_msg.headers = {'name': 'foo', 'required_acl': 2}
+
+        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+
+    def test_bus_msg_invalid_type(self):
         self.bus_msg.body = b'{"name": "\xe8"}'
 
         self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
@@ -60,21 +76,6 @@ class TestBusEvent(unittest.TestCase):
 
     def test_bus_msg_invalid_root_object_type(self):
         self.bus_msg.body = b'2'
-
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
-
-    def test_bus_msg_missing_name(self):
-        self.bus_msg.body = b'{}'
-
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
-
-    def test_bus_msg_wrong_name_type(self):
-        self.bus_msg.body = b'{"name": null}'
-
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
-
-    def test_bus_msg_wrong_required_acl_type(self):
-        self.bus_msg.body = b'{"name": "foo", "required_acl": 2}'
 
         self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
 
