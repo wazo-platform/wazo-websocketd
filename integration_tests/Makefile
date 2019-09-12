@@ -1,7 +1,7 @@
 .PHONY: test-setup egg-info test
 
 test-setup: egg-info
-	docker pull rabbitmq:3.6.6
+	docker pull rabbitmq
 	docker pull wazopbx/wait
 	docker pull wazopbx/wazo-auth-mock
 	docker build --pull -t wazopbx/wazo-websocketd ..
