@@ -41,9 +41,6 @@ class Controller(object):
         if isinstance(exception, asynqp.exceptions.ConnectionLostError):
             logger.warning('bus connection has been lost')
             self._bus_event_service.on_connection_lost()
-        elif isinstance(exception, asynqp.exceptions.ConnectionClosedError):
-            # this happens when we close a bus connection
-            logger.debug('bus connection has been closed')
         else:
             loop.default_exception_handler(context)
 
