@@ -65,7 +65,11 @@ class EventTransmitter(object):
         self._all_events = False
 
     def set_token(self, token):
+        self._token = token
         self._acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
+
+    def get_token(self):
+        return self._token
 
     def subscribe_to_event(self, event_name):
         if event_name == '*':
@@ -195,7 +199,7 @@ class Session(object):
             logger.debug('sending websocket ping')
             await self._ws.ping()
 
-    async def _task_receive_commands(self):
+    async def _task_receive_command(self):
         while True:
             data = await self._ws.recv()
             msg = self._protocol_decoder.decode(data)
@@ -213,8 +217,8 @@ class Session(object):
             else:
                 logger.debug('not sending bus event to websocket: session not started')
 
-    async def _task_authentification(self, _token):
-        await self._authenticator.run_check(_token)
+    async def _task_authentification(self):
+        await self._authenticator.run_check(self._event_transmiter.get_token)
 
     @asyncio.coroutine
     def _do_ws_subscribe(self, msg):

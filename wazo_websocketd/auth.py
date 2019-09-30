@@ -73,10 +73,10 @@ class _Authenticator(object):
         # This function returns a coroutine.
         return self._websocketd_auth_client.is_valid_token(token_id, acl)
 
-    def run_check(self, token):
+    def run_check(self, token_getter):
         # This function returns a coroutine that raise an AuthenticationExpiredError exception
         # when the token expires.
-        return self._auth_check.run(token)
+        return self._auth_check.run(token_getter)
 
 
 class _StaticIntervalAuthCheck(object):
@@ -86,9 +86,9 @@ class _StaticIntervalAuthCheck(object):
         self._interval = interval
 
     @asyncio.coroutine
-    def run(self, token):
-        token_id = token['token']
+    def run(self, token_getter):
         while True:
+            token_id = token_getter()['token']
             yield from asyncio.sleep(self._interval, loop=self._loop)
             logger.debug('static auth check: testing token validity')
             is_valid = yield from self._websocketd_auth_client.is_valid_token(token_id)
@@ -105,9 +105,10 @@ class _DynamicIntervalAuthCheck(object):
         self._websocketd_auth_client = websocketd_auth_client
 
     @asyncio.coroutine
-    def run(self, token):
-        token_id = token['token']
+    def run(self, token_getter):
         while True:
+            token = token_getter()
+            token_id = token['token']
             # FIXME if wazo-websocketd and wazo-auth are not in the same
             #       timezone, this doesn't work -- but this needs to be fixed
             #       in wazo-auth, which should returns data in UTC instead of
@@ -120,7 +121,7 @@ class _DynamicIntervalAuthCheck(object):
             yield from asyncio.sleep(next_check, loop=self._loop)
             logger.debug('dynamic auth check: testing token validity')
             try:
-                token = yield from self._websocketd_auth_client.get_token(token_id)
+                yield from self._websocketd_auth_client.get_token(token_id)
             except AuthenticationError:
                 raise AuthenticationExpiredError()
 
