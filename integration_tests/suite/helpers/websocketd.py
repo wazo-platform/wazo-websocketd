@@ -23,6 +23,7 @@ class WebSocketdClient(object):
         self._port = port
         self._websocket = None
         self._started = False
+        self._version = 1
         self.timeout = self._DEFAULT_TIMEOUT
 
     @asyncio.coroutine
@@ -106,19 +107,30 @@ class WebSocketdClient(object):
         return msg
 
     @asyncio.coroutine
-    def op_start(self):
-        yield from self._send_msg({'op': 'start'})
-        if self._started:
+    def op_start(self, version=None):
+        if version:
+            self._version = 2
+            yield from self._send_msg({'op': 'start', 'data': {'version': 2}})
+        else:
+            yield from self._send_msg({'op': 'start'})
+        if self._started and self._version == 1:
             return
         self._started = True
         yield from self._expect_msg('start')
+
+    @asyncio.coroutine
+    def op_token(self, token):
+        yield from self._send_msg({'op': 'token', 'data': {'token': token}})
+        if self._started and self._version == 1:
+            return
+        yield from self._expect_msg('token')
 
     @asyncio.coroutine
     def op_subscribe(self, event_name):
         yield from self._send_msg(
             {'op': 'subscribe', 'data': {'event_name': event_name}}
         )
-        if self._started:
+        if self._started and self._version == 1:
             return
         yield from self._expect_msg('subscribe')
 

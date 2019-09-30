@@ -67,3 +67,24 @@ class TestTokenExpiration(IntegrationTest):
         yield from self.auth_server.remove_token(self.token_id)
         self.websocketd_client.timeout = self._TIMEOUT
         yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+
+    @run_with_loop
+    def test_token_renew(self):
+        yield from self.auth_server.put_token(self.token_id)
+
+        yield from self.websocketd_client.connect_and_wait_for_init(self.token_id)
+        yield from self.websocketd_client.op_start(version=2)
+        yield from self.auth_server.put_token("new-token")
+        yield from self.websocketd_client.op_token("new-token")
+        self.websocketd_client.timeout = self._TIMEOUT
+        yield from self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    def test_token_renew_invalid(self):
+        yield from self.auth_server.put_token(self.token_id)
+
+        yield from self.websocketd_client.connect_and_wait_for_init(self.token_id)
+        yield from self.websocketd_client.op_start(version=2)
+        yield from self.websocketd_client.op_token("invalid-token")
+        self.websocketd_client.timeout = self._TIMEOUT
+        yield from self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_FAILED)
