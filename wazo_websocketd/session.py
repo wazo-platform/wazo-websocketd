@@ -17,7 +17,6 @@ from .exception import (
     NoTokenError,
     SessionProtocolError,
 )
-from .multiplexer import Multiplexer
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +116,6 @@ class Session(object):
         self._protocol_decoder = protocol_decoder
         self._ws = ws
         self._path = path
-        self._multiplexer = Multiplexer(self._loop)
         self._started = False
         self._event_transmiter = None
 
@@ -154,54 +152,69 @@ class Session(object):
             logger.exception('unexpected exception during websocket session run:')
             yield from self._ws.close(1011)
 
-    @asyncio.coroutine
-    def _run(self):
+    async def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
-        _token = yield from self._authenticator.get_token(token_id)
+        _token = await self._authenticator.get_token(token_id)
 
         self._event_transmiter = EventTransmitter(self._loop)
         self._event_transmiter.set_token(_token)
-        yield from self._bus_event_service.register_event_consumer(
-            self._event_transmiter
-        )
+        await self._bus_event_service.register_event_consumer(self._event_transmiter)
 
         try:
-            yield from self._ws.send(self._protocol_encoder.encode_init())
+            await self._ws.send(self._protocol_encoder.encode_init())
 
-            self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
-            self._multiplexer.call_when_done(
-                self._authenticator.run_check(_token), self._on_authenticator_check
+            ping_task = asyncio.create_task(self._task_send_ping())
+            receiver_task = asyncio.create_task(self._task_receive_command())
+            transmitter_task = asyncio.create_task(self._task_transmit_event())
+            auth_task = asyncio.create_task(self._task_authentification())
+
+            tasks = [ping_task, receiver_task, auth_task, transmitter_task]
+
+            # Wait for the first exception
+            done, pending = await asyncio.wait(
+                tasks, return_when=asyncio.FIRST_COMPLETED
             )
-            self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
-            self._multiplexer.call_when_done(
-                self._event_transmiter.get(), self._on_bus_event
-            )
-            yield from self._multiplexer.run()
+
+            # Then stop other tasks
+            for task in pending:
+                task.cancel()
+
+            # Wait for all tasks to stop
+            await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
+
+            # raise the first exception we got
+            for task in done:
+                task.result()
+
         finally:
             self._bus_event_service.unregister_event_consumer(self._event_transmiter)
-            yield from self._multiplexer.close()
 
-    @asyncio.coroutine
-    def _send_ping(self):
-        logger.debug('sending websocket ping')
-        yield from self._ws.ping()
-        self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
+    async def _task_send_ping(self):
+        while True:
+            await asyncio.sleep(self._ws_ping_interval)
+            logger.debug('sending websocket ping')
+            await self._ws.ping()
 
-    def _on_authenticator_check(self, future):
-        # just call future.result and expect the coroutine to raise an exception
-        future.result()
-        raise AssertionError('should never be reached')
+    async def _task_receive_commands(self):
+        while True:
+            data = await self._ws.recv()
+            msg = self._protocol_decoder.decode(data)
+            func_name = '_do_ws_{}'.format(msg.op)
+            func = getattr(self, func_name, None)
+            if func is None:
+                raise SessionProtocolError('unknown operation "{}"'.format(msg.op))
+            await func(msg)
 
-    @asyncio.coroutine
-    def _on_ws_recv(self, future):
-        data = future.result()
-        msg = self._protocol_decoder.decode(data)
-        func_name = '_do_ws_{}'.format(msg.op)
-        func = getattr(self, func_name, None)
-        if func is None:
-            raise SessionProtocolError('unknown operation "{}"'.format(msg.op))
-        yield from func(msg)
-        self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
+    async def _task_transmit_event(self):
+        while True:
+            bus_event = await self._event_transmiter.get()
+            if self._started:
+                await self._ws.send(bus_event.msg_body)
+            else:
+                logger.debug('not sending bus event to websocket: session not started')
+
+    async def _task_authentification(self, _token):
+        await self._authenticator.run_check(_token)
 
     @asyncio.coroutine
     def _do_ws_subscribe(self, msg):
@@ -225,17 +238,6 @@ class Session(object):
         token = self._authenticator.get_token(msg.value)
         self._event_transmiter.set_token(token)
         yield from self._ws.send(self._protocol_encoder.encode_start())
-
-    @asyncio.coroutine
-    def _on_bus_event(self, future):
-        bus_event = future.result()
-        if self._started:
-            yield from self._ws.send(bus_event.msg_body)
-        else:
-            logger.debug('not sending bus event to websocket: session not started')
-        self._multiplexer.call_when_done(
-            self._event_transmiter.get(), self._on_bus_event
-        )
 
 
 def _extract_token_id(ws, path):
