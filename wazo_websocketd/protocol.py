@@ -82,23 +82,31 @@ class SessionProtocolDecoder(object):
     @staticmethod
     def _get(attribute, operation, deserialized_data, _type, default=_UNSET):
         if 'data' not in deserialized_data:
-            raise SessionProtocolError('object is missing required "data" key')
+            if default == _UNSET:
+                raise SessionProtocolError('object is missing required "data" key')
+            else:
+                return _Message(operation, default)
+
         if not isinstance(deserialized_data['data'], dict):
-            raise SessionProtocolError('object "data" value is not an object')
+            if default == _UNSET:
+                raise SessionProtocolError('object "data" value is not an object')
+            else:
+                return _Message(operation, default)
 
-        if attribute in deserialized_data['data']:
-            value = deserialized_data['data'][attribute]
-        elif default != _UNSET:
-            value = default
-        else:
-            raise SessionProtocolError(
-                'object "data" is missing required "{}" key'.format(attribute)
-            )
+        if attribute not in deserialized_data['data']:
+            if default == _UNSET:
+                raise SessionProtocolError(
+                    'object "data" is missing required "{}" key'.format(attribute)
+                )
+            else:
+                return _Message(operation, default)
 
+        value = deserialized_data['data'][attribute]
         if not isinstance(value, _type):
             raise SessionProtocolError(
                 'object data "{}" value is not a {}'.format(value, _type)
             )
+
         return _Message(operation, value)
 
 

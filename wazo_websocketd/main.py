@@ -8,7 +8,7 @@ from xivo import xivo_logging
 from xivo.daemonize import pidfile_context
 from xivo.user_rights import change_user
 
-from wazo_websocketd.auth import new_authenticator
+from wazo_websocketd.auth import Authenticator
 from wazo_websocketd.bus import new_bus_event_service
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
@@ -28,7 +28,7 @@ def main():
         change_user(config['user'])
 
     loop = asyncio.get_event_loop()
-    authenticator = new_authenticator(config, loop)
+    authenticator = Authenticator(config, loop)
     bus_event_service = new_bus_event_service(config, loop)
     protocol_encoder = SessionProtocolEncoder()
     protocol_decoder = SessionProtocolDecoder()
