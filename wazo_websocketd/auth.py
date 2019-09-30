@@ -17,16 +17,16 @@ class _WebSocketdAuthClient(object):
 
     _ACL = 'websocketd'
 
-    def __init__(self, loop, config):
-        self._loop = loop
+    def __init__(self, config):
         self._auth_client = wazo_auth_client.Client(**config['auth'])
 
     @asyncio.coroutine
     def get_token(self, token_id):
         logger.debug('getting token from wazo-auth')
+        loop = asyncio.get_event_loop()
         try:
             return (
-                yield from self._loop.run_in_executor(
+                yield from loop.run_in_executor(
                     None, self._auth_client.token.get, token_id, self._ACL
                 )
             )
@@ -39,16 +39,16 @@ class _WebSocketdAuthClient(object):
     @asyncio.coroutine
     def is_valid_token(self, token_id, acl=_ACL):
         logger.debug('checking token validity from wazo-auth')
+        loop = asyncio.get_event_loop()
         return (
-            yield from self._loop.run_in_executor(
+            yield from loop.run_in_executor(
                 None, self._auth_client.token.is_valid, token_id, acl
             )
         )
 
 
 class _StaticIntervalAuthCheck(object):
-    def __init__(self, loop, websocketd_auth_client, config):
-        self._loop = loop
+    def __init__(self, websocketd_auth_client, config):
         self._websocketd_auth_client = websocketd_auth_client
         self._interval = config['auth_check_static_interval']
 
@@ -56,7 +56,7 @@ class _StaticIntervalAuthCheck(object):
     def run(self, token_getter):
         while True:
             token_id = token_getter()['token']
-            yield from asyncio.sleep(self._interval, loop=self._loop)
+            yield from asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
             is_valid = yield from self._websocketd_auth_client.is_valid_token(token_id)
             if not is_valid:
@@ -67,8 +67,7 @@ class _DynamicIntervalAuthCheck(object):
 
     _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
 
-    def __init__(self, loop, websocketd_auth_client, config):
-        self._loop = loop
+    def __init__(self, websocketd_auth_client, config):
         self._websocketd_auth_client = websocketd_auth_client
 
     @asyncio.coroutine
@@ -85,7 +84,7 @@ class _DynamicIntervalAuthCheck(object):
                 token['expires_at'], self._ISO_DATETIME
             )
             next_check = self._calculate_next_check(now, expires_at)
-            yield from asyncio.sleep(next_check, loop=self._loop)
+            yield from asyncio.sleep(next_check)
             logger.debug('dynamic auth check: testing token validity')
             try:
                 yield from self._websocketd_auth_client.get_token(token_id)
@@ -108,14 +107,14 @@ STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAut
 
 
 class Authenticator(object):
-    def __init__(self, config, loop):
-        self._websocketd_auth_client = _WebSocketdAuthClient(loop, config)
+    def __init__(self, config):
+        self._websocketd_auth_client = _WebSocketdAuthClient(config)
         auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
         if not auth_check_class:
             raise Exception(
                 'unknown auth_check_strategy {}'.format(config['auth_check_strategy'])
             )
-        self._auth_check = auth_check_class(loop, self._websocketd_auth_client, config)
+        self._auth_check = auth_check_class(self._websocketd_auth_client, config)
 
     def get_token(self, token_id):
         # This function returns a coroutine.

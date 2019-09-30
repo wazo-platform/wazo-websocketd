@@ -12,34 +12,32 @@ logger = logging.getLogger(__name__)
 
 
 class Controller(object):
-    def __init__(self, config, loop, bus_event_service, session_factory):
+    def __init__(self, config, bus_event_service, session_factory):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']
         self._ws_ssl = config['websocket']['ssl']
-        self._loop = loop
         self._bus_event_service = bus_event_service
         self._session_factory = session_factory
 
     def setup(self):
-        self._loop.add_signal_handler(signal.SIGINT, self._stop)
-        self._loop.add_signal_handler(signal.SIGTERM, self._stop)
-        self._loop.set_exception_handler(self._exception_handler)
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(signal.SIGINT, self._stop)
+        loop.add_signal_handler(signal.SIGTERM, self._stop)
+        loop.set_exception_handler(self._exception_handler)
         start_ws_server = websockets.serve(
             self._session_factory.ws_handler,
             self._ws_host,
             self._ws_port,
             ssl=self._ws_ssl,
-            loop=self._loop,
         )
-        self._ws_server = self._loop.run_until_complete(start_ws_server)
+        self._ws_server = loop.run_until_complete(start_ws_server)
 
     def run(self):
         logger.info('wazo-websocketd starting...')
         try:
-            self._loop.run_forever()
+            asyncio.get_event_loop().run_forever()
         finally:
             logger.info('wazo-websocketd stopped')
-            self._loop.close()
 
     def _exception_handler(self, loop, context):
         exception = context.get('exception')
@@ -52,10 +50,9 @@ class Controller(object):
     def _stop(self):
         logger.info('wazo-websocketd stopping...')
         self._ws_server.close()
-        self._loop.create_task(self._coro_stop())
-
-    @asyncio.coroutine
-    def _coro_stop(self):
-        yield from self._ws_server.wait_closed()
-        yield from self._bus_event_service.close()
-        self._loop.stop()
+        asyncio.wait(
+            [
+                asyncio.create_task(self._ws_server.wait_closed()),
+                asyncio.create_task(self._bus_event_service.close()),
+            ]
+        )

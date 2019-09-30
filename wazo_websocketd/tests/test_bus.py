@@ -77,10 +77,8 @@ class TestBusEvent(unittest.TestCase):
 
 class TestBusEventTransmitter(unittest.TestCase):
     def setUp(self):
-        self.loop = asyncio.new_event_loop()
-        self.addCleanup(self.loop.close)
         self.bus_event = _new_bus_event('foo', acl='some.thing')
-        self.event_transmitter = EventTransmitter(self.loop)
+        self.event_transmitter = EventTransmitter()
         self.event_transmitter._acl_check = Mock(ACLCheck)
 
     def test_get_connection_lost(self):
@@ -88,21 +86,25 @@ class TestBusEventTransmitter(unittest.TestCase):
 
         self.assertRaises(
             BusConnectionLostError,
-            self.loop.run_until_complete,
+            asyncio.get_event_loop().run_until_complete,
             self.event_transmitter.get(),
         )
 
     def test_get_event_subscribed_name(self):
         self.event_transmitter.subscribe_to_event(self.bus_event.name)
         self.event_transmitter.put(self.bus_event)
-        result = self.loop.run_until_complete(self.event_transmitter.get())
+        result = asyncio.get_event_loop().run_until_complete(
+            self.event_transmitter.get()
+        )
 
         assert_that(result, same_instance(self.bus_event))
 
     def test_get_event_subscribed_star(self):
         self.event_transmitter.subscribe_to_event('*')
         self.event_transmitter.put(self.bus_event)
-        result = self.loop.run_until_complete(self.event_transmitter.get())
+        result = asyncio.get_event_loop().run_until_complete(
+            self.event_transmitter.get()
+        )
 
         assert_that(result, same_instance(self.bus_event))
 

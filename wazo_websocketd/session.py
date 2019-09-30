@@ -25,14 +25,12 @@ class SessionFactory(object):
     def __init__(
         self,
         config,
-        loop,
         authenticator,
         bus_event_service,
         protocol_encoder,
         protocol_decoder,
     ):
         self._config = config
-        self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_encoder = protocol_encoder
@@ -44,7 +42,6 @@ class SessionFactory(object):
         logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(
             self._config,
-            self._loop,
             self._authenticator,
             self._bus_event_service,
             self._protocol_encoder,
@@ -59,8 +56,8 @@ class SessionFactory(object):
 
 
 class EventTransmitter(object):
-    def __init__(self, loop):
-        self._queue = asyncio.Queue(loop=loop)
+    def __init__(self):
+        self._queue = asyncio.Queue()
         self._event_names = set()
         self._all_events = False
 
@@ -104,7 +101,6 @@ class Session(object):
     def __init__(
         self,
         config,
-        loop,
         authenticator,
         bus_event_service,
         protocol_encoder,
@@ -113,7 +109,6 @@ class Session(object):
         path,
     ):
         self._ws_ping_interval = config['websocket']['ping_interval']
-        self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
         self._protocol_version = 1
@@ -161,7 +156,7 @@ class Session(object):
         token_id = _extract_token_id(self._ws, self._path)
         _token = await self._authenticator.get_token(token_id)
 
-        self._event_transmiter = EventTransmitter(self._loop)
+        self._event_transmiter = EventTransmitter()
         self._event_transmiter.set_token(_token)
         await self._bus_event_service.register_event_consumer(self._event_transmiter)
 

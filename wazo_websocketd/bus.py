@@ -13,20 +13,19 @@ from .exception import BusConnectionError, BusConnectionLostError
 logger = logging.getLogger(__name__)
 
 
-def new_bus_event_service(config, loop):
-    bus_connection = _BusConnection(config, loop)
-    return _BusEventService(loop, bus_connection)
+def new_bus_event_service(config):
+    bus_connection = _BusConnection(config)
+    return _BusEventService(bus_connection)
 
 
 class _BusConnection(object):
-    def __init__(self, config, loop):
+    def __init__(self, config):
         self._host = config['bus']['host']
         self._port = config['bus']['port']
         self._username = config['bus']['username']
         self._password = config['bus']['password']
         self._exchange_name = config['bus']['exchange_name']
         self._exchange_type = config['bus']['exchange_type']
-        self._loop = loop
         self._msg_received_callback = None
         self._connected = False
         self._closed = False
@@ -64,7 +63,7 @@ class _BusConnection(object):
         self._connected = True
         try:
             self._connection = yield from asynqp.connect(
-                self._host, self._port, self._username, self._password, loop=self._loop
+                self._host, self._port, self._username, self._password
             )
             self._channel = yield from self._connection.open_channel()
             self._exchange = yield from self._channel.declare_exchange(
@@ -94,12 +93,11 @@ class _BusConnection(object):
 
 
 class _BusEventService(object):
-    def __init__(self, loop, bus_connection):
+    def __init__(self, bus_connection):
         # Becomes the owner of the bus_connection
-        self._loop = loop
         self._bus_connection = bus_connection
         self._bus_connection.set_msg_received_callback(self._on_msg_received)
-        self._lock = asyncio.Lock(loop=loop)
+        self._lock = asyncio.Lock()
         self._bus_event_consumers = set()
 
     def on_connection_lost(self):
