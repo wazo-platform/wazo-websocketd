@@ -1,6 +1,6 @@
 Format: http://dep.debian.net/deps/dep5
 Upstream-Name: wazo-websocketd
-Source: https://github.com/wazo-pbx/wazo-websocketd.git
+Source: https://github.com/wazo-platform/wazo-websocketd.git
 
 Files: *
 Copyright: 2016-2019 The Wazo Authors
