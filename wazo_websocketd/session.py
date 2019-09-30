@@ -36,8 +36,7 @@ class SessionFactory(object):
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
 
-    @asyncio.coroutine
-    def ws_handler(self, ws, path):
+    async def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
         logger.info('websocket connection accepted from "%s"', remote_address)
         session = Session(
@@ -50,7 +49,7 @@ class SessionFactory(object):
             path,
         )
         try:
-            yield from session.run()
+            await session.run()
         finally:
             logger.info('websocket session terminated %s', remote_address)
 
@@ -74,10 +73,9 @@ class EventTransmitter(object):
         else:
             self._event_names.add(event_name)
 
-    @asyncio.coroutine
-    def get(self):
+    async def get(self):
         # Raise a BusConnectionLostError when the connection to the bus is lost.
-        bus_event = yield from self._queue.get()
+        bus_event = await self._queue.get()
         if bus_event is None:
             raise BusConnectionLostError()
         return bus_event
@@ -119,38 +117,35 @@ class Session(object):
         self._started = False
         self._event_transmiter = None
 
-    @asyncio.coroutine
-    def run(self):
+    async def run(self):
         try:
-            yield from self._run()
+            await self._run()
         except NoTokenError:
             logger.info('closing websocket connection: no token')
-            yield from self._ws.close(self._CLOSE_CODE_NO_TOKEN_ID, 'no token')
+            await self._ws.close(self._CLOSE_CODE_NO_TOKEN_ID, 'no token')
         except AuthenticationExpiredError:
             logger.info('closing websocket connection: authentication expired')
-            yield from self._ws.close(
+            await self._ws.close(
                 self._CLOSE_CODE_AUTH_EXPIRED, 'authentication expired'
             )
         except AuthenticationError as e:
             logger.info('closing websocket connection: authentication failed: %s', e)
-            yield from self._ws.close(
-                self._CLOSE_CODE_AUTH_FAILED, 'authentication failed'
-            )
+            await self._ws.close(self._CLOSE_CODE_AUTH_FAILED, 'authentication failed')
         except SessionProtocolError as e:
             logger.info('closing websocket connection: session protocol error: %s', e)
-            yield from self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
+            await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
         except BusConnectionLostError:
             logger.info('closing websocket connection: bus connection lost')
-            yield from self._ws.close(1011, 'bus connection lost')
+            await self._ws.close(1011, 'bus connection lost')
         except BusConnectionError:
             logger.info('closing websocket connection: bus connection error')
-            yield from self._ws.close(1011, 'bus connection error')
+            await self._ws.close(1011, 'bus connection error')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info('websocket connection closed with code %s', e.code)
         except Exception:
             logger.exception('unexpected exception during websocket session run:')
-            yield from self._ws.close(1011)
+            await self._ws.close(1011)
 
     async def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
@@ -221,25 +216,22 @@ class Session(object):
     async def _task_authentification(self):
         await self._authenticator.run_check(self._event_transmiter.get_token)
 
-    @asyncio.coroutine
-    def _do_ws_subscribe(self, msg):
+    async def _do_ws_subscribe(self, msg):
         logger.debug('subscribing to event "%s"', msg.value)
         self._event_transmiter.subscribe_to_event(msg.value)
         if not self._started or self._protocol_version == 2:
-            yield from self._ws.send(self._protocol_encoder.encode_subscribe())
+            await self._ws.send(self._protocol_encoder.encode_subscribe())
 
-    @asyncio.coroutine
-    def _do_ws_start(self, msg):
+    async def _do_ws_start(self, msg):
         self._started = True
         self._protocol_version = msg.value
-        yield from self._ws.send(self._protocol_encoder.encode_start())
+        await self._ws.send(self._protocol_encoder.encode_start())
 
-    @asyncio.coroutine
-    def _do_ws_token(self, msg):
+    async def _do_ws_token(self, msg):
         token = self._authenticator.get_token(msg.value)
         self._event_transmiter.set_token(token)
         if not self._started or self._protocol_version == 2:
-            yield from self._ws.send(self._protocol_encoder.encode_start())
+            await self._ws.send(self._protocol_encoder.encode_start())
 
 
 def _extract_token_id(ws, path):

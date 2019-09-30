@@ -30,16 +30,15 @@ class _BusConnection(object):
         self._connected = False
         self._closed = False
 
-    @asyncio.coroutine
-    def close(self):
+    async def close(self):
         self._closed = True
         if self._connected:
             logger.debug('closing bus connection')
             self._connected = False
             try:
-                yield from self._consumer.cancel()
-                yield from self._channel.close()
-                yield from self._connection.close()
+                await self._consumer.cancel()
+                await self._channel.close()
+                await self._connection.close()
             except Exception:
                 logger.exception('unexpected error while closing bus connection')
         self._msg_received_callback = None
@@ -52,8 +51,7 @@ class _BusConnection(object):
     def connected(self):
         return self._connected
 
-    @asyncio.coroutine
-    def connect(self):
+    async def connect(self):
         if self._closed:
             raise Exception('already closed')
         if self._connected:
@@ -62,15 +60,15 @@ class _BusConnection(object):
         logger.debug('connecting to bus')
         self._connected = True
         try:
-            self._connection = yield from asynqp.connect(
+            self._connection = await asynqp.connect(
                 self._host, self._port, self._username, self._password
             )
-            self._channel = yield from self._connection.open_channel()
-            self._exchange = yield from self._channel.declare_exchange(
+            self._channel = await self._connection.open_channel()
+            self._exchange = await self._channel.declare_exchange(
                 self._exchange_name, self._exchange_type, durable=True
             )
-            self._queue = yield from self._channel.declare_queue(exclusive=True)
-            self._consumer = yield from self._queue.consume(
+            self._queue = await self._channel.declare_queue(exclusive=True)
+            self._consumer = await self._queue.consume(
                 self._msg_received_callback, no_ack=True
             )
         except Exception:
@@ -82,11 +80,10 @@ class _BusConnection(object):
         if not self._connected:
             raise BusConnectionLostError()
 
-    @asyncio.coroutine
-    def add_queue_binding(self, routing_key):
+    async def add_queue_binding(self, routing_key):
         if not self._connected:
             raise BusConnectionError('not connected')
-        yield from self._queue.bind(self._exchange, routing_key)
+        await self._queue.bind(self._exchange, routing_key)
 
     def on_connection_lost(self):
         self._connected = False
@@ -126,21 +123,19 @@ class _BusEventService(object):
                     'not dispatching event "%s": event has no ACL', bus_event.name
                 )
 
-    @asyncio.coroutine
-    def close(self):
-        yield from self._bus_connection.close()
+    async def close(self):
+        await self._bus_connection.close()
 
-    @asyncio.coroutine
-    def register_event_consumer(self, bus_event_consumer):
+    async def register_event_consumer(self, bus_event_consumer):
         # Try to establish a connection to the bus if not already established
         # first. Might raise an exception if connection fails.
         # Can be called by multiple coroutine at the same time.
-        with (yield from self._lock):
+        with (await self._lock):
             if not self._bus_connection.connected:
-                yield from self._bus_connection.connect()
+                await self._bus_connection.connect()
                 # TODO: each connection should add new bindings according to the subscription type
                 # (user or admin). An empty routing-key with headers exchange mean all events
-                yield from self._bus_connection.add_queue_binding('')
+                await self._bus_connection.add_queue_binding('')
 
         self._bus_event_consumers.add(bus_event_consumer)
 

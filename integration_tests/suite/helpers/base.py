@@ -19,13 +19,6 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
     assets_root = ASSET_ROOT
     service = 'websocketd'
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        # There is bugs in asynqp 0.4 that prevent from setting the event_loop
-        # to None
-        # asyncio.set_event_loop(None)
-
     def setUp(self):
         self.valid_token_id = '123-456'
         self.loop = asyncio.get_event_loop()
@@ -34,9 +27,7 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
         if self.auth_server:
-            self.loop.run_until_complete(
-                self.auth_server.put_token(self.valid_token_id, acls=['websocketd'])
-            )
+            self.auth_server.put_token(self.valid_token_id, acls=['websocketd'])
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())
@@ -75,7 +66,9 @@ def run_with_loop(f):
     # decorator to use on test methods of class deriving from IntegrationTest
     @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
-        coro = asyncio.coroutine(f)
-        self.loop.run_until_complete(coro(self, *args, **kwargs))
+        asyncio.wait(
+            [asyncio.ensure_future(f(self, *args, **kwargs), loop=self.loop)],
+            loop=self.loop,
+        )
 
     return wrapper

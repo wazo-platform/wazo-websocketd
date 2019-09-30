@@ -20,15 +20,12 @@ class AsyncAuthClient(object):
     def __init__(self, config):
         self._auth_client = wazo_auth_client.Client(**config['auth'])
 
-    @asyncio.coroutine
-    def get_token(self, token_id):
+    async def get_token(self, token_id):
         logger.debug('getting token from wazo-auth')
         loop = asyncio.get_event_loop()
         try:
-            return (
-                yield from loop.run_in_executor(
-                    None, self._auth_client.token.get, token_id, self._ACL
-                )
+            return await loop.run_in_executor(
+                None, self._auth_client.token.get, token_id, self._ACL
             )
         except requests.RequestException as e:
             # there's currently no clean way with wazo_auth_client to know if the
@@ -36,14 +33,11 @@ class AsyncAuthClient(object):
             # or something else
             raise AuthenticationError(e)
 
-    @asyncio.coroutine
-    def is_valid_token(self, token_id, acl=_ACL):
+    async def is_valid_token(self, token_id, acl=_ACL):
         logger.debug('checking token validity from wazo-auth')
         loop = asyncio.get_event_loop()
-        return (
-            yield from loop.run_in_executor(
-                None, self._auth_client.token.is_valid, token_id, acl
-            )
+        return await loop.run_in_executor(
+            None, self._auth_client.token.is_valid, token_id, acl
         )
 
 
@@ -52,13 +46,12 @@ class _StaticIntervalAuthCheck(object):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
 
-    @asyncio.coroutine
-    def run(self, token_getter):
+    async def run(self, token_getter):
         while True:
             token_id = token_getter()['token']
-            yield from asyncio.sleep(self._interval)
+            await asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
-            is_valid = yield from self._async_auth_client.is_valid_token(token_id)
+            is_valid = await self._async_auth_client.is_valid_token(token_id)
             if not is_valid:
                 raise AuthenticationExpiredError()
 
@@ -70,8 +63,7 @@ class _DynamicIntervalAuthCheck(object):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
 
-    @asyncio.coroutine
-    def run(self, token_getter):
+    async def run(self, token_getter):
         while True:
             token = token_getter()
             token_id = token['token']
@@ -84,10 +76,10 @@ class _DynamicIntervalAuthCheck(object):
                 token['expires_at'], self._ISO_DATETIME
             )
             next_check = self._calculate_next_check(now, expires_at)
-            yield from asyncio.sleep(next_check)
+            await asyncio.sleep(next_check)
             logger.debug('dynamic auth check: testing token validity')
             try:
-                yield from self._async_auth_client.get_token(token_id)
+                await self._async_auth_client.get_token(token_id)
             except AuthenticationError:
                 raise AuthenticationExpiredError()
 

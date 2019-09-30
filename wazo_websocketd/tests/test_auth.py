@@ -34,7 +34,6 @@ class TestWebSocketdAuthClient(unittest.TestCase):
 
     def test_get_token(self):
         self.auth_client.token.get.return_value = sentinel.token
-        self.auth_client.token.get._is_coroutine = False
 
         token = asyncio.get_event_loop().run_until_complete(
             self.websocketd_auth_client.get_token(sentinel.token_id)
@@ -45,7 +44,6 @@ class TestWebSocketdAuthClient(unittest.TestCase):
 
     def test_get_token_invalid(self):
         self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
-        self.auth_client.token.get._is_coroutine = False
 
         self.assertRaises(
             AuthenticationError,
@@ -56,7 +54,6 @@ class TestWebSocketdAuthClient(unittest.TestCase):
 
     def test_is_valid_token(self):
         self.auth_client.token.is_valid.return_value = True
-        self.auth_client.token.is_valid._is_coroutine = False
 
         is_valid = asyncio.get_event_loop().run_until_complete(
             self.websocketd_auth_client.is_valid_token(sentinel.token_id)
@@ -118,8 +115,7 @@ class TestStaticIntervalAuthCheck(unittest.TestCase):
         self.token = {'token': sentinel.token_id}
 
     def test_run(self):
-        @asyncio.coroutine
-        def is_valid_token(token_id):
+        async def is_valid_token(token_id):
             return False
 
         self.websocketd_auth_client.is_valid_token = is_valid_token
