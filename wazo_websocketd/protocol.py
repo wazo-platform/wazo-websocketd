@@ -28,14 +28,11 @@ class SessionProtocolEncoder(object):
     def encode_start(self):
         return self._encode('start')
 
-    def encode_token(self, success=False):
-        if success:
-            return self._encode('token')
-        else:
-            return self._encode('token', code=self._CODE_FAILURE, msg="Invalid token")
+    def encode_token(self):
+        return self._encode('token')
 
     def encode_event(self, event):
-        self._encode("event", msg=event)
+        return self._encode("event", msg=event)
 
     def _encode(self, operation, code=_CODE_SUCCESS, msg=_MSG_OK):
         return json.dumps({'op': operation, 'code': code, 'msg': msg})

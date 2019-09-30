@@ -61,12 +61,31 @@ class TestBus(IntegrationTest):
 
         await self.websocketd_client.wait_for_nothing()
 
-    async def _prepare(self, skip_start=False):
+    @run_with_loop
+    async def test_receive_message_v2(self):
+        self.event = {'name': 'foo', 'required_acl': 'event.foo'}
+        await self._prepare(version=2)
+        event = await self.websocketd_client.recv_msg()
+        self.assertEqual({"op": "event", "code": 0, "msg": self.event}, event)
+
+        self.auth_server.put_token('useless-token', acls=['websocketd'])
+        await self.websocketd_client.op_token("useless-token")
+        self.bus_client.publish_event(self.event)
+        await self.websocketd_client.wait_for_nothing()
+
+        # Got right again
+        self.auth_server.put_token('my-new-token-id', acls=['websocketd', 'event.foo'])
+        await self.websocketd_client.op_token("my-new-token-id")
+        self.bus_client.publish_event(self.event)
+        event = await self.websocketd_client.recv_msg()
+        self.assertEqual({"op": "event", "code": 0, "msg": self.event}, event)
+
+    async def _prepare(self, skip_start=False, version=None):
         self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init('my-token-id')
         if not skip_start:
-            await self.websocketd_client.op_start()
+            await self.websocketd_client.op_start(version)
         await self.websocketd_client.op_subscribe(self.subscribe_event_name)
         await asyncio.sleep(1, loop=self.loop)
         self.bus_client.publish_event(self.event)

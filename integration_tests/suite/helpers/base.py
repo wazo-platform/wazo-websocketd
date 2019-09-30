@@ -55,9 +55,8 @@ def run_with_loop(f):
     # decorator to use on test methods of class deriving from IntegrationTest
     @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
-        asyncio.wait(
-            [asyncio.ensure_future(f(self, *args, **kwargs), loop=self.loop)],
-            loop=self.loop,
+        self.loop.run_until_complete(
+            asyncio.ensure_future(f(self, *args, **kwargs), loop=self.loop)
         )
 
     return wrapper

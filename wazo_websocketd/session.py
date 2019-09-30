@@ -208,7 +208,7 @@ class Session(object):
                     await self._ws.send(bus_event.msg_body)
                 else:
                     await self._ws.send(
-                        self._protocol_encoder.encode_event(bus_event.msg_body)
+                        self._protocol_encoder.encode_event(bus_event.body)
                     )
             else:
                 logger.debug('not sending bus event to websocket: session not started')
@@ -228,10 +228,10 @@ class Session(object):
         await self._ws.send(self._protocol_encoder.encode_start())
 
     async def _do_ws_token(self, msg):
-        token = self._authenticator.get_token(msg.value)
+        token = await self._authenticator.get_token(msg.value)
         self._event_transmiter.set_token(token)
         if not self._started or self._protocol_version == 2:
-            await self._ws.send(self._protocol_encoder.encode_start())
+            await self._ws.send(self._protocol_encoder.encode_token())
 
 
 def _extract_token_id(ws, path):

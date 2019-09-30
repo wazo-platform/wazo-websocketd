@@ -145,7 +145,8 @@ class _BusEventService(object):
 
 def _decode_bus_msg(bus_msg):
     msg_body = bus_msg.body.decode('utf-8')
-    if not isinstance(json.loads(msg_body), dict):
+    body = json.loads(msg_body)
+    if not isinstance(body, dict):
         raise ValueError('not a valid json document')
 
     headers = bus_msg.headers
@@ -165,7 +166,9 @@ def _decode_bus_msg(bus_msg):
         has_acl = False
         acl = None
 
-    return _BusEvent(name, has_acl, acl, msg_body)
+    return _BusEvent(name, has_acl, acl, msg_body, body)
 
 
-_BusEvent = collections.namedtuple('_BusEvent', ['name', 'has_acl', 'acl', 'msg_body'])
+_BusEvent = collections.namedtuple(
+    '_BusEvent', ['name', 'has_acl', 'acl', 'msg_body', 'body']
+)

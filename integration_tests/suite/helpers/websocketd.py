@@ -104,8 +104,8 @@ class WebSocketdClient(object):
             await self._send_msg({'op': 'start'})
         if self._started and self._version == 1:
             return
-        self._started = True
         await self._expect_msg('start')
+        self._started = True
 
     async def op_token(self, token):
         await self._send_msg({'op': 'token', 'data': {'token': token}})

@@ -78,6 +78,20 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.wait_for_nothing()
 
     @run_with_loop
+    async def test_token_renewand_expire(self):
+        self.auth_server.put_token(self.token_id)
+
+        await self.websocketd_client.connect_and_wait_for_init(self.token_id)
+        await self.websocketd_client.op_start(version=2)
+        self.auth_server.put_token("new-token")
+        await self.websocketd_client.op_token("new-token")
+        self.websocketd_client.timeout = self._TIMEOUT
+        await self.websocketd_client.wait_for_nothing()
+        self.auth_server.remove_token("new-token")
+        self.websocketd_client.timeout = self._TIMEOUT
+        await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+
+    @run_with_loop
     async def test_token_renew_invalid(self):
         self.auth_server.put_token(self.token_id)
 
