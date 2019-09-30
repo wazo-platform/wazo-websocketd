@@ -4,8 +4,6 @@
 import asyncio
 import functools
 
-import asynqp
-
 from xivo_test_helpers import asset_launching_test_case
 
 from .auth import AuthServer
@@ -22,7 +20,6 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
     def setUp(self):
         self.valid_token_id = '123-456'
         self.loop = asyncio.get_event_loop()
-        self.loop.set_exception_handler(self.__exception_handler)
         self.websocketd_client = self.new_websocketd_client()
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
@@ -34,14 +31,6 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         self.loop.run_until_complete(self.bus_client.close())
         self.loop.close()
         asyncio.set_event_loop(asyncio.new_event_loop())
-
-    def __exception_handler(self, loop, context):
-        exception = context.get('exception')
-        if isinstance(exception, asynqp.exceptions.ConnectionClosedError):
-            # this happens even on normal close
-            print('debug: got asynqp ConnectionClosedError')
-        else:
-            loop.default_exception_handler(context)
 
     def new_websocketd_client(self):
         websocketd_port = self.service_port(9502, 'websocketd')
