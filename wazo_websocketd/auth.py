@@ -13,7 +13,7 @@ from .exception import AuthenticationError, AuthenticationExpiredError
 logger = logging.getLogger(__name__)
 
 
-class _WebSocketdAuthClient(object):
+class AsyncAuthClient(object):
 
     _ACL = 'websocketd'
 
@@ -48,8 +48,8 @@ class _WebSocketdAuthClient(object):
 
 
 class _StaticIntervalAuthCheck(object):
-    def __init__(self, websocketd_auth_client, config):
-        self._websocketd_auth_client = websocketd_auth_client
+    def __init__(self, async_auth_client, config):
+        self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
 
     @asyncio.coroutine
@@ -58,7 +58,7 @@ class _StaticIntervalAuthCheck(object):
             token_id = token_getter()['token']
             yield from asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
-            is_valid = yield from self._websocketd_auth_client.is_valid_token(token_id)
+            is_valid = yield from self._async_auth_client.is_valid_token(token_id)
             if not is_valid:
                 raise AuthenticationExpiredError()
 
@@ -67,8 +67,8 @@ class _DynamicIntervalAuthCheck(object):
 
     _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
 
-    def __init__(self, websocketd_auth_client, config):
-        self._websocketd_auth_client = websocketd_auth_client
+    def __init__(self, async_auth_client, config):
+        self._async_auth_client = async_auth_client
 
     @asyncio.coroutine
     def run(self, token_getter):
@@ -87,7 +87,7 @@ class _DynamicIntervalAuthCheck(object):
             yield from asyncio.sleep(next_check)
             logger.debug('dynamic auth check: testing token validity')
             try:
-                yield from self._websocketd_auth_client.get_token(token_id)
+                yield from self._async_auth_client.get_token(token_id)
             except AuthenticationError:
                 raise AuthenticationExpiredError()
 
@@ -108,21 +108,21 @@ STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAut
 
 class Authenticator(object):
     def __init__(self, config):
-        self._websocketd_auth_client = _WebSocketdAuthClient(config)
+        self._async_auth_client = AsyncAuthClient(config)
         auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
         if not auth_check_class:
             raise Exception(
                 'unknown auth_check_strategy {}'.format(config['auth_check_strategy'])
             )
-        self._auth_check = auth_check_class(self._websocketd_auth_client, config)
+        self._auth_check = auth_check_class(self._async_auth_client, config)
 
     def get_token(self, token_id):
         # This function returns a coroutine.
-        return self._websocketd_auth_client.get_token(token_id)
+        return self._async_auth_client.get_token(token_id)
 
     def is_valid_token(self, token_id, acl=None):
         # This function returns a coroutine.
-        return self._websocketd_auth_client.is_valid_token(token_id, acl)
+        return self._async_auth_client.is_valid_token(token_id, acl)
 
     def run_check(self, token_getter):
         # This function returns a coroutine that raise an AuthenticationExpiredError exception

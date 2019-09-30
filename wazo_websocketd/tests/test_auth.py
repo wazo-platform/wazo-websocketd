@@ -11,9 +11,9 @@ from hamcrest import assert_that, equal_to, same_instance
 
 from ..auth import (
     Authenticator,
+    AsyncAuthClient,
     _DynamicIntervalAuthCheck,
     _StaticIntervalAuthCheck,
-    _WebSocketdAuthClient,
 )
 from ..exception import AuthenticationError, AuthenticationExpiredError
 
@@ -30,7 +30,7 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
-        self.websocketd_auth_client = _WebSocketdAuthClient({"auth": {}})
+        self.websocketd_auth_client = AsyncAuthClient({"auth": {}})
 
     def test_get_token(self):
         self.auth_client.token.get.return_value = sentinel.token
@@ -72,7 +72,7 @@ class TestAuthenticator(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
         patcher = patch(
-            "wazo_websocketd.auth._WebSocketdAuthClient",
+            "wazo_websocketd.auth.AsyncAuthClient",
             return_value=self.websocketd_auth_client,
         )
         patcher.start()
