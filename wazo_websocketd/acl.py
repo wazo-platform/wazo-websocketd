@@ -15,7 +15,6 @@ import re
 
 
 class ACLCheck(object):
-
     def __init__(self, user_uuid, acls):
         self._user_uuid = user_uuid
         self._acls = acls
@@ -36,5 +35,5 @@ class ACLCheck(object):
         return False
 
     def _transform_acl_to_regex(self, acl):
-        acl_regex = re.escape(acl).replace('\*', '[^.]*?').replace('\#', '.*?')
+        acl_regex = re.escape(acl).replace('\\*', '[^.]*?').replace('\\#', '.*?')
         return re.compile('^{}$'.format(acl_regex))

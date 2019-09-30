@@ -9,17 +9,11 @@ from unittest.mock import Mock, sentinel
 from hamcrest import assert_that, equal_to, none, same_instance
 
 from ..acl import ACLCheck
-from ..bus import (
-    _BusEvent,
-    _BusEventConsumer,
-    _BusEventDispatcher,
-    _decode_bus_msg,
-)
+from ..bus import _BusEvent, _BusEventConsumer, _BusEventDispatcher, _decode_bus_msg
 from ..exception import BusConnectionLostError
 
 
 class TestBusEvent(unittest.TestCase):
-
     def setUp(self):
         self.bus_msg = Mock()
         self.bus_msg.body = b'{}'
@@ -81,7 +75,6 @@ class TestBusEvent(unittest.TestCase):
 
 
 class TestBusEventDispatcher(unittest.TestCase):
-
     def setUp(self):
         self.bus_event_dispatcher = _BusEventDispatcher()
         self.bus_event_consumer = Mock(_BusEventConsumer)
@@ -117,24 +110,31 @@ class TestBusEventDispatcher(unittest.TestCase):
 
 
 class TestBusEventConsumer(unittest.TestCase):
-
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         self.addCleanup(self.loop.close)
         self.bus_event_dispatcher = Mock(_BusEventDispatcher)
         self.acl_check = Mock(ACLCheck)
         self.bus_event = _new_bus_event('foo', acl='some.thing')
-        self.bus_event_consumer = _BusEventConsumer(self.loop, self.bus_event_dispatcher, self.acl_check)
+        self.bus_event_consumer = _BusEventConsumer(
+            self.loop, self.bus_event_dispatcher, self.acl_check
+        )
 
     def test_close(self):
         self.bus_event_consumer.close()
 
-        self.bus_event_dispatcher.remove_event_consumer.assert_called_once_with(self.bus_event_consumer)
+        self.bus_event_dispatcher.remove_event_consumer.assert_called_once_with(
+            self.bus_event_consumer
+        )
 
     def test_get_connection_lost(self):
         self.bus_event_consumer._on_connection_lost()
 
-        self.assertRaises(BusConnectionLostError, self.loop.run_until_complete, self.bus_event_consumer.get())
+        self.assertRaises(
+            BusConnectionLostError,
+            self.loop.run_until_complete,
+            self.bus_event_consumer.get(),
+        )
 
     def test_get_event_subscribed_name(self):
         self.bus_event_consumer.subscribe_to_event(self.bus_event.name)

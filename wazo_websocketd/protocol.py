@@ -29,10 +29,11 @@ class SessionProtocolEncoder(object):
 
 
 class SessionProtocolDecoder(object):
-
     def decode(self, data):
         if not isinstance(data, str):
-            raise SessionProtocolError('expected text frame: got data with type {}'.format(type(data)))
+            raise SessionProtocolError(
+                'expected text frame: got data with type {}'.format(type(data))
+            )
         try:
             deserialized_data = json.loads(data)
         except ValueError:
@@ -58,7 +59,9 @@ class SessionProtocolDecoder(object):
         if not isinstance(deserialized_data['data'], dict):
             raise SessionProtocolError('object "data" value is not an object')
         if 'event_name' not in deserialized_data['data']:
-            raise SessionProtocolError('object "data" is missing required "event_name" key')
+            raise SessionProtocolError(
+                'object "data" is missing required "event_name" key'
+            )
         event_name = deserialized_data['data']['event_name']
         if not isinstance(event_name, str):
             raise SessionProtocolError('object data "event_name" value is not a string')

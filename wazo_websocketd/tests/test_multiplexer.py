@@ -8,7 +8,6 @@ from ..multiplexer import Multiplexer
 
 
 class TestMultiplexer(unittest.TestCase):
-
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         self.addCleanup(self.loop.close)

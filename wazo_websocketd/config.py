@@ -45,28 +45,29 @@ _DEFAULT_CONFIG = {
 def load_config():
     cli_config = _parse_cli_args()
     file_config = read_config_file_hierarchy(ChainMap(cli_config, _DEFAULT_CONFIG))
-    reinterpreted_config = _get_reinterpreted_raw_values(ChainMap(cli_config, file_config, _DEFAULT_CONFIG))
+    reinterpreted_config = _get_reinterpreted_raw_values(
+        ChainMap(cli_config, file_config, _DEFAULT_CONFIG)
+    )
     return ChainMap(reinterpreted_config, cli_config, file_config, _DEFAULT_CONFIG)
 
 
 def _parse_cli_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c',
-                        '--config-file',
-                        action='store',
-                        help="The path where is the config file")
-    parser.add_argument('-d',
-                        '--debug',
-                        action='store_true',
-                        help="Log debug messages. Overrides log_level.")
-    parser.add_argument('-f',
-                        '--foreground',
-                        action='store_true',
-                        help="Foreground, don't daemonize.")
-    parser.add_argument('-u',
-                        '--user',
-                        action='store',
-                        help="The owner of the process.")
+    parser.add_argument(
+        '-c', '--config-file', action='store', help="The path where is the config file"
+    )
+    parser.add_argument(
+        '-d',
+        '--debug',
+        action='store_true',
+        help="Log debug messages. Overrides log_level.",
+    )
+    parser.add_argument(
+        '-f', '--foreground', action='store_true', help="Foreground, don't daemonize."
+    )
+    parser.add_argument(
+        '-u', '--user', action='store', help="The owner of the process."
+    )
     parsed_args = parser.parse_args()
 
     result = {}
@@ -86,7 +87,9 @@ def _get_reinterpreted_raw_values(config):
     result = {'websocket': {}}
 
     ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    ssl_context.load_cert_chain(config['websocket']['certificate'], config['websocket']['private_key'])
+    ssl_context.load_cert_chain(
+        config['websocket']['certificate'], config['websocket']['private_key']
+    )
     result['websocket']['ssl'] = ssl_context
 
     result['log_level'] = get_log_level_by_name(config['log_level'])

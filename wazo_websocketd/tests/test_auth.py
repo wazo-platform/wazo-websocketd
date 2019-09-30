@@ -15,10 +15,7 @@ from ..auth import (
     _StaticIntervalAuthCheck,
     _WebSocketdAuthClient,
 )
-from ..exception import (
-    AuthenticationError,
-    AuthenticationExpiredError,
-)
+from ..exception import AuthenticationError, AuthenticationExpiredError
 
 
 class TestWebSocketdAuthClient(unittest.TestCase):
@@ -35,7 +32,9 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         self.auth_client.token.get.return_value = sentinel.token
         self.auth_client.token.get._is_coroutine = False
 
-        token = self.loop.run_until_complete(self.websocketd_auth_client.get_token(sentinel.token_id))
+        token = self.loop.run_until_complete(
+            self.websocketd_auth_client.get_token(sentinel.token_id)
+        )
 
         assert_that(token, same_instance(sentinel.token))
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
@@ -44,61 +43,79 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
         self.auth_client.token.get._is_coroutine = False
 
-        self.assertRaises(AuthenticationError,
-                          self.loop.run_until_complete,
-                          self.websocketd_auth_client.get_token(sentinel.token_id))
+        self.assertRaises(
+            AuthenticationError,
+            self.loop.run_until_complete,
+            self.websocketd_auth_client.get_token(sentinel.token_id),
+        )
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
     def test_is_valid_token(self):
         self.auth_client.token.is_valid.return_value = True
         self.auth_client.token.is_valid._is_coroutine = False
 
-        is_valid = self.loop.run_until_complete(self.websocketd_auth_client.is_valid_token(sentinel.token_id))
+        is_valid = self.loop.run_until_complete(
+            self.websocketd_auth_client.is_valid_token(sentinel.token_id)
+        )
 
         assert_that(is_valid)
-        self.auth_client.token.is_valid.assert_called_once_with(sentinel.token_id, self._ACL)
+        self.auth_client.token.is_valid.assert_called_once_with(
+            sentinel.token_id, self._ACL
+        )
 
 
 class TestAuthenticator(unittest.TestCase):
-
     def setUp(self):
         self.websocketd_auth_client = Mock()
         self.auth_check = Mock()
-        self.authenticator = _Authenticator(self.websocketd_auth_client, self.auth_check)
+        self.authenticator = _Authenticator(
+            self.websocketd_auth_client, self.auth_check
+        )
 
     def test_get_token(self):
         coro = self.authenticator.get_token(sentinel.token_id)
 
-        assert_that(coro, same_instance(self.websocketd_auth_client.get_token.return_value))
+        assert_that(
+            coro, same_instance(self.websocketd_auth_client.get_token.return_value)
+        )
         self.websocketd_auth_client.get_token.assert_called_once_with(sentinel.token_id)
 
     def test_is_valid_token(self):
         coro = self.authenticator.is_valid_token(sentinel.token_id, sentinel.acl)
 
-        assert_that(coro, same_instance(self.websocketd_auth_client.is_valid_token.return_value))
-        self.websocketd_auth_client.is_valid_token.assert_called_once_with(sentinel.token_id, sentinel.acl)
+        assert_that(
+            coro, same_instance(self.websocketd_auth_client.is_valid_token.return_value)
+        )
+        self.websocketd_auth_client.is_valid_token.assert_called_once_with(
+            sentinel.token_id, sentinel.acl
+        )
 
 
 class TestStaticIntervalAuthCheck(unittest.TestCase):
-
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         self.addCleanup(self.loop.close)
         self.websocketd_auth_client = Mock()
-        self.check = _StaticIntervalAuthCheck(self.loop, self.websocketd_auth_client, 0.1)
+        self.check = _StaticIntervalAuthCheck(
+            self.loop, self.websocketd_auth_client, 0.1
+        )
         self.token = {'token': sentinel.token_id}
 
     def test_run(self):
         @asyncio.coroutine
         def is_valid_token(token_id):
             return False
+
         self.websocketd_auth_client.is_valid_token = is_valid_token
 
-        self.assertRaises(AuthenticationExpiredError, self.loop.run_until_complete, self.check.run(self.token))
+        self.assertRaises(
+            AuthenticationExpiredError,
+            self.loop.run_until_complete,
+            self.check.run(self.token),
+        )
 
 
 class TestDynamicIntervalAuthCheck(unittest.TestCase):
-
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         self.addCleanup(self.loop.close)

@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class Controller(object):
-
     def __init__(self, config, loop, bus_event_service, session_factory):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']
@@ -25,7 +24,13 @@ class Controller(object):
         self._loop.add_signal_handler(signal.SIGINT, self._stop)
         self._loop.add_signal_handler(signal.SIGTERM, self._stop)
         self._loop.set_exception_handler(self._exception_handler)
-        start_ws_server = websockets.serve(self._session_factory.ws_handler, self._ws_host, self._ws_port, ssl=self._ws_ssl, loop=self._loop)
+        start_ws_server = websockets.serve(
+            self._session_factory.ws_handler,
+            self._ws_host,
+            self._ws_port,
+            ssl=self._ws_ssl,
+            loop=self._loop,
+        )
         self._ws_server = self._loop.run_until_complete(start_ws_server)
 
     def run(self):

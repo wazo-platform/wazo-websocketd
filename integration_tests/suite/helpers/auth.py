@@ -10,7 +10,6 @@ from requests.packages.urllib3 import disable_warnings
 
 
 class AuthServer(object):
-
     def __init__(self, loop, port):
         self._loop = loop
         self._base_url = 'https://localhost:{port}'.format(port=port)
@@ -20,12 +19,10 @@ class AuthServer(object):
 
     @asyncio.coroutine
     def put_token(self, token_id, user_uuid='123-456', acls=['websocketd']):
-        token = {
-            'token': token_id,
-            'acls': acls,
-            'metadata': {'uuid': user_uuid},
-        }
-        return (yield from self._loop.run_in_executor(None, self._sync_put_token, token))
+        token = {'token': token_id, 'acls': acls, 'metadata': {'uuid': user_uuid}}
+        return (
+            yield from self._loop.run_in_executor(None, self._sync_put_token, token)
+        )
 
     def _sync_put_token(self, token):
         url = '{}/_set_token'.format(self._base_url)
@@ -36,7 +33,11 @@ class AuthServer(object):
 
     @asyncio.coroutine
     def remove_token(self, token_id):
-        return (yield from self._loop.run_in_executor(None, self._sync_remove_token, token_id))
+        return (
+            yield from self._loop.run_in_executor(
+                None, self._sync_remove_token, token_id
+            )
+        )
 
     def _sync_remove_token(self, token_id):
         url = '{}/_remove_token/{}'.format(self._base_url, token_id)

@@ -8,10 +8,7 @@ import logging
 import requests
 import wazo_auth_client
 
-from .exception import (
-    AuthenticationError,
-    AuthenticationExpiredError,
-)
+from .exception import AuthenticationError, AuthenticationExpiredError
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +39,11 @@ class _WebSocketdAuthClient(object):
     def get_token(self, token_id):
         logger.debug('getting token from wazo-auth')
         try:
-            return (yield from self._loop.run_in_executor(None, self._auth_client.token.get, token_id, self._ACL))
+            return (
+                yield from self._loop.run_in_executor(
+                    None, self._auth_client.token.get, token_id, self._ACL
+                )
+            )
         except requests.RequestException as e:
             # there's currently no clean way with wazo_auth_client to know if the
             # error was caused because the token is unauthorized, or unknown
@@ -52,11 +53,14 @@ class _WebSocketdAuthClient(object):
     @asyncio.coroutine
     def is_valid_token(self, token_id, acl=_ACL):
         logger.debug('checking token validity from wazo-auth')
-        return (yield from self._loop.run_in_executor(None, self._auth_client.token.is_valid, token_id, acl))
+        return (
+            yield from self._loop.run_in_executor(
+                None, self._auth_client.token.is_valid, token_id, acl
+            )
+        )
 
 
 class _Authenticator(object):
-
     def __init__(self, websocketd_auth_client, auth_check):
         self._websocketd_auth_client = websocketd_auth_client
         self._auth_check = auth_check
@@ -76,7 +80,6 @@ class _Authenticator(object):
 
 
 class _StaticIntervalAuthCheck(object):
-
     def __init__(self, loop, websocketd_auth_client, interval):
         self._loop = loop
         self._websocketd_auth_client = websocketd_auth_client
@@ -110,7 +113,9 @@ class _DynamicIntervalAuthCheck(object):
             #       in wazo-auth, which should returns data in UTC instead of
             #       in local time
             now = datetime.datetime.now()
-            expires_at = datetime.datetime.strptime(token['expires_at'], self._ISO_DATETIME)
+            expires_at = datetime.datetime.strptime(
+                token['expires_at'], self._ISO_DATETIME
+            )
             next_check = self._calculate_next_check(now, expires_at)
             yield from asyncio.sleep(next_check, loop=self._loop)
             logger.debug('dynamic auth check: testing token validity')

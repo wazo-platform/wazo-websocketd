@@ -22,8 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 class SessionFactory(object):
-
-    def __init__(self, config, loop, authenticator, bus_event_service, protocol_encoder, protocol_decoder):
+    def __init__(
+        self,
+        config,
+        loop,
+        authenticator,
+        bus_event_service,
+        protocol_encoder,
+        protocol_decoder,
+    ):
         self._config = config
         self._loop = loop
         self._authenticator = authenticator
@@ -35,8 +42,16 @@ class SessionFactory(object):
     def ws_handler(self, ws, path):
         remote_address = ws.request_headers.get('X-Forwarded-For', ws.remote_address)
         logger.info('websocket connection accepted from "%s"', remote_address)
-        session = Session(self._config, self._loop, self._authenticator, self._bus_event_service,
-                          self._protocol_encoder, self._protocol_decoder, ws, path)
+        session = Session(
+            self._config,
+            self._loop,
+            self._authenticator,
+            self._bus_event_service,
+            self._protocol_encoder,
+            self._protocol_decoder,
+            ws,
+            path,
+        )
         try:
             yield from session.run()
         finally:
@@ -50,8 +65,17 @@ class Session(object):
     _CLOSE_CODE_AUTH_EXPIRED = 4003
     _CLOSE_CODE_PROTOCOL_ERROR = 4004
 
-    def __init__(self, config, loop, authenticator, bus_event_service,
-                 protocol_encoder, protocol_decoder, ws, path):
+    def __init__(
+        self,
+        config,
+        loop,
+        authenticator,
+        bus_event_service,
+        protocol_encoder,
+        protocol_decoder,
+        ws,
+        path,
+    ):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._loop = loop
         self._authenticator = authenticator
@@ -70,12 +94,16 @@ class Session(object):
         except NoTokenError:
             logger.info('closing websocket connection: no token')
             yield from self._ws.close(self._CLOSE_CODE_NO_TOKEN_ID, 'no token')
-        except AuthenticationExpiredError as e:
+        except AuthenticationExpiredError:
             logger.info('closing websocket connection: authentication expired')
-            yield from self._ws.close(self._CLOSE_CODE_AUTH_EXPIRED, 'authentication expired')
+            yield from self._ws.close(
+                self._CLOSE_CODE_AUTH_EXPIRED, 'authentication expired'
+            )
         except AuthenticationError as e:
             logger.info('closing websocket connection: authentication failed: %s', e)
-            yield from self._ws.close(self._CLOSE_CODE_AUTH_FAILED, 'authentication failed')
+            yield from self._ws.close(
+                self._CLOSE_CODE_AUTH_FAILED, 'authentication failed'
+            )
         except SessionProtocolError as e:
             logger.info('closing websocket connection: session protocol error: %s', e)
             yield from self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
@@ -96,15 +124,21 @@ class Session(object):
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
         _token = yield from self._authenticator.get_token(token_id)
-        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(_token)
+        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(
+            _token
+        )
 
         try:
             yield from self._ws.send(self._protocol_encoder.encode_init())
 
             self._multiplexer.call_later(self._ws_ping_interval, self._send_ping)
-            self._multiplexer.call_when_done(self._authenticator.run_check(_token), self._on_authenticator_check)
+            self._multiplexer.call_when_done(
+                self._authenticator.run_check(_token), self._on_authenticator_check
+            )
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
-            self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
+            self._multiplexer.call_when_done(
+                self._bus_event_consumer.get(), self._on_bus_event
+            )
             yield from self._multiplexer.run()
         finally:
             self._bus_event_consumer.close()
@@ -154,7 +188,9 @@ class Session(object):
             yield from self._ws.send(bus_event.msg_body)
         else:
             logger.debug('not sending bus event to websocket: session not started')
-        self._multiplexer.call_when_done(self._bus_event_consumer.get(), self._on_bus_event)
+        self._multiplexer.call_when_done(
+            self._bus_event_consumer.get(), self._on_bus_event
+        )
 
 
 def _extract_token_id(ws, path):

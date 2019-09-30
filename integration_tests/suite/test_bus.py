@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -63,7 +63,9 @@ class TestBus(IntegrationTest):
 
     @asyncio.coroutine
     def _prepare(self, skip_start=False):
-        yield from self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
+        yield from self.auth_server.put_token(
+            'my-token-id', acls=['websocketd', 'event.foo']
+        )
         yield from self.bus_client.connect()
         yield from self.websocketd_client.connect_and_wait_for_init('my-token-id')
         if not skip_start:
@@ -117,7 +119,9 @@ class TestRabbitMQRestart(IntegrationTest):
         # might not work on the first try since rabbitmq might not be ready
         for _ in range(10):
             try:
-                yield from self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
+                yield from self.websocketd_client.connect_and_wait_for_init(
+                    self.valid_token_id
+                )
             except websockets.ConnectionClosed:
                 yield from asyncio.sleep(1, loop=self.loop)
             else:

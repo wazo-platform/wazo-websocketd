@@ -9,10 +9,7 @@ import json
 import asynqp
 
 from .acl import ACLCheck
-from .exception import (
-    BusConnectionError,
-    BusConnectionLostError,
-)
+from .exception import BusConnectionError, BusConnectionLostError
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +21,6 @@ def new_bus_event_service(config, loop):
 
 
 class _BusConnection(object):
-
     def __init__(self, config, loop):
         self._host = config['bus']['host']
         self._port = config['bus']['port']
@@ -69,11 +65,17 @@ class _BusConnection(object):
         logger.debug('connecting to bus')
         self._connected = True
         try:
-            self._connection = yield from asynqp.connect(self._host, self._port, self._username, self._password, loop=self._loop)
+            self._connection = yield from asynqp.connect(
+                self._host, self._port, self._username, self._password, loop=self._loop
+            )
             self._channel = yield from self._connection.open_channel()
-            self._exchange = yield from self._channel.declare_exchange(self._exchange_name, self._exchange_type, durable=True)
+            self._exchange = yield from self._channel.declare_exchange(
+                self._exchange_name, self._exchange_type, durable=True
+            )
             self._queue = yield from self._channel.declare_queue(exclusive=True)
-            self._consumer = yield from self._queue.consume(self._msg_received_callback, no_ack=True)
+            self._consumer = yield from self._queue.consume(
+                self._msg_received_callback, no_ack=True
+            )
         except Exception:
             logger.exception('error while connecting to the bus')
             self._connected = False
@@ -94,7 +96,6 @@ class _BusConnection(object):
 
 
 class _BusEventService(object):
-
     def __init__(self, loop, bus_connection, bus_event_dispatcher):
         # Becomes the owner of the bus_connection
         self._loop = loop
@@ -134,7 +135,9 @@ class _BusEventService(object):
                 yield from self._bus_connection.add_queue_binding('')
 
         acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
-        bus_event_consumer = _BusEventConsumer(self._loop, self._bus_event_dispatcher, acl_check)
+        bus_event_consumer = _BusEventConsumer(
+            self._loop, self._bus_event_dispatcher, acl_check
+        )
         self._bus_event_dispatcher.add_event_consumer(bus_event_consumer)
         return bus_event_consumer
 
@@ -160,7 +163,9 @@ class _BusEventDispatcher(object):
 
     def dispatch_event(self, bus_event):
         if bus_event.has_acl:
-            logger.debug('dispatching event "%s" with ACL "%s"', bus_event.name, bus_event.acl)
+            logger.debug(
+                'dispatching event "%s" with ACL "%s"', bus_event.name, bus_event.acl
+            )
             for bus_event_consumer in self._bus_event_consumers:
                 bus_event_consumer._on_event(bus_event)
         else:
@@ -168,7 +173,6 @@ class _BusEventDispatcher(object):
 
 
 class _BusEventConsumer(object):
-
     def __init__(self, loop, bus_event_dispatcher, acl_check):
         self._bus_event_dispatcher = bus_event_dispatcher
         self._acl_check = acl_check
