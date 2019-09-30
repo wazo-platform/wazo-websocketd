@@ -116,6 +116,7 @@ class Session(object):
         self._loop = loop
         self._authenticator = authenticator
         self._bus_event_service = bus_event_service
+        self._protocol_version = 1
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
         self._ws = ws
@@ -213,7 +214,12 @@ class Session(object):
         while True:
             bus_event = await self._event_transmiter.get()
             if self._started:
-                await self._ws.send(bus_event.msg_body)
+                if self._protocol_version == 1:
+                    await self._ws.send(bus_event.msg_body)
+                else:
+                    await self._ws.send(
+                        self._protocol_encoder.encode_event(bus_event.msg_body)
+                    )
             else:
                 logger.debug('not sending bus event to websocket: session not started')
 
@@ -224,24 +230,21 @@ class Session(object):
     def _do_ws_subscribe(self, msg):
         logger.debug('subscribing to event "%s"', msg.value)
         self._event_transmiter.subscribe_to_event(msg.value)
-        if not self._started:
+        if not self._started or self._protocol_version == 2:
             yield from self._ws.send(self._protocol_encoder.encode_subscribe())
 
     @asyncio.coroutine
     def _do_ws_start(self, msg):
-        if self._started:
-            return
-
         self._started = True
+        self._protocol_version = msg.value
         yield from self._ws.send(self._protocol_encoder.encode_start())
 
     @asyncio.coroutine
     def _do_ws_token(self, msg):
-        # TODO(sileht): Refactor authenticator to check expiration of this
-        # token
         token = self._authenticator.get_token(msg.value)
         self._event_transmiter.set_token(token)
-        yield from self._ws.send(self._protocol_encoder.encode_start())
+        if not self._started or self._protocol_version == 2:
+            yield from self._ws.send(self._protocol_encoder.encode_start())
 
 
 def _extract_token_id(ws, path):
