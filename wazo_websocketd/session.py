@@ -8,6 +8,7 @@ from urllib.parse import urlparse, parse_qsl
 
 import websockets
 
+from .acl import ACLCheck
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -58,6 +59,38 @@ class SessionFactory(object):
             logger.info('websocket session terminated %s', remote_address)
 
 
+class EventTransmitter(object):
+    def __init__(self, loop):
+        self._queue = asyncio.Queue(loop=loop)
+        self._event_names = set()
+        self._all_events = False
+
+    def set_token(self, token):
+        self._acl_check = ACLCheck(token['metadata']['uuid'], token['acls'])
+
+    def subscribe_to_event(self, event_name):
+        if event_name == '*':
+            self._all_events = True
+        else:
+            self._event_names.add(event_name)
+
+    @asyncio.coroutine
+    def get(self):
+        # Raise a BusConnectionLostError when the connection to the bus is lost.
+        bus_event = yield from self._queue.get()
+        if bus_event is None:
+            raise BusConnectionLostError()
+        return bus_event
+
+    def put(self, bus_event):
+        if self._all_events or bus_event.name in self._event_names:
+            if self._acl_check.matches_required_acl(bus_event.acl):
+                self._queue.put_nowait(bus_event)
+
+    def put_connection_lost(self):
+        self._queue.put_nowait(None)
+
+
 class Session(object):
 
     _CLOSE_CODE_NO_TOKEN_ID = 4001
@@ -86,6 +119,7 @@ class Session(object):
         self._path = path
         self._multiplexer = Multiplexer(self._loop)
         self._started = False
+        self._event_transmiter = None
 
     @asyncio.coroutine
     def run(self):
@@ -124,8 +158,11 @@ class Session(object):
     def _run(self):
         token_id = _extract_token_id(self._ws, self._path)
         _token = yield from self._authenticator.get_token(token_id)
-        self._bus_event_consumer = yield from self._bus_event_service.new_event_consumer(
-            _token
+
+        self._event_transmiter = EventTransmitter(self._loop)
+        self._event_transmiter.set_token(_token)
+        yield from self._bus_event_service.register_event_consumer(
+            self._event_transmiter
         )
 
         try:
@@ -137,11 +174,11 @@ class Session(object):
             )
             self._multiplexer.call_when_done(self._ws.recv(), self._on_ws_recv)
             self._multiplexer.call_when_done(
-                self._bus_event_consumer.get(), self._on_bus_event
+                self._event_transmiter.get(), self._on_bus_event
             )
             yield from self._multiplexer.run()
         finally:
-            self._bus_event_consumer.close()
+            self._bus_event_service.unregister_event_consumer(self._event_transmiter)
             yield from self._multiplexer.close()
 
     @asyncio.coroutine
@@ -168,8 +205,8 @@ class Session(object):
 
     @asyncio.coroutine
     def _do_ws_subscribe(self, msg):
-        logger.debug('subscribing to event "%s"', msg.event_name)
-        self._bus_event_consumer.subscribe_to_event(msg.event_name)
+        logger.debug('subscribing to event "%s"', msg.value)
+        self._event_transmiter.subscribe_to_event(msg.value)
         if not self._started:
             yield from self._ws.send(self._protocol_encoder.encode_subscribe())
 
@@ -182,6 +219,14 @@ class Session(object):
         yield from self._ws.send(self._protocol_encoder.encode_start())
 
     @asyncio.coroutine
+    def _do_ws_token(self, msg):
+        # TODO(sileht): Refactor authenticator to check expiration of this
+        # token
+        token = self._authenticator.get_token(msg.value)
+        self._event_transmiter.set_token(token)
+        yield from self._ws.send(self._protocol_encoder.encode_start())
+
+    @asyncio.coroutine
     def _on_bus_event(self, future):
         bus_event = future.result()
         if self._started:
@@ -189,7 +234,7 @@ class Session(object):
         else:
             logger.debug('not sending bus event to websocket: session not started')
         self._multiplexer.call_when_done(
-            self._bus_event_consumer.get(), self._on_bus_event
+            self._event_transmiter.get(), self._on_bus_event
         )
 
 

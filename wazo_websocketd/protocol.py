@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 class SessionProtocolEncoder(object):
 
-    _CODE_OK = 0
+    _CODE_SUCCESS = 0
+    _CODe_FAILURE = 1
     _MSG_OK = ''
 
     def encode_init(self):
@@ -24,7 +25,13 @@ class SessionProtocolEncoder(object):
     def encode_start(self):
         return self._encode('start')
 
-    def _encode(self, operation, code=_CODE_OK, msg=_MSG_OK):
+    def encode_token(self, success=False):
+        if success:
+            return self._encode('token')
+        else:
+            return self._encode('token', code=self._CODE_FAILURE, msg="Invalid token")
+
+    def _encode(self, operation, code=_CODE_SUCCESS, msg=_MSG_OK):
         return json.dumps({'op': operation, 'code': code, 'msg': msg})
 
 
@@ -51,22 +58,28 @@ class SessionProtocolDecoder(object):
         return func(operation, deserialized_data)
 
     def _decode(self, operation, deserialized_data):
-        return _Message(operation)
+        return _Message(operation, None)
+
+    def _decode_token(self, operation, deserialized_data):
+        return self._get_string("token", operation, deserialized_data)
 
     def _decode_subscribe(self, operation, deserialized_data):
+        return self._get_string("event_name", operation, deserialized_data)
+
+    @staticmethod
+    def _get_string(attribute, operation, deserialized_data):
         if 'data' not in deserialized_data:
             raise SessionProtocolError('object is missing required "data" key')
         if not isinstance(deserialized_data['data'], dict):
             raise SessionProtocolError('object "data" value is not an object')
-        if 'event_name' not in deserialized_data['data']:
+        if attribute not in deserialized_data['data']:
             raise SessionProtocolError(
-                'object "data" is missing required "event_name" key'
+                'object "data" is missing required "{}" key'.format(attribute)
             )
-        event_name = deserialized_data['data']['event_name']
-        if not isinstance(event_name, str):
-            raise SessionProtocolError('object data "event_name" value is not a string')
-        return _SubscribeMessage(operation, event_name)
+        value = deserialized_data['data'][attribute]
+        if not isinstance(value, str):
+            raise SessionProtocolError('object data "{}" value is not a string')
+        return _Message(operation, value)
 
 
-_Message = collections.namedtuple('_Message', ['op'])
-_SubscribeMessage = collections.namedtuple('_SubscribeMessage', ['op', 'event_name'])
+_Message = collections.namedtuple('_Message', ['op', 'value'])

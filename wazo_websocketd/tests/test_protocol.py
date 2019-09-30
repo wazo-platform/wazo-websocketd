@@ -73,7 +73,7 @@ class TestProtocolDecoder(unittest.TestCase):
         msg = self.decoder.decode(data)
 
         assert_that(msg.op, equal_to('subscribe'))
-        assert_that(msg.event_name, equal_to('foo'))
+        assert_that(msg.value, equal_to('foo'))
 
     def test_decode_subscribe_missing_data_key(self):
         data = '{"op": "subscribe"}'
@@ -101,3 +101,12 @@ class TestProtocolDecoder(unittest.TestCase):
         msg = self.decoder.decode(data)
 
         assert_that(msg.op, equal_to('start'))
+
+    def test_decode_token(self):
+        token = "bc9571dd-bc62-4044-b78f-0bfb8a1481e4"
+        data = '{"op": "token", "data": {"token": "%s"}}' % token
+
+        msg = self.decoder.decode(data)
+
+        assert_that(msg.op, equal_to('token'))
+        assert_that(msg.value, equal_to(token))
