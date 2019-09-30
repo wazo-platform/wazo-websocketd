@@ -4,7 +4,7 @@ wazo-websocketd is a WebSocket server that delivers Wazo related events to clien
 
 ## Dependencies
 
-* python >= 3.4
+* python >= 3.6
 * see requirements.txt
 
 ## Running integration tests
@@ -37,7 +37,7 @@ scenarios:
   - engine: "ws"
     flow:
       - think: 5
-      - send: '{"op": "start"}'
+      - send: '{"op": "start", {"data": {"version": 2}}}'
       - think: 240
 ```
   * `artillery run benchmark.yml`
