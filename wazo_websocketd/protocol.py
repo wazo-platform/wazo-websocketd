@@ -16,11 +16,10 @@ _UNSET = object()
 class SessionProtocolEncoder(object):
 
     _CODE_SUCCESS = 0
-    _CODe_FAILURE = 1
-    _MSG_OK = ''
+    _CODR_FAILURE = 1
 
-    def encode_init(self):
-        return self._encode('init', msg={"data": {"version": 2}})
+    def encode_init(self, version=2):
+        return self._encode('init', {"version": version})
 
     def encode_subscribe(self):
         return self._encode('subscribe')
@@ -32,10 +31,10 @@ class SessionProtocolEncoder(object):
         return self._encode('token')
 
     def encode_event(self, event):
-        return self._encode("event", msg=event)
+        return self._encode("event", {"event": event})
 
-    def _encode(self, operation, code=_CODE_SUCCESS, msg=_MSG_OK):
-        return json.dumps({'op': operation, 'code': code, 'msg': msg})
+    def _encode(self, operation, data=None, code=_CODE_SUCCESS):
+        return json.dumps({'op': operation, 'code': code, 'data': data})
 
 
 class SessionProtocolDecoder(object):
@@ -68,13 +67,6 @@ class SessionProtocolDecoder(object):
 
     def _decode_subscribe(self, operation, deserialized_data):
         return self._get("event_name", operation, deserialized_data, str)
-
-    def _decode_start(self, operation, deserialized_data):
-        msg = self._get("version", operation, deserialized_data, int, 1)
-        if msg.value in [1, 2]:
-            return msg
-        else:
-            raise SessionProtocolError('invalid protocal version: {}'.format(msg.value))
 
     @staticmethod
     def _get(attribute, operation, deserialized_data, _type, default=_UNSET):

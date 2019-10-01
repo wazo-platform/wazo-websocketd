@@ -31,21 +31,26 @@ class WebSocketdClient(object):
             await self._websocket.close()
             self._websocket = None
 
-    async def connect(self, token_id):
-        url = 'wss://localhost:{port}/'.format(port=self._port)
+    async def connect(self, token_id, version=1):
+        self._version = version
+        url = 'wss://localhost:{port}/?'.format(port=self._port)
         if token_id is not None:
-            url = url + '?token={}'.format(token_id)
+            url += 'token={}&'.format(token_id)
+        if version > 1:
+            url += 'version={}&'.format(version)
+
+        print(url)
 
         self._websocket = await websockets.connect(
             url, loop=self._loop, ssl=self._SSL_CONTEXT
         )
 
-    async def connect_and_wait_for_init(self, token_id):
-        await self.connect(token_id)
+    async def connect_and_wait_for_init(self, token_id, version=1):
+        await self.connect(token_id, version)
         await self.wait_for_init()
 
-    async def connect_and_wait_for_close(self, token_id, code=None):
-        await self.connect(token_id)
+    async def connect_and_wait_for_close(self, token_id, code=None, version=1):
+        await self.connect(token_id, version)
         await self.wait_for_close(code)
 
     async def wait_for_close(self, code=None):
@@ -63,7 +68,7 @@ class WebSocketdClient(object):
 
     async def wait_for_init(self):
         msg = await self._expect_msg('init')
-        assert msg["data"]["version"] == 2
+        assert msg["data"]["version"] == self._version, msg
 
     async def wait_for_nothing(self):
         # Raise an exception if data is received during the next "self.timeout" seconds
@@ -97,12 +102,8 @@ class WebSocketdClient(object):
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
         return msg
 
-    async def op_start(self, version=None):
-        if version:
-            self._version = 2
-            await self._send_msg({'op': 'start', 'data': {'version': 2}})
-        else:
-            await self._send_msg({'op': 'start'})
+    async def op_start(self):
+        await self._send_msg({'op': 'start'})
         if self._started and self._version == 1:
             return
         await self._expect_msg('start')

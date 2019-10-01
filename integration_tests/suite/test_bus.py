@@ -80,12 +80,14 @@ class TestBus(IntegrationTest):
         event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "msg": self.event}, event)
 
-    async def _prepare(self, skip_start=False, version=None):
+    async def _prepare(self, skip_start=False, version=1):
         self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
         await self.bus_client.connect()
-        await self.websocketd_client.connect_and_wait_for_init('my-token-id')
+        await self.websocketd_client.connect_and_wait_for_init(
+            'my-token-id', version=version
+        )
         if not skip_start:
-            await self.websocketd_client.op_start(version)
+            await self.websocketd_client.op_start()
         await self.websocketd_client.op_subscribe(self.subscribe_event_name)
         await asyncio.sleep(1, loop=self.loop)
         self.bus_client.publish_event(self.event)

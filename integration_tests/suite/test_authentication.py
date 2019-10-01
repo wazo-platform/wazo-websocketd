@@ -72,19 +72,19 @@ class TestTokenExpiration(IntegrationTest):
     async def test_token_renew(self):
         self.auth_server.put_token(self.token_id)
 
-        await self.websocketd_client.connect_and_wait_for_init(self.token_id)
-        await self.websocketd_client.op_start(version=2)
+        await self.websocketd_client.connect_and_wait_for_init(self.token_id, version=2)
+        await self.websocketd_client.op_start()
         self.auth_server.put_token("new-token")
         await self.websocketd_client.op_token("new-token")
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_nothing()
 
     @run_with_loop
-    async def test_token_renewand_expire(self):
+    async def test_token_renew_and_expire(self):
         self.auth_server.put_token(self.token_id)
 
-        await self.websocketd_client.connect_and_wait_for_init(self.token_id)
-        await self.websocketd_client.op_start(version=2)
+        await self.websocketd_client.connect_and_wait_for_init(self.token_id, version=2)
+        await self.websocketd_client.op_start()
         self.auth_server.put_token("new-token")
         await self.websocketd_client.op_token("new-token")
         self.websocketd_client.timeout = self._TIMEOUT
@@ -97,8 +97,8 @@ class TestTokenExpiration(IntegrationTest):
     async def test_token_renew_invalid(self):
         self.auth_server.put_token(self.token_id)
 
-        await self.websocketd_client.connect_and_wait_for_init(self.token_id)
-        await self.websocketd_client.op_start(version=2)
+        await self.websocketd_client.connect_and_wait_for_init(self.token_id, version=2)
+        await self.websocketd_client.op_start()
         try:
             await self.websocketd_client.op_token("invalid-token")
         except websockets.ConnectionClosed as e:

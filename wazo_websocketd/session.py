@@ -15,10 +15,14 @@ from .exception import (
     BusConnectionError,
     BusConnectionLostError,
     NoTokenError,
+    UnsupportedVersionError,
     SessionProtocolError,
 )
 
 logger = logging.getLogger(__name__)
+
+
+SUPPORTED_VERSION = (1, 2)
 
 
 class SessionFactory(object):
@@ -134,6 +138,9 @@ class Session(object):
         except SessionProtocolError as e:
             logger.info('closing websocket connection: session protocol error: %s', e)
             await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
+        except UnsupportedVersionError:
+            logger.info('closing websocket connection: protocol version unknown')
+            await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
         except BusConnectionLostError:
             logger.info('closing websocket connection: bus connection lost')
             await self._ws.close(1011, 'bus connection lost')
@@ -148,6 +155,8 @@ class Session(object):
             await self._ws.close(1011)
 
     async def _run(self):
+        self._protocol_version = _extract_version_from_path(self._path)
+
         token_id = _extract_token_id(self._ws, self._path)
         _token = await self._authenticator.get_token(token_id)
 
@@ -156,7 +165,9 @@ class Session(object):
         await self._bus_event_service.register_event_consumer(self._event_transmiter)
 
         try:
-            await self._ws.send(self._protocol_encoder.encode_init())
+            await self._ws.send(
+                self._protocol_encoder.encode_init(version=self._protocol_version)
+            )
 
             ping_task = asyncio.create_task(self._task_send_ping())
             receiver_task = asyncio.create_task(self._task_receive_command())
@@ -224,7 +235,6 @@ class Session(object):
 
     async def _do_ws_start(self, msg):
         self._started = True
-        self._protocol_version = msg.value
         await self._ws.send(self._protocol_encoder.encode_start())
 
     async def _do_ws_token(self, msg):
@@ -243,6 +253,16 @@ def _extract_token_id(ws, path):
     if token:
         return token
     raise NoTokenError()
+
+
+def _extract_version_from_path(path):
+    for name, value in parse_qsl(urlparse(path).query):
+        if name == 'version':
+            version = int(value)
+            if version not in SUPPORTED_VERSION:
+                raise UnsupportedVersionError()
+            return version
+    return 1
 
 
 def _extract_token_id_from_path(path):
