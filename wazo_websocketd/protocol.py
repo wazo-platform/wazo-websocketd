@@ -20,7 +20,7 @@ class SessionProtocolEncoder(object):
     _MSG_OK = ''
 
     def encode_init(self):
-        return self._encode('init')
+        return self._encode('init', msg={"data": {"version": 2}})
 
     def encode_subscribe(self):
         return self._encode('subscribe')

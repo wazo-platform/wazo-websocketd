@@ -62,7 +62,8 @@ class WebSocketdClient(object):
             raise AssertionError('got unexpected data: {!r}'.format(data))
 
     async def wait_for_init(self):
-        await self._expect_msg('init')
+        msg = await self._expect_msg('init')
+        assert msg["data"]["version"] == 2
 
     async def wait_for_nothing(self):
         # Raise an exception if data is received during the next "self.timeout" seconds
