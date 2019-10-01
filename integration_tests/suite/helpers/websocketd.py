@@ -39,8 +39,6 @@ class WebSocketdClient(object):
         if version > 1:
             url += 'version={}&'.format(version)
 
-        print(url)
-
         self._websocket = await websockets.connect(
             url, loop=self._loop, ssl=self._SSL_CONTEXT
         )
