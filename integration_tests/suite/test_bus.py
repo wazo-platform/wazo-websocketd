@@ -66,7 +66,9 @@ class TestBus(IntegrationTest):
         self.event = {'name': 'foo', 'required_acl': 'event.foo'}
         await self._prepare(version=2)
         event = await self.websocketd_client.recv_msg()
-        self.assertEqual({"op": "event", "code": 0, "msg": self.event}, event)
+        self.assertEqual(
+            {"op": "event", "code": 0, "data": {"event": self.event}}, event
+        )
 
         self.auth_server.put_token('useless-token', acls=['websocketd'])
         await self.websocketd_client.op_token("useless-token")
@@ -78,7 +80,9 @@ class TestBus(IntegrationTest):
         await self.websocketd_client.op_token("my-new-token-id")
         self.bus_client.publish_event(self.event)
         event = await self.websocketd_client.recv_msg()
-        self.assertEqual({"op": "event", "code": 0, "msg": self.event}, event)
+        self.assertEqual(
+            {"op": "event", "code": 0, "data": {"event": self.event}}, event
+        )
 
     async def _prepare(self, skip_start=False, version=1):
         self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
