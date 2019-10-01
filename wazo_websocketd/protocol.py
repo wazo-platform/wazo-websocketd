@@ -10,8 +10,6 @@ from .exception import SessionProtocolError
 
 logger = logging.getLogger(__name__)
 
-_UNSET = object()
-
 
 class SessionProtocolEncoder(object):
 
@@ -63,37 +61,26 @@ class SessionProtocolDecoder(object):
         return _Message(operation, None)
 
     def _decode_token(self, operation, deserialized_data):
-        return self._get("token", operation, deserialized_data, str)
+        return self._get("token", operation, deserialized_data)
 
     def _decode_subscribe(self, operation, deserialized_data):
-        return self._get("event_name", operation, deserialized_data, str)
+        return self._get("event_name", operation, deserialized_data)
 
     @staticmethod
-    def _get(attribute, operation, deserialized_data, _type, default=_UNSET):
+    def _get(attribute, operation, deserialized_data):
         if 'data' not in deserialized_data:
-            if default == _UNSET:
-                raise SessionProtocolError('object is missing required "data" key')
-            else:
-                return _Message(operation, default)
-
-        if not isinstance(deserialized_data['data'], dict):
-            if default == _UNSET:
-                raise SessionProtocolError('object "data" value is not an object')
-            else:
-                return _Message(operation, default)
-
-        if attribute not in deserialized_data['data']:
-            if default == _UNSET:
-                raise SessionProtocolError(
-                    'object "data" is missing required "{}" key'.format(attribute)
-                )
-            else:
-                return _Message(operation, default)
+            raise SessionProtocolError('object is missing required "data" key')
+        elif not isinstance(deserialized_data['data'], dict):
+            raise SessionProtocolError('object "data" value is not an object')
+        elif attribute not in deserialized_data['data']:
+            raise SessionProtocolError(
+                'object "data" is missing required "{}" key'.format(attribute)
+            )
 
         value = deserialized_data['data'][attribute]
-        if not isinstance(value, _type):
+        if not isinstance(value, str):
             raise SessionProtocolError(
-                'object data "{}" value is not a {}'.format(value, _type)
+                'object data "{}" value is not a string'.format(value)
             )
 
         return _Message(operation, value)
