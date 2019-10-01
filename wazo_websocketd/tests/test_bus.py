@@ -127,4 +127,4 @@ class TestBusEventTransmitter(unittest.TestCase):
 
 
 def _new_bus_event(name, has_acl=True, acl=None):
-    return _BusEvent(name, has_acl, acl, sentinel.msg_body)
+    return _BusEvent(name, has_acl, acl, sentinel.msg_body, sentinel.body)
