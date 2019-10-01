@@ -8,7 +8,6 @@ from ..acl import ACLCheck
 
 
 class TestACLCheck(unittest.TestCase):
-
     def setUp(self):
         self.user_uuid = '123'
 
@@ -26,7 +25,9 @@ class TestACLCheck(unittest.TestCase):
         acl_check = ACLCheck(self.user_uuid, acls)
 
         assert_that(acl_check.matches_required_acl('foo.bar.toto'))
-        assert_that(acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False))
+        assert_that(
+            acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False)
+        )
         assert_that(acl_check.matches_required_acl('other.bar.toto'), equal_to(False))
 
     def test_matches_required_acls_when_user_acl_has_asterisks(self):
@@ -34,7 +35,9 @@ class TestACLCheck(unittest.TestCase):
         acl_check = ACLCheck(self.user_uuid, acls)
 
         assert_that(acl_check.matches_required_acl('foo.bar.toto'))
-        assert_that(acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False))
+        assert_that(
+            acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False)
+        )
         assert_that(acl_check.matches_required_acl('other.bar.toto'), equal_to(False))
 
     def test_matches_required_acls_with_multiple_acls(self):
@@ -44,7 +47,9 @@ class TestACLCheck(unittest.TestCase):
         assert_that(acl_check.matches_required_acl('foo'))
         assert_that(acl_check.matches_required_acl('foo.bar'), equal_to(False))
         assert_that(acl_check.matches_required_acl('foo.bar.toto'))
-        assert_that(acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False))
+        assert_that(
+            acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False)
+        )
         assert_that(acl_check.matches_required_acl('other.bar.toto'))
 
     def test_matches_required_acls_when_user_acl_has_hashtag_in_middle(self):
@@ -53,7 +58,9 @@ class TestACLCheck(unittest.TestCase):
 
         assert_that(acl_check.matches_required_acl('foo.bar'), equal_to(False))
         assert_that(acl_check.matches_required_acl('foo.bar.toto'), equal_to(False))
-        assert_that(acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False))
+        assert_that(
+            acl_check.matches_required_acl('foo.bar.toto.tata'), equal_to(False)
+        )
         assert_that(acl_check.matches_required_acl('foo.bar.toto.tata.titi'))
 
     def test_matches_required_acls_when_user_acl_ends_with_me(self):
@@ -63,7 +70,9 @@ class TestACLCheck(unittest.TestCase):
         assert_that(acl_check.matches_required_acl('foo.bar'), equal_to(False))
         assert_that(acl_check.matches_required_acl('foo.bar.123'))
         assert_that(acl_check.matches_required_acl('foo.bar.toto.123'))
-        assert_that(acl_check.matches_required_acl('foo.bar.toto.123.titi'), equal_to(False))
+        assert_that(
+            acl_check.matches_required_acl('foo.bar.toto.123.titi'), equal_to(False)
+        )
 
     def test_matches_required_acls_when_user_acl_has_me_in_middle(self):
         acls = ['foo.#.me.bar']

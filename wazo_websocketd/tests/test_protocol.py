@@ -7,45 +7,29 @@ import unittest
 from hamcrest import assert_that, equal_to
 
 from ..exception import SessionProtocolError
-from ..protocol import (
-    SessionProtocolDecoder,
-    SessionProtocolEncoder,
-)
+from ..protocol import SessionProtocolDecoder, SessionProtocolEncoder
 
 
 class TestProtocolEncoder(unittest.TestCase):
-
     def setUp(self):
         self.encoder = SessionProtocolEncoder()
 
     def test_encode_init(self):
-        expected = {
-            'op': 'init',
-            'code': 0,
-            'msg': '',
-        }
+        expected = {'op': 'init', 'code': 0, 'msg': ''}
 
         data = self.encoder.encode_init()
 
         assert_that(json.loads(data), equal_to(expected))
 
     def test_encode_subscribe(self):
-        expected = {
-            'op': 'subscribe',
-            'code': 0,
-            'msg': '',
-        }
+        expected = {'op': 'subscribe', 'code': 0, 'msg': ''}
 
         data = self.encoder.encode_subscribe()
 
         assert_that(json.loads(data), equal_to(expected))
 
     def test_encode_start(self):
-        expected = {
-            'op': 'start',
-            'code': 0,
-            'msg': '',
-        }
+        expected = {'op': 'start', 'code': 0, 'msg': ''}
 
         data = self.encoder.encode_start()
 
@@ -53,7 +37,6 @@ class TestProtocolEncoder(unittest.TestCase):
 
 
 class TestProtocolDecoder(unittest.TestCase):
-
     def setUp(self):
         self.decoder = SessionProtocolDecoder()
 

@@ -8,7 +8,6 @@ import asynqp
 
 
 class BusClient(object):
-
     def __init__(self, loop, port):
         self._loop = loop
         self._port = port
@@ -17,9 +16,13 @@ class BusClient(object):
 
     @asyncio.coroutine
     def connect(self):
-        self._connection = yield from asynqp.connect('localhost', loop=self._loop, port=self._port)
+        self._connection = yield from asynqp.connect(
+            'localhost', loop=self._loop, port=self._port
+        )
         self._channel = yield from self._connection.open_channel()
-        self._exchange = yield from self._channel.declare_exchange('wazo-headers', 'headers', durable=True)
+        self._exchange = yield from self._channel.declare_exchange(
+            'wazo-headers', 'headers', durable=True
+        )
 
     @asyncio.coroutine
     def close(self):

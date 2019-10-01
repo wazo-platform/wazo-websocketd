@@ -1,4 +1,4 @@
-# Copyright 2016 Avencall
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class Multiplexer(object):
-
     def __init__(self, loop):
         self._loop = loop
         self._stopped = False
@@ -53,7 +52,9 @@ class Multiplexer(object):
             except asyncio.CancelledError:
                 pass
             except Exception:
-                logger.exception('unexpected error while waiting for task in multiplexer')
+                logger.exception(
+                    'unexpected error while waiting for task in multiplexer'
+                )
 
     def stop(self):
         self._queue.put_nowait(None)
@@ -71,7 +72,6 @@ class Multiplexer(object):
 
 
 class _CallSoonTask(object):
-
     def __init__(self, function, args):
         self._function = function
         self._args = args
@@ -81,7 +81,6 @@ class _CallSoonTask(object):
 
 
 class _CallLaterTask(object):
-
     def __init__(self, multiplexer, function, args):
         self._multiplexer = multiplexer
         self._function = function
@@ -94,7 +93,6 @@ class _CallLaterTask(object):
 
 
 class _FutureTask(object):
-
     def __init__(self, multiplexer, future, function, args):
         self._multiplexer = multiplexer
         self._function = function
@@ -110,7 +108,6 @@ class _FutureTask(object):
 
 
 class _RaiseTask(object):
-
     def __init__(self, exception):
         self._exception = exception
 

@@ -37,7 +37,9 @@ class WebSocketdClient(object):
         if token_id is not None:
             url = url + '?token={}'.format(token_id)
 
-        self._websocket = yield from websockets.connect(url, loop=self._loop, ssl=self._SSL_CONTEXT)
+        self._websocket = yield from websockets.connect(
+            url, loop=self._loop, ssl=self._SSL_CONTEXT
+        )
 
     @asyncio.coroutine
     def connect_and_wait_for_init(self, token_id):
@@ -56,7 +58,9 @@ class WebSocketdClient(object):
             data = yield from self._recv()
         except websockets.ConnectionClosed as e:
             if code is not None and e.code != code:
-                raise AssertionError('expected close code {}: got {}'.format(code, e.code))
+                raise AssertionError(
+                    'expected close code {}: got {}'.format(code, e.code)
+                )
             return
         else:
             raise AssertionError('got unexpected data: {!r}'.format(data))
@@ -73,7 +77,9 @@ class WebSocketdClient(object):
         except WebSocketdTimeoutError:
             pass
         else:
-            raise AssertionError('got unexpected data from websocket: {!r}'.format(data))
+            raise AssertionError(
+                'got unexpected data from websocket: {!r}'.format(data)
+            )
 
     @asyncio.coroutine
     def recv_msg(self):
@@ -87,7 +93,9 @@ class WebSocketdClient(object):
         yield from asyncio.wait([task], loop=self._loop, timeout=timeout)
         if not task.done():
             task.cancel()
-            raise WebSocketdTimeoutError('recv() did not return in {} seconds'.format(timeout))
+            raise WebSocketdTimeoutError(
+                'recv() did not return in {} seconds'.format(timeout)
+            )
         return task.result()
 
     @asyncio.coroutine
@@ -107,7 +115,9 @@ class WebSocketdClient(object):
 
     @asyncio.coroutine
     def op_subscribe(self, event_name):
-        yield from self._send_msg({'op': 'subscribe', 'data': {'event_name': event_name}})
+        yield from self._send_msg(
+            {'op': 'subscribe', 'data': {'event_name': event_name}}
+        )
         if self._started:
             return
         yield from self._expect_msg('subscribe')

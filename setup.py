@@ -13,9 +13,5 @@ setup(
     author_email='dev@wazo.community',
     url='http://wazo.community',
     packages=find_packages(),
-    entry_points={
-        'console_scripts': [
-            'wazo-websocketd=wazo_websocketd.main:main',
-        ],
-    }
+    entry_points={'console_scripts': ['wazo-websocketd=wazo_websocketd.main:main']},
 )

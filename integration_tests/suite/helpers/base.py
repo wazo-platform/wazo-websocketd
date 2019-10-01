@@ -34,10 +34,9 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
         if self.auth_server:
-            self.loop.run_until_complete(self.auth_server.put_token(
-                self.valid_token_id,
-                acls=['websocketd'],
-            ))
+            self.loop.run_until_complete(
+                self.auth_server.put_token(self.valid_token_id, acls=['websocketd'])
+            )
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())
@@ -60,7 +59,10 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
     def new_auth_server(self):
         try:
             auth_port = self.service_port(9497, 'auth')
-        except (asset_launching_test_case.NoSuchPort, asset_launching_test_case.NoSuchService):
+        except (
+            asset_launching_test_case.NoSuchPort,
+            asset_launching_test_case.NoSuchService,
+        ):
             return None
         return AuthServer(self.loop, auth_port)
 
@@ -75,4 +77,5 @@ def run_with_loop(f):
     def wrapper(self, *args, **kwargs):
         coro = asyncio.coroutine(f)
         self.loop.run_until_complete(coro(self, *args, **kwargs))
+
     return wrapper

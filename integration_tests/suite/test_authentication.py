@@ -1,4 +1,4 @@
-# Copyright 2016-2017 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from .helpers.base import IntegrationTest, run_with_loop
@@ -17,8 +17,9 @@ class TestAuthentication(IntegrationTest):
 
     @run_with_loop
     def test_no_token_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(None,
-                                                                     CLOSE_CODE_NO_TOKEN_ID)
+        yield from self.websocketd_client.connect_and_wait_for_close(
+            None, CLOSE_CODE_NO_TOKEN_ID
+        )
 
     @run_with_loop
     def test_valid_auth_gives_result(self):
@@ -26,13 +27,15 @@ class TestAuthentication(IntegrationTest):
 
     @run_with_loop
     def test_invalid_auth_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(INVALID_TOKEN_ID,
-                                                                     CLOSE_CODE_AUTH_FAILED)
+        yield from self.websocketd_client.connect_and_wait_for_close(
+            INVALID_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
+        )
 
     @run_with_loop
     def test_unauthorized_auth_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(UNAUTHORIZED_TOKEN_ID,
-                                                                     CLOSE_CODE_AUTH_FAILED)
+        yield from self.websocketd_client.connect_and_wait_for_close(
+            UNAUTHORIZED_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
+        )
 
 
 class TestNoXivoAuth(IntegrationTest):
@@ -41,7 +44,9 @@ class TestNoXivoAuth(IntegrationTest):
 
     @run_with_loop
     def test_no_auth_server_closes_websocket(self):
-        yield from self.websocketd_client.connect_and_wait_for_close(self.valid_token_id)
+        yield from self.websocketd_client.connect_and_wait_for_close(
+            self.valid_token_id
+        )
 
 
 class TestTokenExpiration(IntegrationTest):
