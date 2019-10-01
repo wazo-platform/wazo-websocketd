@@ -1,6 +1,8 @@
 # Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import websockets
+
 from .helpers.base import IntegrationTest, run_with_loop
 from .helpers.constants import (
     INVALID_TOKEN_ID,
@@ -97,6 +99,14 @@ class TestTokenExpiration(IntegrationTest):
 
         await self.websocketd_client.connect_and_wait_for_init(self.token_id)
         await self.websocketd_client.op_start(version=2)
-        await self.websocketd_client.op_token("invalid-token")
-        self.websocketd_client.timeout = self._TIMEOUT
-        await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_FAILED)
+        try:
+            await self.websocketd_client.op_token("invalid-token")
+        except websockets.ConnectionClosed as e:
+            if e.code != CLOSE_CODE_AUTH_FAILED:
+                raise AssertionError(
+                    'expected close code {}: got {}'.format(
+                        CLOSE_CODE_AUTH_FAILED, e.code
+                    )
+                )
+        else:
+            raise AssertionError("expected connection to be closed")
