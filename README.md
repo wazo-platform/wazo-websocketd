@@ -24,7 +24,7 @@ Using [artillery](https://artillery.io/docs/getting-started/)
   * Create scenarios in `benchmark.yml`:
 ```
 config:
-  target: "wss://<host>:9502?token=<token_id>"
+  target: "wss://<host>:9502?token=<token_id>&version=2"
   phases:
     - duration: 120
       arrivalRate: 8
@@ -37,7 +37,7 @@ scenarios:
   - engine: "ws"
     flow:
       - think: 5
-      - send: '{"op": "start", {"data": {"version": 2}}}'
+      - send: '{"op": "start"}'
       - think: 240
 ```
   * `artillery run benchmark.yml`
