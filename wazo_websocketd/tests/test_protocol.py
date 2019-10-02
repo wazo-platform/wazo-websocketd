@@ -123,7 +123,7 @@ class TestProtocolDecoder(unittest.TestCase):
 
     def test_decode_token(self):
         token = "bc9571dd-bc62-4044-b78f-0bfb8a1481e4"
-        data = '{"op": "token", "data": {"token": "%s"}}' % token
+        data = '{{"op": "token", "data": {{"token": "{}"}}}}'.format(token)
 
         msg = self.decoder.decode(data)
 
