@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class SessionProtocolEncoder(object):
 
     _CODE_SUCCESS = 0
-    _CODR_FAILURE = 1
+    _CODE_FAILURE = 1
 
     def encode_init(self, version=2):
         return self._encode('init', {"version": version})
