@@ -24,3 +24,7 @@ class BusConnectionError(Exception):
 
 class BusConnectionLostError(BusConnectionError):
     pass
+
+
+class UnsupportedVersionError(Exception):
+    pass

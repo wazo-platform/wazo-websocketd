@@ -4,7 +4,7 @@ wazo-websocketd is a WebSocket server that delivers Wazo related events to clien
 
 ## Dependencies
 
-* python >= 3.4
+* python >= 3.6
 * see requirements.txt
 
 ## Running integration tests
@@ -24,7 +24,7 @@ Using [artillery](https://artillery.io/docs/getting-started/)
   * Create scenarios in `benchmark.yml`:
 ```
 config:
-  target: "wss://<host>:9502?token=<token_id>"
+  target: "wss://<host>:9502?token=<token_id>&version=2"
   phases:
     - duration: 120
       arrivalRate: 8

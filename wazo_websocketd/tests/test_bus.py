@@ -9,8 +9,9 @@ from unittest.mock import Mock, sentinel
 from hamcrest import assert_that, equal_to, none, same_instance
 
 from ..acl import ACLCheck
-from ..bus import _BusEvent, _BusEventConsumer, _BusEventDispatcher, _decode_bus_msg
+from ..bus import _BusEvent, _decode_bus_msg
 from ..exception import BusConnectionLostError
+from ..session import EventTransmitter
 
 
 class TestBusEvent(unittest.TestCase):
@@ -74,97 +75,56 @@ class TestBusEvent(unittest.TestCase):
         self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
 
 
-class TestBusEventDispatcher(unittest.TestCase):
+class TestBusEventTransmitter(unittest.TestCase):
     def setUp(self):
-        self.bus_event_dispatcher = _BusEventDispatcher()
-        self.bus_event_consumer = Mock(_BusEventConsumer)
-
-    def test_dispatch_connection_lost(self):
-        self.bus_event_dispatcher.add_event_consumer(self.bus_event_consumer)
-        self.bus_event_dispatcher.dispatch_connection_lost()
-
-        self.bus_event_consumer._on_connection_lost.assert_called_once_with()
-
-    def test_dispatch_event_with_acl(self):
-        bus_event = _new_bus_event('foo', has_acl=True)
-
-        self.bus_event_dispatcher.add_event_consumer(self.bus_event_consumer)
-        self.bus_event_dispatcher.dispatch_event(bus_event)
-
-        self.bus_event_consumer._on_event.assert_called_once_with(bus_event)
-
-    def test_dispatch_event_without_acl(self):
-        bus_event = _new_bus_event('foo', has_acl=False)
-
-        self.bus_event_dispatcher.add_event_consumer(self.bus_event_consumer)
-        self.bus_event_dispatcher.dispatch_event(bus_event)
-
-        assert_that(self.bus_event_consumer._on_event.called, equal_to(False))
-
-    def test_remove_event_consumer(self):
-        self.bus_event_dispatcher.add_event_consumer(self.bus_event_consumer)
-        self.bus_event_dispatcher.remove_event_consumer(self.bus_event_consumer)
-        self.bus_event_dispatcher.dispatch_connection_lost()
-
-        assert_that(self.bus_event_consumer._on_connection_lost.called, equal_to(False))
-
-
-class TestBusEventConsumer(unittest.TestCase):
-    def setUp(self):
-        self.loop = asyncio.new_event_loop()
-        self.addCleanup(self.loop.close)
-        self.bus_event_dispatcher = Mock(_BusEventDispatcher)
-        self.acl_check = Mock(ACLCheck)
         self.bus_event = _new_bus_event('foo', acl='some.thing')
-        self.bus_event_consumer = _BusEventConsumer(
-            self.loop, self.bus_event_dispatcher, self.acl_check
-        )
-
-    def test_close(self):
-        self.bus_event_consumer.close()
-
-        self.bus_event_dispatcher.remove_event_consumer.assert_called_once_with(
-            self.bus_event_consumer
-        )
+        self.event_transmitter = EventTransmitter()
+        self.event_transmitter._acl_check = Mock(ACLCheck)
 
     def test_get_connection_lost(self):
-        self.bus_event_consumer._on_connection_lost()
+        self.event_transmitter.put_connection_lost()
 
         self.assertRaises(
             BusConnectionLostError,
-            self.loop.run_until_complete,
-            self.bus_event_consumer.get(),
+            asyncio.get_event_loop().run_until_complete,
+            self.event_transmitter.get(),
         )
 
     def test_get_event_subscribed_name(self):
-        self.bus_event_consumer.subscribe_to_event(self.bus_event.name)
-        self.bus_event_consumer._on_event(self.bus_event)
-        result = self.loop.run_until_complete(self.bus_event_consumer.get())
+        self.event_transmitter.subscribe_to_event(self.bus_event.name)
+        self.event_transmitter.put(self.bus_event)
+        result = asyncio.get_event_loop().run_until_complete(
+            self.event_transmitter.get()
+        )
 
         assert_that(result, same_instance(self.bus_event))
 
     def test_get_event_subscribed_star(self):
-        self.bus_event_consumer.subscribe_to_event('*')
-        self.bus_event_consumer._on_event(self.bus_event)
-        result = self.loop.run_until_complete(self.bus_event_consumer.get())
+        self.event_transmitter.subscribe_to_event('*')
+        self.event_transmitter.put(self.bus_event)
+        result = asyncio.get_event_loop().run_until_complete(
+            self.event_transmitter.get()
+        )
 
         assert_that(result, same_instance(self.bus_event))
 
     def test_get_event_not_subscribed(self):
-        self.bus_event_consumer.subscribe_to_event('some_unknown_event_name')
-        self.bus_event_consumer._on_event(self.bus_event)
+        self.event_transmitter.subscribe_to_event('some_unknown_event_name')
+        self.event_transmitter.put(self.bus_event)
 
-        assert_that(self.bus_event_consumer._queue.empty())
+        assert_that(self.event_transmitter._queue.empty())
 
     def test_get_event_non_matching_acl(self):
-        self.acl_check.matches_required_acl.return_value = False
+        self.event_transmitter._acl_check.matches_required_acl.return_value = False
 
-        self.bus_event_consumer.subscribe_to_event(self.bus_event.name)
-        self.bus_event_consumer._on_event(self.bus_event)
+        self.event_transmitter.subscribe_to_event(self.bus_event.name)
+        self.event_transmitter.put(self.bus_event)
 
-        self.acl_check.matches_required_acl.assert_called_once_with(self.bus_event.acl)
-        assert_that(self.bus_event_consumer._queue.empty())
+        self.event_transmitter._acl_check.matches_required_acl.assert_called_once_with(
+            self.bus_event.acl
+        )
+        assert_that(self.event_transmitter._queue.empty())
 
 
 def _new_bus_event(name, has_acl=True, acl=None):
-    return _BusEvent(name, has_acl, acl, sentinel.msg_body)
+    return _BusEvent(name, has_acl, acl, sentinel.msg_body, sentinel.body)

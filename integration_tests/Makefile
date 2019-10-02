@@ -11,4 +11,4 @@ egg-info:
 	cd .. && python3 setup.py egg_info
 
 test:
-	nosetests suite
+	pytest suite

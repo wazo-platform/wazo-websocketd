@@ -1,6 +1,6 @@
 https://github.com/wazo-platform/xivo-test-helpers/archive/master.zip
 asynqp
 docker-compose
-nose
+pytest
 requests
 websockets

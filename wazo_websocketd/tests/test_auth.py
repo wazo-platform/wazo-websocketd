@@ -4,16 +4,16 @@
 import asyncio
 import datetime
 import unittest
-from unittest.mock import Mock, sentinel
+from unittest.mock import Mock, sentinel, patch
 
 import requests
 from hamcrest import assert_that, equal_to, same_instance
 
 from ..auth import (
-    _Authenticator,
+    Authenticator,
+    AsyncAuthClient,
     _DynamicIntervalAuthCheck,
     _StaticIntervalAuthCheck,
-    _WebSocketdAuthClient,
 )
 from ..exception import AuthenticationError, AuthenticationExpiredError
 
@@ -23,16 +23,19 @@ class TestWebSocketdAuthClient(unittest.TestCase):
     _ACL = 'websocketd'
 
     def setUp(self):
-        self.loop = asyncio.new_event_loop()
-        self.addCleanup(self.loop.close)
         self.auth_client = Mock()
-        self.websocketd_auth_client = _WebSocketdAuthClient(self.loop, self.auth_client)
+        patcher = patch(
+            "wazo_websocketd.auth.wazo_auth_client.Client",
+            return_value=self.auth_client,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.websocketd_auth_client = AsyncAuthClient({"auth": {}})
 
     def test_get_token(self):
         self.auth_client.token.get.return_value = sentinel.token
-        self.auth_client.token.get._is_coroutine = False
 
-        token = self.loop.run_until_complete(
+        token = asyncio.get_event_loop().run_until_complete(
             self.websocketd_auth_client.get_token(sentinel.token_id)
         )
 
@@ -41,20 +44,18 @@ class TestWebSocketdAuthClient(unittest.TestCase):
 
     def test_get_token_invalid(self):
         self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
-        self.auth_client.token.get._is_coroutine = False
 
         self.assertRaises(
             AuthenticationError,
-            self.loop.run_until_complete,
+            asyncio.get_event_loop().run_until_complete,
             self.websocketd_auth_client.get_token(sentinel.token_id),
         )
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
     def test_is_valid_token(self):
         self.auth_client.token.is_valid.return_value = True
-        self.auth_client.token.is_valid._is_coroutine = False
 
-        is_valid = self.loop.run_until_complete(
+        is_valid = asyncio.get_event_loop().run_until_complete(
             self.websocketd_auth_client.is_valid_token(sentinel.token_id)
         )
 
@@ -67,9 +68,23 @@ class TestWebSocketdAuthClient(unittest.TestCase):
 class TestAuthenticator(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
-        self.auth_check = Mock()
-        self.authenticator = _Authenticator(
-            self.websocketd_auth_client, self.auth_check
+        patcher = patch(
+            "wazo_websocketd.auth.AsyncAuthClient",
+            return_value=self.websocketd_auth_client,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.auth_client = Mock()
+        patcher = patch(
+            "wazo_websocketd.auth.wazo_auth_client.Client",
+            return_value=self.auth_client,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        self.authenticator = Authenticator(
+            {"auth_check_static_interval": 1, "auth_check_strategy": "static"}
         )
 
     def test_get_token(self):
@@ -93,34 +108,29 @@ class TestAuthenticator(unittest.TestCase):
 
 class TestStaticIntervalAuthCheck(unittest.TestCase):
     def setUp(self):
-        self.loop = asyncio.new_event_loop()
-        self.addCleanup(self.loop.close)
         self.websocketd_auth_client = Mock()
         self.check = _StaticIntervalAuthCheck(
-            self.loop, self.websocketd_auth_client, 0.1
+            self.websocketd_auth_client, {"auth_check_static_interval": 0.1}
         )
         self.token = {'token': sentinel.token_id}
 
     def test_run(self):
-        @asyncio.coroutine
-        def is_valid_token(token_id):
+        async def is_valid_token(token_id):
             return False
 
         self.websocketd_auth_client.is_valid_token = is_valid_token
 
         self.assertRaises(
             AuthenticationExpiredError,
-            self.loop.run_until_complete,
-            self.check.run(self.token),
+            asyncio.get_event_loop().run_until_complete,
+            self.check.run(lambda: self.token),
         )
 
 
 class TestDynamicIntervalAuthCheck(unittest.TestCase):
     def setUp(self):
-        self.loop = asyncio.new_event_loop()
-        self.addCleanup(self.loop.close)
         self.websocketd_auth_client = Mock()
-        self.check = _DynamicIntervalAuthCheck(self.loop, self.websocketd_auth_client)
+        self.check = _DynamicIntervalAuthCheck(self.websocketd_auth_client, {})
 
     def test_expiration_in_the_past(self):
         now = datetime.datetime(2016, 1, 1, 0, 0, 0)
