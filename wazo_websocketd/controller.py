@@ -34,9 +34,18 @@ class Controller(object):
 
     def run(self):
         logger.info('wazo-websocketd starting...')
+        loop = asyncio.get_event_loop()
         try:
-            asyncio.get_event_loop().run_forever()
+            loop.run_forever()
         finally:
+            loop.run_until_complete(
+                asyncio.gather(
+                    asyncio.ensure_future(self._ws_server.wait_closed(), loop=loop),
+                    asyncio.ensure_future(self._bus_event_service.close(), loop=loop),
+                )
+            )
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
             logger.info('wazo-websocketd stopped')
 
     def _exception_handler(self, loop, context):
@@ -50,9 +59,4 @@ class Controller(object):
     def _stop(self):
         logger.info('wazo-websocketd stopping...')
         self._ws_server.close()
-        asyncio.wait(
-            [
-                asyncio.create_task(self._ws_server.wait_closed()),
-                asyncio.create_task(self._bus_event_service.close()),
-            ]
-        )
+        asyncio.get_event_loop().stop()
