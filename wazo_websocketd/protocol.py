@@ -29,7 +29,7 @@ class SessionProtocolEncoder(object):
         return self._encode('token')
 
     def encode_event(self, event):
-        return self._encode("event", {"event": event})
+        return self._encode("event", event)
 
     def _encode(self, operation, data=None, code=_CODE_SUCCESS):
         return json.dumps({'op': operation, 'code': code, 'data': data})
