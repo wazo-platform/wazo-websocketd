@@ -4,6 +4,6 @@
 *.swp
 *.tox
 coverage.xml
-nosetests.xml
 pycodestyle.txt
 pylint.txt
+unit-tests.xml
