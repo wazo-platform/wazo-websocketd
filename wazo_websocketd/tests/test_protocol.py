@@ -35,6 +35,25 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
+    def test_encode_event(self):
+        event = {
+            "name": "auth_session_created",
+            "origin_uuid": "2170f276-9344-44e8-aad7-dd98bb849b8f",
+            "required_acl": "events.auth.sessions.a725625b-01d0-4afb-a2de-dcbaa19031e5.created",
+            "data": {
+                "uuid": "a725625b-01d0-4afb-a2de-dcbaa19031e5",
+                "tenant_uuid": "47bfdafc-2897-4369-8fb3-153d41fb835d",
+                "user_uuid": "73cfa622-6f5b-4a0d-9788-ddb72ab57836",
+                "mobile": False,
+            },
+        }
+
+        expected = {'op': 'event', 'code': 0, 'data': event}
+
+        data = self.encoder.encode_event(event)
+
+        assert_that(json.loads(data), equal_to(expected))
+
 
 class TestProtocolDecoder(unittest.TestCase):
     def setUp(self):
