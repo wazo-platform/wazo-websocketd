@@ -8,14 +8,10 @@
   * With the v2 protocol events are now surrounded by:
 
   ```
-  {"op": "event", "code": "OK", "msg": <event>}
+  {"op": "event", "code": 0, "msg": <event>}
   ```
 
   * When command are send, websocketd will always return a command result.
-  * To start a v2 sessions:
-
-  ```
-  {"op": "start", "data": {"version": 2}}
-  ```
+  * To start a v2 sessions `&version=2` must be added to the websocket url.
 
 * V1 protocol does no longer provide the `msg` attribute that was always empty
