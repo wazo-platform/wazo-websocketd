@@ -6,9 +6,9 @@ Before=monit.service
 
 [Service]
 Type=forking
-ExecStartPre=/usr/bin/install -d -o wazo-websocketd -g www-data /var/run/wazo-websocketd
+ExecStartPre=/usr/bin/install -d -o wazo-websocketd -g www-data /run/wazo-websocketd
 ExecStart=/usr/bin/python3 -u /usr/bin/wazo-websocketd
-PIDFile=/var/run/wazo-websocketd/wazo-websocketd.pid
+PIDFile=/run/wazo-websocketd/wazo-websocketd.pid
 
 [Install]
 WantedBy=multi-user.target

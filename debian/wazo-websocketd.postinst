@@ -28,7 +28,7 @@ case "$1" in
             # Fix a previous version where the wazo-websocketd.log was created before renaming
             rm -f /var/log/xivo-websocketd.log
         fi
-        rm -rf /var/run/xivo-websocketd
+        rm -rf /run/xivo-websocketd
         if [ -d /etc/xivo-websocketd/conf.d ] ; then
             find /etc/xivo-websocketd/conf.d/ -mindepth 1 -exec mv {} /etc/wazo-websocketd/conf.d/ \;
             rmdir --ignore-fail-on-non-empty -p /etc/xivo-websocketd/conf.d
