@@ -19,7 +19,7 @@
 #user: wazo-websocketd
 
 ## PID file.
-#pid_file: /var/run/wazo-websocketd/wazo-websocketd.pid
+#pid_file: /run/wazo-websocketd/wazo-websocketd.pid
 
 ## WebSocket server
 #websocket:

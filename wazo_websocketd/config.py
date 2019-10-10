@@ -17,7 +17,7 @@ _DEFAULT_CONFIG = {
     'log_level': 'info',
     'log_file': '/var/log/wazo-websocketd.log',
     'user': 'wazo-websocketd',
-    'pid_file': '/var/run/wazo-websocketd/wazo-websocketd.pid',
+    'pid_file': '/run/wazo-websocketd/wazo-websocketd.pid',
     'auth': {
         'host': 'localhost',
         'verify_certificate': '/usr/share/xivo-certs/server.crt',
