@@ -9,6 +9,7 @@ import kombu
 
 ROUTING_KEYS = [
     'applications.#',
+    'auth.#',
     'call_log.#',
     'calls.#',
     'chatd.#',
