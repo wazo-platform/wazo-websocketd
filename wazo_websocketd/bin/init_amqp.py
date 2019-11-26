@@ -15,6 +15,7 @@ ROUTING_KEYS = [
     'chatd.#',
     'collectd.#',
     'config.#',
+    'directory.#',
     'events.#',
     'instances.#',
     'service.#',
