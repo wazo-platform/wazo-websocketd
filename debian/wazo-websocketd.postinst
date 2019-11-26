@@ -48,8 +48,6 @@ case "$1" in
                     /etc/nginx/locations/https-enabled/$DAEMONNAME
         fi
 
-        wazo-websocketd-init-amqp
-
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
