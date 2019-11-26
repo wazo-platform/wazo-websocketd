@@ -9,7 +9,6 @@ import kombu
 
 ROUTING_KEYS = [
     'applications.#',
-    'authorizations.#',
     'call_log.#',
     'calls.#',
     'chatd.#',
@@ -17,13 +16,10 @@ ROUTING_KEYS = [
     'conferences.#',
     'config.#',
     'directory.#',
-    'events.#',
     'faxes.#',
-    'instances.#',
     'plugin.#',
     'service.#',
     'status.#',
-    'subscriptions.#',
     'switchboards.#',
     'sysconfd.#',
     'voicemails.#',
