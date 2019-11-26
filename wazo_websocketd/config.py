@@ -29,7 +29,7 @@ _DEFAULT_CONFIG = {
         'port': 5672,
         'username': 'guest',
         'password': 'guest',
-        'exchange_name': 'wazo-headers',
+        'exchange_name': 'wazo-websocketd',
         'exchange_type': 'headers',
     },
     'websocket': {

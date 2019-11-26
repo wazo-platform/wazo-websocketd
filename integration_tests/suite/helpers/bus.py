@@ -19,7 +19,7 @@ class BusClient(object):
         )
         self._channel = await self._connection.open_channel()
         self._exchange = await self._channel.declare_exchange(
-            'wazo-headers', 'headers', durable=True
+            'wazo-websocketd', 'headers', durable=True
         )
 
     async def close(self):
