@@ -17,11 +17,6 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
     assets_root = ASSET_ROOT
     service = 'websocketd'
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.docker_exec(['wazo-websocketd-init-amqp', '--host', 'rabbitmq'])
-
     def setUp(self):
         self.valid_token_id = '123-456'
         self.loop = asyncio.get_event_loop()

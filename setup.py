@@ -14,10 +14,5 @@ setup(
     author_email='dev@wazo.community',
     url='http://wazo.community',
     packages=find_packages(),
-    entry_points={
-        'console_scripts': [
-            '{}=wazo_websocketd.main:main'.format(NAME),
-            '{}-init-amqp=wazo_websocketd.bin.init_amqp:main'.format(NAME),
-        ],
-    },
+    entry_points={'console_scripts': ['{}=wazo_websocketd.main:main'.format(NAME)]},
 )

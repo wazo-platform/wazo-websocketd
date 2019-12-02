@@ -8,7 +8,7 @@ from xivo.daemonize import pidfile_context
 from xivo.user_rights import change_user
 
 from wazo_websocketd.auth import Authenticator
-from wazo_websocketd.bus import new_bus_event_service
+from wazo_websocketd.bus import create_or_update_exchange, new_bus_event_service
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
 from wazo_websocketd.protocol import SessionProtocolEncoder, SessionProtocolDecoder
@@ -26,6 +26,7 @@ def main():
     if config['user']:
         change_user(config['user'])
 
+    create_or_update_exchange(config)
     authenticator = Authenticator(config)
     bus_event_service = new_bus_event_service(config)
     protocol_encoder = SessionProtocolEncoder()
