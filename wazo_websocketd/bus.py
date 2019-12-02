@@ -5,12 +5,59 @@ import asyncio
 import collections
 import logging
 import json
+import kombu
 
 import asynqp
 
 from .exception import BusConnectionError, BusConnectionLostError
 
 logger = logging.getLogger(__name__)
+
+
+ROUTING_KEYS = [
+    'applications.#',
+    'auth.#',
+    'call_log.#',
+    'calls.#',
+    'chatd.#',
+    'collectd.#',
+    'conferences.#',
+    'config.#',
+    'directory.#',
+    'faxes.#',
+    'plugin.#',
+    'service.#',
+    'status.#',
+    'switchboards.#',
+    'sysconfd.#',
+    'voicemails.#',
+]
+
+
+def create_or_update_exchange(config):
+    bus_url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
+
+    upstream_exchange = kombu.Exchange(
+        config['bus']['upstream_exchange_name'],
+        type=config['bus']['exchange_type'],
+        auto_delete=False,
+        durable=True,
+        delivery_mode='persistent',
+    )
+    exchange = kombu.Exchange(
+        config['bus']['exchange_name'],
+        type=config['bus']['exchange_type'],
+        auto_delete=False,
+        durable=True,
+        delivery_mode='persistent',
+    )
+
+    with kombu.Connection(bus_url) as connection:
+        upstream_exchange.bind(connection).declare()
+        exchange = exchange.bind(connection)
+        exchange.declare()
+        for routing_key in ROUTING_KEYS:
+            exchange.bind_to(upstream_exchange, routing_key=routing_key)
 
 
 def new_bus_event_service(config):

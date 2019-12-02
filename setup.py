@@ -6,12 +6,13 @@ from setuptools import setup
 from setuptools import find_packages
 
 
+NAME = 'wazo-websocketd'
 setup(
-    name='wazo-websocketd',
+    name=NAME,
     version='1.0',
     author='Wazo Authors',
     author_email='dev@wazo.community',
     url='http://wazo.community',
     packages=find_packages(),
-    entry_points={'console_scripts': ['wazo-websocketd=wazo_websocketd.main:main']},
+    entry_points={'console_scripts': ['{}=wazo_websocketd.main:main'.format(NAME)]},
 )
