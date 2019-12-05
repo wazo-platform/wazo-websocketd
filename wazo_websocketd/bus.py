@@ -30,6 +30,7 @@ ROUTING_KEYS = [
     'status.#',
     'switchboards.#',
     'sysconfd.#',
+    'trunks.#'
     'voicemails.#',
 ]
 
