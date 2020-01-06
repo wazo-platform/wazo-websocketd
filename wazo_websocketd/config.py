@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import argparse
@@ -31,7 +31,8 @@ _DEFAULT_CONFIG = {
         'password': 'guest',
         'exchange_name': 'wazo-websocketd',
         'exchange_type': 'headers',
-        'upstream_exchange_name': 'wazo-headers',
+        'upstream_exchange_name': 'xivo',
+        'upstream_exchange_type': 'topic',
     },
     'websocket': {
         'listen': '0.0.0.0',

@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -40,7 +40,7 @@ def create_or_update_exchange(config):
 
     upstream_exchange = kombu.Exchange(
         config['bus']['upstream_exchange_name'],
-        type=config['bus']['exchange_type'],
+        type=config['bus']['upstream_exchange_type'],
         auto_delete=False,
         durable=True,
         delivery_mode='persistent',
