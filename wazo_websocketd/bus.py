@@ -57,7 +57,13 @@ def create_or_update_exchange(config):
         upstream_exchange.bind(connection).declare()
         exchange = exchange.bind(connection)
         exchange.declare()
+        # This unbind_from and the one in the loop were added in 20.01 because we created
+        # a bind on the wrong exchange (wazo-headers) in a previous version
+        exchange.unbind_from('wazo-headers', 'trunks.#voicemails.#')  # Migrate <20.01
         for routing_key in ROUTING_KEYS:
+            exchange.unbind_from(
+                'wazo-headers', routing_key=routing_key
+            )  # Migrate <20.01
             exchange.bind_to(upstream_exchange, routing_key=routing_key)
 
 
