@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -48,9 +48,9 @@ class _StaticIntervalAuthCheck(object):
 
     async def run(self, token_getter):
         while True:
-            token_id = token_getter()['token']
             await asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
+            token_id = token_getter()['token']
             is_valid = await self._async_auth_client.is_valid_token(token_id)
             if not is_valid:
                 raise AuthenticationExpiredError()
