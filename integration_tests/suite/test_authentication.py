@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import websockets
@@ -76,6 +76,7 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.op_start()
         self.auth_server.put_token("new-token")
         await self.websocketd_client.op_token("new-token")
+        self.auth_server.remove_token(self.token_id)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_nothing()
 
