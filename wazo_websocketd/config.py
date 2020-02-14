@@ -88,11 +88,12 @@ def _parse_cli_args():
 def _get_reinterpreted_raw_values(config):
     result = {'websocket': {}}
 
-    ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    ssl_context.load_cert_chain(
-        config['websocket']['certificate'], config['websocket']['private_key']
-    )
-    result['websocket']['ssl'] = ssl_context
+    if config['websocket']['certificate'] and config['websocket']['private_key']:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        ssl_context.load_cert_chain(
+            config['websocket']['certificate'], config['websocket']['private_key']
+        )
+        result['websocket']['ssl'] = ssl_context
 
     result['log_level'] = get_log_level_by_name(config['log_level'])
 

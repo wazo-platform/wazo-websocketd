@@ -15,7 +15,7 @@ class Controller(object):
     def __init__(self, config, bus_event_service, session_factory):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']
-        self._ws_ssl = config['websocket']['ssl']
+        self._ws_ssl = config['websocket'].get('ssl')
         self._bus_event_service = bus_event_service
         self._session_factory = session_factory
 
