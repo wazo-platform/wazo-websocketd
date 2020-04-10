@@ -38,7 +38,9 @@
 ## wazo-auth (authentication daemon) connection informations.
 #auth:
 #  host: localhost
-#  verify_certificate: /usr/share/xivo-certs/server.crt
+#  port: 9497
+#  prefix: null
+#  https: false
 
 ## Event bus (AMQP) connection informations
 #bus:

@@ -7,8 +7,6 @@ services:
 
   auth:
     image: wazopbx/wazo-auth-mock
-    volumes:
-      - ./ssl:/usr/local/share/ssl
     ports:
       - "9497"
 
