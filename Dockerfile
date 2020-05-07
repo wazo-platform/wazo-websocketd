@@ -17,4 +17,4 @@ RUN rm -rf /usr/src/wazo-websocketd
 
 EXPOSE 9502
 
-CMD ["wazo-websocketd", "-fd"]
+CMD ["wazo-websocketd", "-d"]
