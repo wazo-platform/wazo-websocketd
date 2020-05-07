@@ -13,7 +13,6 @@ _DEFAULT_CONFIG = {
     'config_file': '/etc/wazo-websocketd/config.yml',
     'extra_config_files': '/etc/wazo-websocketd/conf.d/',
     'debug': False,
-    'foreground': False,
     'log_level': 'info',
     'log_file': '/var/log/wazo-websocketd.log',
     'user': 'wazo-websocketd',
@@ -62,9 +61,6 @@ def _parse_cli_args():
         help="Log debug messages. Overrides log_level.",
     )
     parser.add_argument(
-        '-f', '--foreground', action='store_true', help="Foreground, don't daemonize."
-    )
-    parser.add_argument(
         '-u', '--user', action='store', help="The owner of the process."
     )
     parsed_args = parser.parse_args()
@@ -74,8 +70,6 @@ def _parse_cli_args():
         result['config_file'] = parsed_args.config_file
     if parsed_args.debug:
         result['debug'] = parsed_args.debug
-    if parsed_args.foreground:
-        result['foreground'] = parsed_args.foreground
     if parsed_args.user:
         result['user'] = parsed_args.user
 
