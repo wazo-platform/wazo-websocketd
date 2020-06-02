@@ -1,5 +1,9 @@
 # Changelog
 
+## 20.08
+
+* Add a ping operation to allow client-side ping.
+
 ## 19.14
 
 * V2 protocol has been added:

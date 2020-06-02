@@ -243,6 +243,11 @@ class Session(object):
         if not self._started or self._protocol_version == 2:
             await self._ws.send(self._protocol_encoder.encode_token())
 
+    async def _do_ws_ping(self, msg):
+        logger.debug('received client ping, sending pong')
+        if self._protocol_version == 2:
+            await self._ws.send(self._protocol_encoder.encode_pong(msg.value))
+
 
 def _extract_token_id(ws, path):
     token = _extract_token_id_from_path(path)

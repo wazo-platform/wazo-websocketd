@@ -54,6 +54,13 @@ class TestProtocolEncoder(unittest.TestCase):
 
         assert_that(json.loads(data), equal_to(expected))
 
+    def test_encode_pong(self):
+        expected = {'op': 'pong', 'code': 0, 'data': {'payload': 'abcd'}}
+
+        data = self.encoder.encode_pong('abcd')
+
+        assert_that(json.loads(data), equal_to(expected))
+
 
 class TestProtocolDecoder(unittest.TestCase):
     def setUp(self):
@@ -129,3 +136,11 @@ class TestProtocolDecoder(unittest.TestCase):
 
         assert_that(msg.op, equal_to('token'))
         assert_that(msg.value, equal_to(token))
+
+    def test_decode_ping(self):
+        data = '{"op": "ping", "data": {"payload": "abcd"}}'
+
+        msg = self.decoder.decode(data)
+
+        assert_that(msg.op, equal_to('ping'))
+        assert_that(msg.value, equal_to('abcd'))
