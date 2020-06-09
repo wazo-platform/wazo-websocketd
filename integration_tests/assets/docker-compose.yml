@@ -19,7 +19,6 @@ services:
     image: wazo-websocketd-test
     volumes:
       - "../..:/usr/src/wazo-websocketd"
-      - "./ssl:/usr/local/share/ssl"
       - "./etc/wazo-websocketd/conf.d/50-base.yml:/etc/wazo-websocketd/conf.d/50-base.yml"
     ports:
       - "9502"

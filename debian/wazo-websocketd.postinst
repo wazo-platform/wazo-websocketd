@@ -4,7 +4,7 @@ set -e
 
 LOG_FILENAME='/var/log/wazo-websocketd.log'
 USER='wazo-websocketd'
-GROUP='www-data'
+GROUP=$USER
 DAEMONNAME='wazo-websocketd'
 
 case "$1" in
@@ -19,8 +19,6 @@ case "$1" in
                     $USER
         fi
 
-        adduser --quiet $USER www-data
-
         if [ ! -e "$LOG_FILENAME" ]; then
             touch "$LOG_FILENAME"
         fi
@@ -29,6 +27,10 @@ case "$1" in
         if [[ -z "${previous_version}" ]]; then
             ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
                     /etc/nginx/locations/https-enabled/$DAEMONNAME
+        elif dpkg --compare-versions "${previous_version}" lt '20.09'; then
+            if getent group www-data | grep -q $USER; then
+                deluser --quiet $USER www-data
+            fi
         fi
 
     ;;

@@ -30,9 +30,6 @@
 #  # Listening port
 #  port: 9502
 #
-#  certificate: /usr/share/xivo-certs/server.crt
-#  private_key: /usr/share/xivo-certs/server.key
-#
 #  ping_interval: 60
 
 ## wazo-auth (authentication daemon) connection informations.

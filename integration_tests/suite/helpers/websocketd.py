@@ -1,9 +1,8 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import json
-import ssl
 
 import websockets
 
@@ -15,8 +14,6 @@ class WebSocketdTimeoutError(Exception):
 class WebSocketdClient(object):
 
     _DEFAULT_TIMEOUT = 5
-    _SSL_CONTEXT = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    _SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
     def __init__(self, loop, port):
         self._loop = loop
@@ -33,15 +30,13 @@ class WebSocketdClient(object):
 
     async def connect(self, token_id, version=1):
         self._version = version
-        url = 'wss://localhost:{port}/?'.format(port=self._port)
+        url = 'ws://localhost:{port}/?'.format(port=self._port)
         if token_id is not None:
             url += 'token={}&'.format(token_id)
         if version > 1:
             url += 'version={}&'.format(version)
 
-        self._websocket = await websockets.connect(
-            url, loop=self._loop, ssl=self._SSL_CONTEXT
-        )
+        self._websocket = await websockets.connect(url, loop=self._loop)
 
     async def connect_and_wait_for_init(self, token_id, version=1):
         await self.connect(token_id, version)

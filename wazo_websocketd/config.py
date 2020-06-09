@@ -1,6 +1,7 @@
 # Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import logging
 import argparse
 import ssl
 
@@ -8,6 +9,7 @@ from xivo.chain_map import ChainMap
 from xivo.config_helper import read_config_file_hierarchy
 from xivo.xivo_logging import get_log_level_by_name
 
+logger = logging.getLogger(__name__)
 
 _DEFAULT_CONFIG = {
     'config_file': '/etc/wazo-websocketd/config.yml',
@@ -31,10 +33,10 @@ _DEFAULT_CONFIG = {
         'upstream_exchange_type': 'topic',
     },
     'websocket': {
-        'listen': '0.0.0.0',
+        'listen': '127.0.0.1',
         'port': 9502,
-        'certificate': '/usr/share/xivo-certs/server.crt',
-        'private_key': '/usr/share/xivo-certs/server.key',
+        'certificate': None,
+        'private_key': None,
         'ping_interval': 60,
     },
 }
@@ -79,10 +81,15 @@ def _parse_cli_args():
 def _get_reinterpreted_raw_values(config):
     result = {'websocket': {}}
 
-    ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-    ssl_context.load_cert_chain(
-        config['websocket']['certificate'], config['websocket']['private_key']
-    )
+    ssl_context = None
+    if config['websocket']['certificate'] and config['websocket']['private_key']:
+        logger.warning(
+            'Using service SSL configuration is deprecated. Please use NGINX instead.'
+        )
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        ssl_context.load_cert_chain(
+            config['websocket']['certificate'], config['websocket']['private_key']
+        )
     result['websocket']['ssl'] = ssl_context
 
     result['log_level'] = get_log_level_by_name(config['log_level'])
