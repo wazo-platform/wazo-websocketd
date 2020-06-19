@@ -1,7 +1,6 @@
 debug: true
 websocket:
-  certificate: /usr/local/share/ssl/websocketd/server.crt
-  private_key: /usr/local/share/ssl/websocketd/server.key
+  listen: 0.0.0.0
 
 auth:
   host: auth

@@ -1,5 +1,5 @@
 location ^~ /api/websocketd/ {
-    proxy_pass https://127.0.0.1:9502/;
+    proxy_pass http://127.0.0.1:9502/;
     proxy_http_version 1.1;
     proxy_read_timeout 90s;
 

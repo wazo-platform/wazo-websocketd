@@ -4,7 +4,7 @@ set -e
 
 LOG_FILENAME='/var/log/wazo-websocketd.log'
 USER='wazo-websocketd'
-GROUP='www-data'
+GROUP=$USER
 DAEMONNAME='wazo-websocketd'
 
 case "$1" in
@@ -19,25 +19,6 @@ case "$1" in
                     $USER
         fi
 
-        adduser --quiet $USER www-data
-
-        # move files from xivo-websocketd
-        rm -f /etc/nginx/locations/https-enabled/xivo-websocketd
-        if [ -f /var/log/xivo-websocketd.log ] ; then
-            rename 's/xivo-websocketd/wazo-websocketd/g' /var/log/xivo-websocketd.log*
-            # Fix a previous version where the wazo-websocketd.log was created before renaming
-            rm -f /var/log/xivo-websocketd.log
-        fi
-        rm -rf /run/xivo-websocketd
-        if [ -d /etc/xivo-websocketd/conf.d ] ; then
-            find /etc/xivo-websocketd/conf.d/ -mindepth 1 -exec mv {} /etc/wazo-websocketd/conf.d/ \;
-            rmdir --ignore-fail-on-non-empty -p /etc/xivo-websocketd/conf.d
-        fi
-        if getent passwd xivo-websocketd > /dev/null; then
-            deluser --quiet --system --remove-home xivo-websocketd
-        fi
-        # End of move files from xivo-websocketd
-
         if [ ! -e "$LOG_FILENAME" ]; then
             touch "$LOG_FILENAME"
         fi
@@ -46,6 +27,10 @@ case "$1" in
         if [[ -z "${previous_version}" ]]; then
             ln -sf  /etc/nginx/locations/https-available/$DAEMONNAME \
                     /etc/nginx/locations/https-enabled/$DAEMONNAME
+        elif dpkg --compare-versions "${previous_version}" lt '20.09'; then
+            if getent group www-data | grep -q $USER; then
+                deluser --quiet $USER www-data
+            fi
         fi
 
     ;;
