@@ -95,7 +95,9 @@ class WebSocketdClient(object):
         if msg['op'] != op:
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
         if data and msg.get('data', {}) != data:
-            raise AssertionError('expected data "{}": got data "{}"'.format(data, msg['data']))
+            raise AssertionError(
+                'expected data "{}": got data "{}"'.format(data, msg['data'])
+            )
         return msg
 
     async def op_start(self):
