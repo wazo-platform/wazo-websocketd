@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -143,3 +143,14 @@ class TestRabbitMQRestart(IntegrationTest):
                 await asyncio.sleep(1, loop=self.loop)
             else:
                 return
+
+
+class TestClientPing(IntegrationTest):
+
+    asset = 'basic'
+
+    @run_with_loop
+    async def test_receive_pong_on_client_ping(self):
+        self.auth_server.put_token('my-token-id', acls=['websocketd'])
+        await self.websocketd_client.connect_and_wait_for_init('my-token-id', version=2)
+        await self.websocketd_client.op_ping()

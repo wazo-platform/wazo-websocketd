@@ -31,6 +31,9 @@ class SessionProtocolEncoder(object):
     def encode_event(self, event):
         return self._encode("event", event)
 
+    def encode_pong(self, data):
+        return self._encode("pong", data={"payload": data})
+
     def _encode(self, operation, data=None, code=_CODE_SUCCESS):
         return json.dumps({'op': operation, 'code': code, 'data': data})
 
@@ -65,6 +68,9 @@ class SessionProtocolDecoder(object):
 
     def _decode_subscribe(self, operation, deserialized_data):
         return self._get("event_name", operation, deserialized_data)
+
+    def _decode_ping(self, operation, deserialized_data):
+        return self._get("payload", operation, deserialized_data)
 
     @staticmethod
     def _get(attribute, operation, deserialized_data):

@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+import uuid
 
 import websockets
 
@@ -89,10 +90,14 @@ class WebSocketdClient(object):
             )
         return task.result()
 
-    async def _expect_msg(self, op):
+    async def _expect_msg(self, op, data=None):
         msg = await self.recv_msg()
         if msg['op'] != op:
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
+        if data and msg.get('data', {}) != data:
+            raise AssertionError(
+                'expected data "{}": got data "{}"'.format(data, msg['data'])
+            )
         return msg
 
     async def op_start(self):
@@ -113,6 +118,13 @@ class WebSocketdClient(object):
         if self._started and self._version == 1:
             return
         await self._expect_msg('subscribe')
+
+    async def op_ping(self):
+        payload = str(uuid.uuid4())
+        await self._send_msg({'op': 'ping', 'data': {'payload': payload}})
+        if self._started and self._version == 1:
+            return
+        await self._expect_msg('pong', data={'payload': payload})
 
     async def _send_msg(self, msg):
         await self._websocket.send(json.dumps(msg))
