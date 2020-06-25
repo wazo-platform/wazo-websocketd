@@ -94,7 +94,7 @@ class WebSocketdClient(object):
         msg = await self.recv_msg()
         if msg['op'] != op:
             raise AssertionError('expected op "{}": got op "{}"'.format(op, msg['op']))
-        if data and msg.get('data', {}) != data:
+        if data and msg['data'] != data:
             raise AssertionError(
                 'expected data "{}": got data "{}"'.format(data, msg['data'])
             )
