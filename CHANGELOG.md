@@ -1,5 +1,9 @@
 # Changelog
 
+## 20.09
+
+* Deprecate SSL configuration
+
 ## 20.08
 
 * Add a ping operation to allow client-side ping.
