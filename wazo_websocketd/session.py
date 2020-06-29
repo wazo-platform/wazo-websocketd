@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -244,9 +244,11 @@ class Session(object):
             await self._ws.send(self._protocol_encoder.encode_token())
 
     async def _do_ws_ping(self, msg):
-        logger.debug('received client ping, sending pong')
         if self._protocol_version == 2:
+            logger.debug('received client ping, sending pong')
             await self._ws.send(self._protocol_encoder.encode_pong(msg.value))
+        else:
+            logger.debug('received client ping, only supported in version 2')
 
 
 def _extract_token_id(ws, path):
