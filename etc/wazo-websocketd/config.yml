@@ -18,9 +18,6 @@
 ## User to run process as.
 #user: wazo-websocketd
 
-## PID file.
-#pid_file: /run/wazo-websocketd/wazo-websocketd.pid
-
 ## WebSocket server
 #websocket:
 #

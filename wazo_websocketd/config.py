@@ -18,7 +18,6 @@ _DEFAULT_CONFIG = {
     'log_level': 'info',
     'log_file': '/var/log/wazo-websocketd.log',
     'user': 'wazo-websocketd',
-    'pid_file': '/run/wazo-websocketd/wazo-websocketd.pid',
     'auth': {'host': 'localhost', 'port': 9497, 'prefix': None, 'https': False},
     'auth_check_strategy': 'static',
     'auth_check_static_interval': 60,

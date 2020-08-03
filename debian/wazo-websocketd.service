@@ -2,12 +2,13 @@
 Description=wazo-websocketd server
 ConditionPathExists=!/var/lib/wazo/disabled
 After=network.target rabbitmq-server.service wazo-auth.service
-Before=monit.service
+StartLimitBurst=15
+StartLimitIntervalSec=150
 
 [Service]
-ExecStartPre=/usr/bin/install -d -o wazo-websocketd -g www-data /run/wazo-websocketd
 ExecStart=/usr/bin/python3 -u /usr/bin/wazo-websocketd
-PIDFile=/run/wazo-websocketd/wazo-websocketd.pid
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
