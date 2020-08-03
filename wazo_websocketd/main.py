@@ -4,7 +4,6 @@
 import logging
 
 from xivo import xivo_logging
-from xivo.daemonize import pidfile_context
 from xivo.user_rights import change_user
 
 from wazo_websocketd.auth import Authenticator
@@ -14,14 +13,12 @@ from wazo_websocketd.controller import Controller
 from wazo_websocketd.protocol import SessionProtocolEncoder, SessionProtocolDecoder
 from wazo_websocketd.session import SessionFactory
 
-FOREGROUND = True  # Always in foreground systemd takes care of daemonizing
-
 
 def main():
     config = load_config()
 
     xivo_logging.setup_logging(
-        config['log_file'], FOREGROUND, config['debug'], config['log_level']
+        config['log_file'], debug=config['debug'], log_level=config['log_level']
     )
     xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
 
@@ -37,7 +34,5 @@ def main():
         config, authenticator, bus_event_service, protocol_encoder, protocol_decoder
     )
     controller = Controller(config, bus_event_service, session_factory)
-
-    with pidfile_context(config['pid_file'], FOREGROUND):
-        controller.setup()
-        controller.run()
+    controller.setup()
+    controller.run()

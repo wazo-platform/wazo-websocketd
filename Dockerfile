@@ -4,7 +4,6 @@ ADD . /usr/src/wazo-websocketd
 ADD etc/wazo-websocketd/config.yml /etc/wazo-websocketd/
 RUN mkdir /etc/wazo-websocketd/conf.d/
 RUN adduser --quiet --system --group --no-create-home --home /var/lib/wazo-websocketd wazo-websocketd
-RUN install -d -o wazo-websocketd -g wazo-websocketd /run/wazo-websocketd/
 
 WORKDIR /usr/src/wazo-websocketd
 
