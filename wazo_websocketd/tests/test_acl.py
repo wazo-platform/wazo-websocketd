@@ -82,3 +82,40 @@ class TestACLCheck(unittest.TestCase):
         assert_that(acl_check.matches_required_acl('foo.bar.123'), equal_to(False))
         assert_that(acl_check.matches_required_acl('foo.bar.123.bar'))
         assert_that(acl_check.matches_required_acl('foo.bar.toto.123.bar'))
+
+    def test_does_not_match_required_acls_when_negating(self):
+        acls = ['!foo.me.bar']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.123.bar'), equal_to(False))
+
+    def test_does_not_match_required_acls_when_negating_multiple_identical_acls(self):
+        acls = ['foo.me.bar', '!foo.me.bar', 'foo.me.bar']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.123.bar'), equal_to(False))
+
+    def test_does_not_match_required_acls_when_negating_ending_hashtag(self):
+        acls = ['!foo.me.bar.#', 'foo.me.bar.123']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.123.bar.123'), equal_to(False))
+
+    def test_does_not_match_required_acls_when_negating_hashtag_sublevel(self):
+        acls = ['foo.#', '!foo.me.bar.#', 'foo.me.bar.123']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.123.bar.123'), equal_to(False))
+
+    def test_matches_required_acl_when_negating_specific(self):
+        acls = ['foo.*.bar', '!foo.123.bar']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.bar.bar'))
+        assert_that(acl_check.matches_required_acl('foo.123.bar'), equal_to(False))
+
+    def test_does_not_match_required_acl_when_negating_toplevel(self):
+        acls = ['!*.bar', 'foo.bar']
+        acl_check = ACLCheck(self.user_uuid, acls)
+
+        assert_that(acl_check.matches_required_acl('foo.bar'), equal_to(False))
