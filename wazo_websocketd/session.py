@@ -66,7 +66,9 @@ class EventTransmitter(object):
 
     def set_token(self, token):
         self._token = token
-        self._access_check = AccessCheck(token['metadata']['uuid'], token['acl'])
+        self._access_check = AccessCheck(
+            token['metadata']['uuid'], token['session_uuid'], token['acl']
+        )
 
     def get_token(self):
         return self._token
