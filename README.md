@@ -43,3 +43,4 @@ scenarios:
   * `artillery run benchmark.yml`
 
 Note: You may need to increase file descriptors of `root`: `/etc/security/limits.d/asterisk.conf`
+
