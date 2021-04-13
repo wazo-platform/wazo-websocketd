@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -24,7 +24,7 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
         if self.auth_server:
-            self.auth_server.put_token(self.valid_token_id, acls=['websocketd'])
+            self.auth_server.put_token(self.valid_token_id, acl=['websocketd'])
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())

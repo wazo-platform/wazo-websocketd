@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
@@ -15,8 +15,8 @@ class AuthServer(object):
         self._session = requests.Session()
         disable_warnings()
 
-    def put_token(self, token_id, user_uuid='123-456', acls=['websocketd']):
-        token = {'token': token_id, 'acls': acls, 'metadata': {'uuid': user_uuid}}
+    def put_token(self, token_id, user_uuid='123-456', acl=['websocketd']):
+        token = {'token': token_id, 'acl': acl, 'metadata': {'uuid': user_uuid}}
         url = '{}/_set_token'.format(self._base_url)
         headers = {'Content-Type': 'application/json'}
         r = self._session.post(url, headers=headers, data=json.dumps(token))
