@@ -20,6 +20,7 @@ services:
     volumes:
       - "../..:/usr/src/wazo-websocketd"
       - "./etc/wazo-websocketd/conf.d/50-base.yml:/etc/wazo-websocketd/conf.d/50-base.yml"
+      # - "${LOCAL_GIT_REPOS}/xivo-lib-python/xivo:/opt/venv/lib/python3.7/site-packages/xivo"
     ports:
       - "9502"
     environment:

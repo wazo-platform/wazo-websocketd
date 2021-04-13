@@ -3,12 +3,12 @@
 
 import asyncio
 import logging
+import websockets
 
 from urllib.parse import urlparse, parse_qsl
 
-import websockets
+from xivo.auth_verifier import AccessCheck
 
-from .acl import ACLCheck
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -66,7 +66,7 @@ class EventTransmitter(object):
 
     def set_token(self, token):
         self._token = token
-        self._acl_check = ACLCheck(token['metadata']['uuid'], token['acl'])
+        self._access_check = AccessCheck(token['metadata']['uuid'], token['acl'])
 
     def get_token(self):
         return self._token
@@ -86,7 +86,7 @@ class EventTransmitter(object):
 
     def put(self, bus_event):
         if self._all_events or bus_event.name in self._event_names:
-            if self._acl_check.matches_required_acl(bus_event.acl):
+            if self._access_check.matches_required_access(bus_event.acl):
                 self._queue.put_nowait(bus_event)
 
     def put_connection_lost(self):
