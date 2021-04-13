@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import re
@@ -11,16 +11,16 @@ import re
 
 
 class ACLCheck(object):
-    def __init__(self, user_uuid, acls):
+    def __init__(self, user_uuid, acl):
         self._positive_acl_regexes = [
-            self._transform_acl_to_regex(user_uuid, acl)
-            for acl in acls
-            if not acl.startswith('!')
+            self._transform_acl_to_regex(user_uuid, access)
+            for access in acl
+            if not access.startswith('!')
         ]
         self._negative_acl_regexes = [
-            self._transform_acl_to_regex(user_uuid, acl[1:])
-            for acl in acls
-            if acl.startswith('!')
+            self._transform_acl_to_regex(user_uuid, access[1:])
+            for access in acl
+            if access.startswith('!')
         ]
 
     def matches_required_acl(self, required_acl):

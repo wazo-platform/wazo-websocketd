@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -68,20 +68,20 @@ class TestBus(IntegrationTest):
         event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
-        self.auth_server.put_token('useless-token', acls=['websocketd'])
+        self.auth_server.put_token('useless-token', acl=['websocketd'])
         await self.websocketd_client.op_token("useless-token")
         self.bus_client.publish_event(self.event)
         await self.websocketd_client.wait_for_nothing()
 
         # Got right again
-        self.auth_server.put_token('my-new-token-id', acls=['websocketd', 'event.foo'])
+        self.auth_server.put_token('my-new-token-id', acl=['websocketd', 'event.foo'])
         await self.websocketd_client.op_token("my-new-token-id")
         self.bus_client.publish_event(self.event)
         event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
     async def _prepare(self, skip_start=False, version=1):
-        self.auth_server.put_token('my-token-id', acls=['websocketd', 'event.foo'])
+        self.auth_server.put_token('my-token-id', acl=['websocketd', 'event.foo'])
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init(
             'my-token-id', version=version
@@ -151,6 +151,6 @@ class TestClientPing(IntegrationTest):
 
     @run_with_loop
     async def test_receive_pong_on_client_ping(self):
-        self.auth_server.put_token('my-token-id', acls=['websocketd'])
+        self.auth_server.put_token('my-token-id', acl=['websocketd'])
         await self.websocketd_client.connect_and_wait_for_init('my-token-id', version=2)
         await self.websocketd_client.op_ping()
