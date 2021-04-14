@@ -1,30 +1,25 @@
 # Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import json
-
-import requests
-
 from requests.packages.urllib3 import disable_warnings
+from xivo_test_helpers.auth import AuthClient, MockUserToken
 
 
 class AuthServer(object):
     def __init__(self, loop, port):
         self._loop = loop
-        self._base_url = 'http://localhost:{port}'.format(port=port)
-        self._session = requests.Session()
+        self._client = AuthClient('localhost', port)
         disable_warnings()
 
-    def put_token(self, token_id, user_uuid='123-456', acl=['websocketd']):
-        token = {'token': token_id, 'acl': acl, 'metadata': {'uuid': user_uuid}}
-        url = '{}/_set_token'.format(self._base_url)
-        headers = {'Content-Type': 'application/json'}
-        r = self._session.post(url, headers=headers, data=json.dumps(token))
-        if r.status_code != 204:
-            r.raise_for_status()
+    def put_token(
+        self,
+        token_id,
+        user_uuid='123-456',
+        session_uuid='my-session',
+        acl=['websocketd'],
+    ):
+        token = MockUserToken(token_id, user_uuid, session_uuid=session_uuid, acl=acl)
+        self._client.set_token(token)
 
     def remove_token(self, token_id):
-        url = '{}/_remove_token/{}'.format(self._base_url, token_id)
-        r = self._session.delete(url)
-        if r.status_code != 204:
-            r.raise_for_status()
+        self._client.revoke_token(token_id)

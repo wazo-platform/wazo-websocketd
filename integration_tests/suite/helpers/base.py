@@ -24,7 +24,9 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
         self.auth_server = self.new_auth_server()
         self.bus_client = self.new_bus_client()
         if self.auth_server:
-            self.auth_server.put_token(self.valid_token_id, acl=['websocketd'])
+            self.auth_server.put_token(
+                self.valid_token_id, session_uuid='my-session', acl=['websocketd']
+            )
 
     def tearDown(self):
         self.loop.run_until_complete(self.websocketd_client.close())
