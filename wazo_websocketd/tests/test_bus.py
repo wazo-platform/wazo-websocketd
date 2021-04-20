@@ -1,14 +1,13 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import unittest
 
-from unittest.mock import Mock, sentinel
-
 from hamcrest import assert_that, equal_to, none, same_instance
+from unittest.mock import Mock, sentinel
+from xivo.auth_verifier import AccessCheck
 
-from ..acl import ACLCheck
 from ..bus import _BusEvent, _decode_bus_msg
 from ..exception import BusConnectionLostError
 from ..session import EventTransmitter
@@ -79,7 +78,7 @@ class TestBusEventTransmitter(unittest.TestCase):
     def setUp(self):
         self.bus_event = _new_bus_event('foo', acl='some.thing')
         self.event_transmitter = EventTransmitter()
-        self.event_transmitter._acl_check = Mock(ACLCheck)
+        self.event_transmitter._access_check = Mock(AccessCheck)
 
     def test_get_connection_lost(self):
         self.event_transmitter.put_connection_lost()
@@ -115,12 +114,14 @@ class TestBusEventTransmitter(unittest.TestCase):
         assert_that(self.event_transmitter._queue.empty())
 
     def test_get_event_non_matching_acl(self):
-        self.event_transmitter._acl_check.matches_required_acl.return_value = False
+        self.event_transmitter._access_check.matches_required_access.return_value = (
+            False
+        )
 
         self.event_transmitter.subscribe_to_event(self.bus_event.name)
         self.event_transmitter.put(self.bus_event)
 
-        self.event_transmitter._acl_check.matches_required_acl.assert_called_once_with(
+        self.event_transmitter._access_check.matches_required_access.assert_called_once_with(
             self.bus_event.acl
         )
         assert_that(self.event_transmitter._queue.empty())
