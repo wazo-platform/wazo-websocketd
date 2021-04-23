@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -31,7 +31,7 @@ class WebSocketdClient(object):
 
     async def connect(self, token_id, version=1):
         self._version = version
-        url = 'ws://localhost:{port}/?'.format(port=self._port)
+        url = 'ws://127.0.0.1:{port}/?'.format(port=self._port)
         if token_id is not None:
             url += 'token={}&'.format(token_id)
         if version > 1:

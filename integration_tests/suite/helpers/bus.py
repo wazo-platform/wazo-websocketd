@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
@@ -15,7 +15,7 @@ class BusClient(object):
 
     async def connect(self):
         self._connection = await asynqp.connect(
-            'localhost', loop=self._loop, port=self._port
+            '127.0.0.1', loop=self._loop, port=self._port
         )
         self._channel = await self._connection.open_channel()
         self._exchange = await self._channel.declare_exchange(

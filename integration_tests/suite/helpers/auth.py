@@ -8,7 +8,7 @@ from xivo_test_helpers.auth import AuthClient, MockUserToken
 class AuthServer(object):
     def __init__(self, loop, port):
         self._loop = loop
-        self._client = AuthClient('localhost', port)
+        self._client = AuthClient('127.0.0.1', port)
         disable_warnings()
 
     def put_token(
