@@ -6,4 +6,4 @@ kombu==4.6.11
 pyyaml==3.13
 requests==2.21.0
 stevedore==1.29.0
-websockets==7.0
+websockets==9.1
