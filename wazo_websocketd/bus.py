@@ -27,6 +27,7 @@ ROUTING_KEYS = [
     'directory.#',
     'faxes.#',
     'lines.#',
+    'meetings.#',
     'plugin.#',
     'service.#',
     'status.#',
