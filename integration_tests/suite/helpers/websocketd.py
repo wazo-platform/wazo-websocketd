@@ -37,7 +37,7 @@ class WebSocketdClient(object):
         if version > 1:
             url += 'version={}&'.format(version)
 
-        self._websocket = await websockets.connect(url, loop=self._loop)
+        self._websocket = await websockets.connect(url)
 
     async def connect_and_wait_for_init(self, token_id, version=1):
         await self.connect(token_id, version)
@@ -82,7 +82,7 @@ class WebSocketdClient(object):
     async def _recv(self):
         timeout = self.timeout
         task = self._loop.create_task(self._websocket.recv())
-        await asyncio.wait([task], loop=self._loop, timeout=timeout)
+        await asyncio.wait([task], timeout=timeout)
         if not task.done():
             task.cancel()
             raise WebSocketdTimeoutError(

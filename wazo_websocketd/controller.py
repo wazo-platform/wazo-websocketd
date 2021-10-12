@@ -1,11 +1,10 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import signal
 import logging
 
-import asynqp
 import websockets
 
 logger = logging.getLogger(__name__)
@@ -23,7 +22,6 @@ class Controller(object):
         loop = asyncio.get_event_loop()
         loop.add_signal_handler(signal.SIGINT, self._stop)
         loop.add_signal_handler(signal.SIGTERM, self._stop)
-        loop.set_exception_handler(self._exception_handler)
         start_ws_server = websockets.serve(
             self._session_factory.ws_handler,
             self._ws_host,
@@ -40,21 +38,13 @@ class Controller(object):
         finally:
             loop.run_until_complete(
                 asyncio.gather(
-                    asyncio.ensure_future(self._ws_server.wait_closed(), loop=loop),
-                    asyncio.ensure_future(self._bus_event_service.close(), loop=loop),
+                    asyncio.ensure_future(self._ws_server.wait_closed()),
+                    asyncio.ensure_future(self._bus_event_service.close()),
                 )
             )
             loop.run_until_complete(loop.shutdown_asyncgens())
             loop.close()
             logger.info('wazo-websocketd stopped')
-
-    def _exception_handler(self, loop, context):
-        exception = context.get('exception')
-        if isinstance(exception, asynqp.exceptions.ConnectionLostError):
-            logger.warning('bus connection has been lost')
-            self._bus_event_service.on_connection_lost()
-        else:
-            loop.default_exception_handler(context)
 
     def _stop(self):
         logger.info('wazo-websocketd stopping...')

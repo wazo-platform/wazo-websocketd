@@ -7,16 +7,13 @@ import asynqp
 
 
 class BusClient(object):
-    def __init__(self, loop, port):
-        self._loop = loop
+    def __init__(self, port):
         self._port = port
         self._connection = None
         self._exchange = None
 
     async def connect(self):
-        self._connection = await asynqp.connect(
-            '127.0.0.1', loop=self._loop, port=self._port
-        )
+        self._connection = await asynqp.connect('127.0.0.1', port=self._port)
         self._channel = await self._connection.open_channel()
         self._exchange = await self._channel.declare_exchange(
             'wazo-websocketd', 'headers', durable=True

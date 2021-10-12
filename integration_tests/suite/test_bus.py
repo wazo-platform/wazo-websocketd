@@ -89,7 +89,7 @@ class TestBus(IntegrationTest):
         if not skip_start:
             await self.websocketd_client.op_start()
         await self.websocketd_client.op_subscribe(self.subscribe_event_name)
-        await asyncio.sleep(1, loop=self.loop)
+        await asyncio.sleep(1)
         self.bus_client.publish_event(self.event)
 
 
@@ -140,7 +140,7 @@ class TestRabbitMQRestart(IntegrationTest):
                     self.valid_token_id
                 )
             except websockets.ConnectionClosed:
-                await asyncio.sleep(1, loop=self.loop)
+                await asyncio.sleep(1)
             else:
                 return
 

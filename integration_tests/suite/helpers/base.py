@@ -46,19 +46,17 @@ class IntegrationTest(asset_launching_test_case.AssetLaunchingTestCase):
             asset_launching_test_case.NoSuchService,
         ):
             return None
-        return AuthServer(self.loop, auth_port)
+        return AuthServer(auth_port)
 
     def new_bus_client(self):
         bus_port = self.service_port(5672, 'rabbitmq')
-        return BusClient(self.loop, bus_port)
+        return BusClient(bus_port)
 
 
 def run_with_loop(f):
     # decorator to use on test methods of class deriving from IntegrationTest
     @functools.wraps(f)
     def wrapper(self, *args, **kwargs):
-        self.loop.run_until_complete(
-            asyncio.ensure_future(f(self, *args, **kwargs), loop=self.loop)
-        )
+        self.loop.run_until_complete(asyncio.ensure_future(f(self, *args, **kwargs)))
 
     return wrapper
