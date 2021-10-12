@@ -38,8 +38,8 @@ class Controller(object):
         finally:
             loop.run_until_complete(
                 asyncio.gather(
-                    asyncio.ensure_future(self._ws_server.wait_closed(), loop=loop),
-                    asyncio.ensure_future(self._bus_event_service.close(), loop=loop),
+                    asyncio.ensure_future(self._ws_server.wait_closed()),
+                    asyncio.ensure_future(self._bus_event_service.close()),
                 )
             )
             loop.run_until_complete(loop.shutdown_asyncgens())
