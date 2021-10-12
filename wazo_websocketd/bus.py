@@ -84,6 +84,7 @@ class _BusConnection(object):
         self._exchange_name = config['bus']['exchange_name']
         self._exchange_type = config['bus']['exchange_type']
         self._msg_received_callback = None
+        self._connection_lost_callback = None
         self._connected = False
         self._closed = False
 
@@ -104,6 +105,9 @@ class _BusConnection(object):
         # Must be called before calling "connect()". Can't be changed once connected.
         self._msg_received_callback = callback
 
+    def set_connection_lost_callback(self, callback):
+        self._connection_lost_callback = callback
+
     @property
     def connected(self):
         return self._connected
@@ -118,7 +122,11 @@ class _BusConnection(object):
         self._connected = True
         try:
             self._connection = await asynqp.connect(
-                self._host, self._port, self._username, self._password
+                self._host,
+                self._port,
+                self._username,
+                self._password,
+                on_connection_close=self.on_connection_closed,
             )
             self._channel = await self._connection.open_channel()
             self._exchange = await self._channel.declare_exchange(
@@ -142,8 +150,11 @@ class _BusConnection(object):
             raise BusConnectionError('not connected')
         await self._queue.bind(self._exchange, routing_key)
 
-    def on_connection_lost(self):
-        self._connected = False
+    async def on_connection_closed(self, exception):
+        logger.debug('Connection closed: %s', exception)
+        if self._connected:
+            self._connected = False
+            self._connection_lost_callback(exception)
 
 
 class _BusEventService(object):
@@ -151,12 +162,13 @@ class _BusEventService(object):
         # Becomes the owner of the bus_connection
         self._bus_connection = bus_connection
         self._bus_connection.set_msg_received_callback(self._on_msg_received)
+        self._bus_connection.set_connection_lost_callback(
+            lambda exc: self.on_connection_lost()
+        )
         self._lock = asyncio.Lock()
         self._bus_event_consumers = set()
 
     def on_connection_lost(self):
-        # Must only be called by the loop exception handler when a ConnectionLostError is raised
-        self._bus_connection.on_connection_lost()
         for bus_event_consumer in self._bus_event_consumers:
             bus_event_consumer.put_connection_lost()
 
