@@ -3,7 +3,7 @@ services:
   sync:
     image: wazoplatform/wait
     environment:
-      TIMEOUT: "15"
+      TIMEOUT: ${INTEGRATION_TEST_TIMEOUT}
 
   auth:
     image: wazoplatform/wazo-auth-mock
