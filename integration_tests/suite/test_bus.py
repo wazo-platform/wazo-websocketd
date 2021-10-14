@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
+import os
 
 import websockets
 
@@ -134,13 +135,14 @@ class TestRabbitMQRestart(IntegrationTest):
 
     async def _try_connect(self):
         # might not work on the first try since rabbitmq might not be ready
-        for t in range(8):
+        timeout = os.environ.get('INTEGRATION_TEST_TIMEOUT', 30)
+        for _ in range(timeout):
             try:
                 await self.websocketd_client.connect_and_wait_for_init(
                     self.valid_token_id
                 )
             except websockets.ConnectionClosed:
-                await asyncio.sleep(2 << t)
+                await asyncio.sleep(1)
             else:
                 return
 
