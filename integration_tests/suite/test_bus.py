@@ -135,7 +135,7 @@ class TestRabbitMQRestart(IntegrationTest):
 
     async def _try_connect(self):
         # might not work on the first try since rabbitmq might not be ready
-        timeout = os.environ.get('INTEGRATION_TEST_TIMEOUT', 30)
+        timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
         for _ in range(timeout):
             try:
                 await self.websocketd_client.connect_and_wait_for_init(
