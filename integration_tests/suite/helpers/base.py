@@ -4,7 +4,7 @@
 import asyncio
 import functools
 
-from xivo_test_helpers import asset_launching_test_case
+from wazo_test_helpers import asset_launching_test_case
 
 from .auth import AuthServer
 from .bus import BusClient

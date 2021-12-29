@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from requests.packages.urllib3 import disable_warnings
-from xivo_test_helpers.auth import AuthClient, MockUserToken
+from wazo_test_helpers.auth import AuthClient, MockUserToken
 
 
 class AuthServer(object):
