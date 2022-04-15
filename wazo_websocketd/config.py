@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
@@ -6,7 +6,7 @@ import argparse
 import ssl
 
 from xivo.chain_map import ChainMap
-from xivo.config_helper import read_config_file_hierarchy
+from xivo.config_helper import read_config_file_hierarchy, parse_config_file
 from xivo.xivo_logging import get_log_level_by_name
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,13 @@ _DEFAULT_CONFIG = {
     'log_level': 'info',
     'log_file': '/var/log/wazo-websocketd.log',
     'user': 'wazo-websocketd',
-    'auth': {'host': 'localhost', 'port': 9497, 'prefix': None, 'https': False},
+    'auth': {
+        'host': 'localhost',
+        'port': 9497,
+        'prefix': None,
+        'https': False,
+        'key_file': '/var/lib/wazo-auth-keys/wazo-websocketd-key.yml',
+    },
     'auth_check_strategy': 'static',
     'auth_check_static_interval': 60,
     'bus': {
@@ -44,10 +50,13 @@ _DEFAULT_CONFIG = {
 def load_config():
     cli_config = _parse_cli_args()
     file_config = read_config_file_hierarchy(ChainMap(cli_config, _DEFAULT_CONFIG))
+    service_key = _load_key_file(ChainMap(cli_config, file_config, _DEFAULT_CONFIG))
     reinterpreted_config = _get_reinterpreted_raw_values(
         ChainMap(cli_config, file_config, _DEFAULT_CONFIG)
     )
-    return ChainMap(reinterpreted_config, cli_config, file_config, _DEFAULT_CONFIG)
+    return ChainMap(
+        reinterpreted_config, cli_config, service_key, file_config, _DEFAULT_CONFIG
+    )
 
 
 def _parse_cli_args():
@@ -94,3 +103,15 @@ def _get_reinterpreted_raw_values(config):
     result['log_level'] = get_log_level_by_name(config['log_level'])
 
     return result
+
+
+def _load_key_file(config):
+    key_file = parse_config_file(config['auth']['key_file'])
+    if not key_file:
+        return {}
+    return {
+        'auth': {
+            'username': key_file['service_id'],
+            'password': key_file['service_key'],
+        }
+    }

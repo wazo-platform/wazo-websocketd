@@ -1,22 +1,23 @@
-# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import signal
 import logging
-
 import websockets
+
+from .auth import TokenRenewer, set_master_tenant
 
 logger = logging.getLogger(__name__)
 
 
 class Controller(object):
-    def __init__(self, config, bus_event_service, session_factory):
+    def __init__(self, config, session_factory):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']
         self._ws_ssl = config['websocket']['ssl']
-        self._bus_event_service = bus_event_service
         self._session_factory = session_factory
+        self._token_renewer = TokenRenewer(config)
 
     def setup(self):
         loop = asyncio.get_event_loop()
@@ -29,17 +30,18 @@ class Controller(object):
             ssl=self._ws_ssl,
         )
         self._ws_server = loop.run_until_complete(start_ws_server)
+        self._token_renewer.subscribe(set_master_tenant, details=True)
 
     def run(self):
         logger.info('wazo-websocketd starting...')
         loop = asyncio.get_event_loop()
         try:
-            loop.run_forever()
+            with self._token_renewer:
+                loop.run_forever()
         finally:
             loop.run_until_complete(
                 asyncio.gather(
                     asyncio.ensure_future(self._ws_server.wait_closed()),
-                    asyncio.ensure_future(self._bus_event_service.close()),
                 )
             )
             loop.run_until_complete(loop.shutdown_asyncgens())
