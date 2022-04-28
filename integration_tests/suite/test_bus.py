@@ -1,11 +1,9 @@
-# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
-import os
 
-import websockets
-
+from .helpers.constants import MASTER_TENANT_UUID, TENANT1_UUID, TENANT2_UUID
 from .helpers.base import IntegrationTest, run_with_loop
 
 
@@ -17,6 +15,12 @@ class TestBus(IntegrationTest):
         super().setUp()
         self.event = {'name': 'foo', 'required_acl': None}
         self.subscribe_event_name = self.event['name']
+        self.tenant_uuid = TENANT1_UUID
+        self.token = self.auth_client.make_token(acl=['websocketd', 'event.foo'])
+
+    def tearDown(self):
+        self.auth_client.revoke_token(self.token)
+        super().tearDown()
 
     @run_with_loop
     async def test_receive_message_with_matching_event_name(self):
@@ -69,29 +73,59 @@ class TestBus(IntegrationTest):
         event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
-        self.auth_server.put_token('useless-token', acl=['websocketd'])
-        await self.websocketd_client.op_token("useless-token")
-        self.bus_client.publish_event(self.event)
-        await self.websocketd_client.wait_for_nothing()
+        with self.auth_client.token(acl=['websocketd']) as token:
+            await self.websocketd_client.op_token(token)
+            await self.bus_client.publish(self.event, self.tenant_uuid)
+            await self.websocketd_client.wait_for_nothing()
 
         # Got right again
-        self.auth_server.put_token('my-new-token-id', acl=['websocketd', 'event.foo'])
-        await self.websocketd_client.op_token("my-new-token-id")
-        self.bus_client.publish_event(self.event)
-        event = await self.websocketd_client.recv_msg()
+        with self.auth_client.token(acl=['websocketd', 'event.foo']) as token:
+            await self.websocketd_client.op_token(token)
+            await self.bus_client.publish(self.event, self.tenant_uuid)
+            event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
-    async def _prepare(self, skip_start=False, version=1):
-        self.auth_server.put_token('my-token-id', acl=['websocketd', 'event.foo'])
+    @run_with_loop
+    async def test_dont_receive_message_from_other_tenant(self):
+        self.event = {'name': 'foo', 'required_acl': 'event.foo'}
+        await self._prepare(skip_publish=True)
+        await self.bus_client.publish(self.event, tenant_uuid=TENANT2_UUID)
+        await self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    async def test_dont_receive_message_from_master_tenant_when_user(self):
+        self.event = {'name': 'foo', 'required_acl': 'event.foo'}
+        await self._prepare(skip_publish=True)
+        await self.bus_client.publish(self.event, tenant_uuid=MASTER_TENANT_UUID)
+        await self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    async def test_receive_all_messages_when_master_tenant(self):
+        self.event = {'name': 'foo', 'required_acl': 'event.foo'}
+        self.tenant_uuid = MASTER_TENANT_UUID
+        with self.auth_client.token(
+            tenant_uuid=MASTER_TENANT_UUID, acl=['websocketd', 'event.foo']
+        ) as token:
+            await self.bus_client.connect()
+            await self.websocketd_client.connect_and_wait_for_init(token)
+            await self.websocketd_client.op_start()
+            await self.websocketd_client.op_subscribe('foo')
+            await asyncio.sleep(1)
+            await self.bus_client.publish(self.event, tenant_uuid=TENANT1_UUID)
+            events = await self.websocketd_client.recv_msg()
+        self.assertEqual(events, self.event)
+
+    async def _prepare(self, skip_start=False, version=1, skip_publish=False):
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init(
-            'my-token-id', version=version
+            self.token, version=version
         )
         if not skip_start:
             await self.websocketd_client.op_start()
         await self.websocketd_client.op_subscribe(self.subscribe_event_name)
         await asyncio.sleep(1)
-        self.bus_client.publish_event(self.event)
+        if not skip_publish:
+            await self.bus_client.publish(self.event, self.tenant_uuid)
 
 
 class TestBusConnectionLost(IntegrationTest):
@@ -100,51 +134,39 @@ class TestBusConnectionLost(IntegrationTest):
 
     @run_with_loop
     async def test_ws_connection_is_closed_when_bus_connection_is_lost(self):
-        await self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
-        await self.websocketd_client.op_subscribe('foo')
-        self.stop_service('rabbitmq')
+        with self.auth_client.token() as token:
+            await self.websocketd_client.connect_and_wait_for_init(token)
+            await self.websocketd_client.op_subscribe('foo')
+            self.stop_service('rabbitmq')
 
-        await self.websocketd_client.wait_for_close(code=1011)
+            await self.websocketd_client.wait_for_close(code=1011)
 
 
 class TestRabbitMQRestart(IntegrationTest):
 
     asset = 'basic'
 
-    def setUp(self):
-        super().setUp()
-        self.event = {'name': 'foo', 'required_acl': None}
-
     @run_with_loop
     async def test_can_connect_after_rabbitmq_restart(self):
-        await self.websocketd_client.connect_and_wait_for_init(self.valid_token_id)
-        await self.websocketd_client.op_subscribe('foo')
-        self.restart_service('rabbitmq')
-        await self.websocketd_client.wait_for_close(code=1011)
-        await self.websocketd_client.close()
-        await self._try_connect()
-        await self.websocketd_client.op_subscribe('foo')
-        await self.websocketd_client.op_start()
-        self.bus_client = self.new_bus_client()
-        await self.bus_client.connect()
-        self.bus_client.publish_event(self.event)
+        event = {'name': 'foo', 'required_acl': None}
+        tenant_uuid = TENANT1_UUID
 
-        event = await self.websocketd_client.recv_msg()
+        with self.auth_client.token(tenant_uuid=tenant_uuid) as token:
+            await self.websocketd_client.connect_and_wait_for_init(token)
+            await self.websocketd_client.op_subscribe('foo')
+            self.restart_service('rabbitmq')
+            await self.websocketd_client.wait_for_close(code=1011)
+            await self.websocketd_client.close()
+            self.bus_client = self.make_bus()
+            await self.bus_client.connect()
+            await self.wait_strategy.await_for_connection(self)
+            await self.websocketd_client.connect_and_wait_for_init(token)
+            await self.websocketd_client.op_subscribe('foo')
+            await self.websocketd_client.op_start()
+            await self.bus_client.publish(event, tenant_uuid)
 
-        self.assertEqual(event, self.event)
-
-    async def _try_connect(self):
-        # might not work on the first try since rabbitmq might not be ready
-        timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
-        for _ in range(timeout):
-            try:
-                await self.websocketd_client.connect_and_wait_for_init(
-                    self.valid_token_id
-                )
-            except websockets.ConnectionClosed:
-                await asyncio.sleep(1)
-            else:
-                return
+            received_event = await self.websocketd_client.recv_msg()
+        self.assertEqual(event, received_event)
 
 
 class TestClientPing(IntegrationTest):
@@ -153,6 +175,6 @@ class TestClientPing(IntegrationTest):
 
     @run_with_loop
     async def test_receive_pong_on_client_ping(self):
-        self.auth_server.put_token('my-token-id', acl=['websocketd'])
-        await self.websocketd_client.connect_and_wait_for_init('my-token-id', version=2)
-        await self.websocketd_client.op_ping()
+        with self.auth_client.token() as token:
+            await self.websocketd_client.connect_and_wait_for_init(token, version=2)
+            await self.websocketd_client.op_ping()
