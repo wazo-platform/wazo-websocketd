@@ -1,5 +1,5 @@
 https://github.com/wazo-platform/wazo-test-helpers/archive/master.zip
-asynqp
+aioamqp
 pytest
 requests
 websockets

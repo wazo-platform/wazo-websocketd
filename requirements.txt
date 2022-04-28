@@ -1,9 +1,8 @@
 https://github.com/wazo-platform/xivo-lib-python/archive/master.zip
 https://github.com/wazo-platform/wazo-lib-rest-client/archive/master.zip
 https://github.com/wazo-platform/wazo-auth-client/archive/master.zip
-asynqp==0.6
-kombu==4.6.11
 pyyaml==3.13
 requests==2.21.0
 stevedore==1.29.0
 websockets==7.0
+aioamqp==0.12
