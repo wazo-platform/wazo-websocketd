@@ -21,6 +21,7 @@ def main():
         config['log_file'], debug=config['debug'], log_level=config['log_level']
     )
     xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
+    xivo_logging.silence_loggers(['aioamqp'], logging.CRITICAL)
 
     if config['user']:
         change_user(config['user'])
