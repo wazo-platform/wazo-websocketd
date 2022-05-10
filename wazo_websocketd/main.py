@@ -7,7 +7,7 @@ from xivo import xivo_logging
 from xivo.user_rights import change_user
 
 from wazo_websocketd.auth import Authenticator
-from wazo_websocketd.bus import create_or_update_exchange, BusConsumerFactory
+from wazo_websocketd.bus import create_or_update_exchange, BusService
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
 from wazo_websocketd.protocol import SessionProtocolEncoder, SessionProtocolDecoder
@@ -27,12 +27,12 @@ def main():
 
     create_or_update_exchange(config)
     authenticator = Authenticator(config)
-    bus_service = BusConsumerFactory(**config['bus'])
+    bus_service = BusService(**config['bus'])
     protocol_encoder = SessionProtocolEncoder()
     protocol_decoder = SessionProtocolDecoder()
     session_factory = SessionFactory(
         config, authenticator, bus_service, protocol_encoder, protocol_decoder
     )
-    controller = Controller(config, session_factory)
+    controller = Controller(config, session_factory, bus_service)
     controller.setup()
     controller.run()
