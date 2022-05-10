@@ -301,7 +301,9 @@ class BusConsumer(object):
         await channel.basic_qos(prefetch_count=1, prefetch_size=0)
 
         # Create exclusive queue on exchange
-        response = await channel.queue('', durable=False, exclusive=True)
+        response = await channel.queue(
+            '', durable=False, auto_delete=True, exclusive=True
+        )
         if response['queue'] is None:
             raise BusConnectionError
         self._amqp_queue = response['queue']
