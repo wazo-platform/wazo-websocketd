@@ -1,6 +1,7 @@
 # Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import os
 import json
 import aioamqp
 import asyncio
@@ -8,17 +9,19 @@ from aioamqp.exceptions import AmqpClosedConnection
 
 
 class BusClient(object):
+    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
+
     def __init__(self, port):
         self._port = port
         self._transport = None
         self._protocol = None
         self._channel = None
 
-    async def connect(self, timeout=60):
-        await self._try_connect(timeout=timeout)
+    async def connect(self):
+        await self._try_connect(timeout=self.timeout)
         self._channel = await self._protocol.channel()
 
-    async def _try_connect(self, timeout=30):
+    async def _try_connect(self, timeout):
         for _ in range(timeout):
             try:
                 self._transport, self._protocol = await aioamqp.connect(
