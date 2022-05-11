@@ -10,7 +10,7 @@ from unittest.mock import Mock
 from ..controller import Controller
 
 
-class BusServiceMock(object):
+class BusServiceMock:
     def __enter__(self):
         pass
 

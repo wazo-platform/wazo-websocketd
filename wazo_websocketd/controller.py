@@ -11,7 +11,7 @@ from .auth import ServiceTokenRenewer, set_master_tenant
 logger = logging.getLogger(__name__)
 
 
-class _WebsocketServerManager(object):
+class _WebsocketServerManager:
     def __init__(self, factory, host, port, *, ssl=None, loop=None):
         self._loop = loop or asyncio.get_event_loop()
         self._start = websockets.serve(factory, host, port, ssl=ssl)
@@ -31,7 +31,7 @@ class _WebsocketServerManager(object):
         logger.info('websocket server terminated')
 
 
-class Controller(object):
+class Controller:
     def __init__(self, config, session_factory, bus_service):
         self._ws_host = config['websocket']['listen']
         self._ws_port = config['websocket']['port']

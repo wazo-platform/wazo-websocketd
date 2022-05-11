@@ -8,7 +8,7 @@ from wazo_test_helpers.auth import AuthClient as Client, MockUserToken
 from .constants import TENANT1_UUID
 
 
-class AuthClient(object):
+class AuthClient:
     def __init__(self, port):
         self._client = Client('127.0.0.1', port)
         disable_warnings()

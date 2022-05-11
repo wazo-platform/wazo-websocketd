@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 SUPPORTED_VERSION = (1, 2)
 
 
-class SessionFactory(object):
+class SessionFactory:
     def __init__(
         self,
         config,
@@ -56,7 +56,7 @@ class SessionFactory(object):
             logger.info('websocket session terminated %s', remote_address)
 
 
-class Session(object):
+class Session:
 
     _CLOSE_CODE_NO_TOKEN_ID = 4001
     _CLOSE_CODE_AUTH_FAILED = 4002

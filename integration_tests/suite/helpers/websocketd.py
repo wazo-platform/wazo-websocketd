@@ -12,7 +12,7 @@ class WebSocketdTimeoutError(Exception):
     pass
 
 
-class WebSocketdClient(object):
+class WebSocketdClient:
 
     _DEFAULT_TIMEOUT = 5
 

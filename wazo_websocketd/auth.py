@@ -37,7 +37,7 @@ def has_master_tenant():
     return get_master_tenant() is not None
 
 
-class AsyncAuthClient(object):
+class AsyncAuthClient:
 
     _ACL = 'websocketd'
 
@@ -65,7 +65,7 @@ class AsyncAuthClient(object):
         )
 
 
-class _StaticIntervalAuthCheck(object):
+class _StaticIntervalAuthCheck:
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
@@ -80,7 +80,7 @@ class _StaticIntervalAuthCheck(object):
                 raise AuthenticationExpiredError()
 
 
-class _DynamicIntervalAuthCheck(object):
+class _DynamicIntervalAuthCheck:
 
     _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
 
@@ -122,7 +122,7 @@ class _DynamicIntervalAuthCheck(object):
 STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAuthCheck}
 
 
-class Authenticator(object):
+class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
         auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
@@ -146,7 +146,7 @@ class Authenticator(object):
         return self._auth_check.run(token_getter)
 
 
-class ServiceTokenRenewer(object):
+class ServiceTokenRenewer:
     DEFAULT_EXPIRATION = 21600  # 6h
     DEFAULT_LEEWAY_FACTOR = 0.85
     DEFAULT_RETRY_TIMEOUTS = (1, 2, 4, 8, 16, 32)

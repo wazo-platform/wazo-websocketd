@@ -30,7 +30,7 @@ class ClientCreateException(Exception):
         super().__init__(f'Could not create client {client_name}')
 
 
-class WrongClient(object):
+class WrongClient:
     def __init__(self, client_name):
         self.client_name = client_name
 

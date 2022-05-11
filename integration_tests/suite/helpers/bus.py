@@ -8,7 +8,7 @@ import asyncio
 from aioamqp.exceptions import AmqpClosedConnection
 
 
-class BusClient(object):
+class BusClient:
     timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
 
     def __init__(self, port):

@@ -109,7 +109,7 @@ def create_or_update_exchange(config):
         logger.debug('done configuring RabbitMQ, continuing...')
 
 
-class _BusConnection(object):
+class _BusConnection:
     def __init__(self, url, *, loop=None):
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
@@ -186,7 +186,7 @@ class _BusConnection(object):
         await asyncio.gather(*tasks, loop=self._loop)
 
 
-class _BusConnectionPool(object):
+class _BusConnectionPool:
     def __init__(self, connection_params, *, limit=2, loop=None):
         self._url = 'amqp://{username}:{password}@{host}:{port}/{vhost}/'.format(
             **connection_params._asdict()
@@ -227,7 +227,7 @@ class _BusConnectionPool(object):
         return next(self._iterator)
 
 
-class BusService(object):
+class BusService:
     def __init__(
         self,
         *,
@@ -258,7 +258,7 @@ class BusService(object):
         return consumer
 
 
-class BusConsumer(object):
+class BusConsumer:
     def __init__(self, exchange_params, connection, token):
         self.set_token(token)
 

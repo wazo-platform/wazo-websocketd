@@ -9,7 +9,7 @@ from websockets import ConnectionClosed
 from .websocketd import WebSocketdClient, WebSocketdTimeoutError
 
 
-class WaitStrategy(object):
+class WaitStrategy:
     def wait(self, integration_test):
         raise NotImplementedError
 
