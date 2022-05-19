@@ -21,14 +21,14 @@ def main():
         config['log_file'], debug=config['debug'], log_level=config['log_level']
     )
     xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
-    xivo_logging.silence_loggers(['aioamqp'], logging.CRITICAL)
+    xivo_logging.silence_loggers(['aioamqp'], logging.WARNING)
 
     if config['user']:
         change_user(config['user'])
 
     create_or_update_exchange(config)
     authenticator = Authenticator(config)
-    bus_service = BusService(**config['bus'])
+    bus_service = BusService(config)
     protocol_encoder = SessionProtocolEncoder()
     protocol_decoder = SessionProtocolDecoder()
     session_factory = SessionFactory(

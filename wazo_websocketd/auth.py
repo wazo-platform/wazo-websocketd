@@ -149,13 +149,12 @@ class Authenticator:
 class ServiceTokenRenewer:
     DEFAULT_EXPIRATION = 21600  # 6h
     DEFAULT_LEEWAY_FACTOR = 0.85
-    DEFAULT_RETRY_TIMEOUTS = (1, 2, 4, 8, 16, 32)
 
     Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
 
-    def __init__(self, config, expiration=DEFAULT_EXPIRATION, loop=None):
+    def __init__(self, config, *, loop=None):
         self._client = wazo_auth_client.Client(**config['auth'])
-        self._expiration = expiration
+        self._expiration = self.DEFAULT_EXPIRATION
         self._callbacks = []
         self._lock = asyncio.Lock()
         self._task = None
@@ -175,34 +174,25 @@ class ServiceTokenRenewer:
         self._callbacks.append(callback_)
 
     def unsubscribe(self, callback, *, details=False, oneshot=False):
+        callback_ = self.Callback(callback, details, oneshot)
         try:
-            self._callbacks.remove((callback, details, oneshot))
+            self._callbacks.remove(callback_)
         except ValueError:
             pass
 
-    async def _renew(self):
-        token = await self._fetch_token()
-        await self._notify(token)
-
     async def _run(self):
         while True:
-            await self._renew()
+            token = await self._fetch_token()
+            await self._notify(token)
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
-    async def _fetch_token(self, retry=True):
-        def reset_timeouts():
-            timeouts = list(self.DEFAULT_RETRY_TIMEOUTS)
-            last = repeat(timeouts.pop(-1))
-            return chain(timeouts, last)
-
-        timeouts = reset_timeouts()
+    async def _fetch_token(self):
+        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
         fn = partial(self._client.token.new, expiration=self._expiration)
-        for _ in repeat(0):
+        while True:
             try:
                 return await self._loop.run_in_executor(None, fn)
             except Exception as exc:
-                if not retry:
-                    raise AuthenticationError
                 interval = next(timeouts)
                 await self.on_error(exc, interval)
             await asyncio.sleep(interval)

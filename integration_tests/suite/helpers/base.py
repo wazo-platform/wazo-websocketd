@@ -115,7 +115,7 @@ class IntegrationTest(AssetLaunchingTestCase):
             port = self.service_port(9502, 'websocketd')
         except (NoSuchService, NoSuchPort):
             return WrongClient('websocketd')
-        return WebSocketdClient(self.loop, port)
+        return WebSocketdClient(port, loop=self.loop)
 
 
 def run_with_loop(f):

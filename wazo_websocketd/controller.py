@@ -19,7 +19,7 @@ class _WebsocketServerManager:
 
     def __enter__(self):
         self._server = self._loop.run_until_complete(self._start)
-        logger.info('websocket server started')
+        logger.info('websocket now serving connections')
 
     def __exit__(self, *args):
         self._server.close()

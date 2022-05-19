@@ -110,7 +110,8 @@ def create_or_update_exchange(config):
 
 
 class _BusConnection:
-    def __init__(self, url, *, loop=None):
+    def __init__(self, id, url, *, loop=None):
+        self._id = id
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
@@ -131,22 +132,23 @@ class _BusConnection:
         else:
             return True
 
-    async def connect(self, *, max_retries=None):
-        timeouts = chain([1, 2, 4, 8, 16], repeat(32))
-        retries = repeat(1) if max_retries is None else range(max_retries + 1)
-
-        for _ in retries:
+    async def connect(self):
+        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
+        while True:
             try:
                 transport, protocol = await aioamqp.from_url(self._url, heartbeat=10)
             except (AmqpClosedConnection, OSError):
                 timeout = next(timeouts)
-                logger.debug('unable to connect, retrying in %d seconds', timeout)
+                logger.debug(
+                    '[connection %d] unable to connect, retrying in %d seconds',
+                    self._id,
+                    timeout,
+                )
                 await asyncio.sleep(timeout)
             else:
                 self._transport, self._protocol = transport, protocol
                 self._loop.create_task(self._handle_reconnection())
                 return
-        raise BusConnectionError(f'unable to connect after {max_retries} tries')
 
     async def disconnect(self):
         self._closing.set()
@@ -158,7 +160,9 @@ class _BusConnection:
         try:
             return await self._protocol.channel()
         except (AmqpClosedConnection, ChannelClosed):
-            raise BusConnectionError('unable to create channel from connection')
+            raise BusConnectionError(
+                '[connection %d] unable to create channel', self._id
+            )
 
     def unregister(self, consumer):
         self._consumers.remove(consumer)
@@ -170,35 +174,31 @@ class _BusConnection:
             self._transport.close()
 
             # Notify consumers of disconnection
-            await self._notify_close()
+            await self._notify_closed()
 
-            # if not terminated, reconnect
-            if not self.is_closing:
-                logger.info('unexpectedly lost connection to bus, reconnecting...')
-                await self.connect()
-                logger.info('restored connection to bus')
-                continue
+            # if terminated, exit
+            if self.is_closing:
+                return
 
-            return
+            logger.info(
+                '[connection %d] unexpectedly lost connection to bus, reconnecting...',
+                self._id,
+            )
+            await self.connect()
+            logger.info('[connection %d] reestablished connection to bus', self._id)
 
-    async def _notify_close(self):
+    async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
         await asyncio.gather(*tasks, loop=self._loop)
 
 
 class _BusConnectionPool:
-    def __init__(self, connection_params, *, limit=2, loop=None):
-        self._url = 'amqp://{username}:{password}@{host}:{port}/{vhost}/'.format(
-            **connection_params._asdict()
-        )
+    def __init__(self, url, pool_size, *, loop=None):
+        self._url = url
         self._loop = loop or asyncio.get_event_loop()
-        self._limit = limit
+        self._size = pool_size
         self._connections = []
         self._iterator = None
-
-    @property
-    def _size(self):
-        return len(self._connections)
 
     @property
     def _round_robin(self):
@@ -207,7 +207,8 @@ class _BusConnectionPool:
 
     async def connect(self):
         self._connections = [
-            _BusConnection(self._url, loop=self._loop) for _ in range(self._limit)
+            _BusConnection(id + 1, self._url, loop=self._loop)
+            for id in range(self._size)
         ]
 
         await asyncio.gather(
@@ -219,7 +220,7 @@ class _BusConnectionPool:
         await asyncio.gather(
             *[connection.disconnect() for connection in self._connections]
         )
-        logger.info('closed bus connection pool')
+        logger.info('bus connection pool closed (%s connections)', self._size)
 
     def connection(self):
         if not self._iterator:
@@ -228,23 +229,20 @@ class _BusConnectionPool:
 
 
 class BusService:
-    def __init__(
-        self,
-        *,
-        username='guest',
-        password='guest',
-        host='localhost',
-        port=5672,
-        vhost='',
-        exchange_name=None,
-        exchange_type=None,
-        loop=None,
-        **kwargs,
-    ):
-        connection_params = _ConnectionParams(host, port, username, password, vhost)
+    _DEFAULT_CONNECTION_POOL_SIZE = 2  # number of worker connections
+
+    def __init__(self, config, *, loop=None):
+        self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(
+            **config['bus']
+        )
         self._loop = loop or asyncio.get_event_loop()
-        self._connection_pool = _BusConnectionPool(connection_params)
-        self._exchange_params = _ExchangeParams(exchange_name, exchange_type)
+        self._connection_pool = _BusConnectionPool(
+            self._url, self._DEFAULT_CONNECTION_POOL_SIZE
+        )
+        self._exchange_params = _ExchangeParams(
+            config['bus']['exchange_name'],
+            config['bus']['exchange_type'],
+        )
 
     def __enter__(self):
         self._loop.run_until_complete(self._connection_pool.connect())
@@ -277,12 +275,14 @@ class BusConsumer:
     async def __aexit__(self, *args):
         await self._stop_consuming()
 
-    async def __aiter__(self):
-        for _ in repeat(None):
-            payload = await self._queue.get()
-            if isinstance(payload, Exception):
-                raise payload
-            yield payload
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        payload = await self._queue.get()
+        if isinstance(payload, Exception):
+            raise payload
+        return payload
 
     async def _start_consuming(self):
         channel = self._channel = await self._connection.register(self)

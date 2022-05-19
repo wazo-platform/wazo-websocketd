@@ -30,15 +30,13 @@ class WaitUntilValidConnection(WaitStrategy):
 
     async def await_for_connection(self, test):
         port = test.service_port(9502, 'websocketd')
-        client = WebSocketdClient(None, port)
+        client = WebSocketdClient(port)
 
         with test.auth_client.token() as token:
             for _ in range(self.timeout):
                 try:
                     await client.connect_and_wait_for_init(token)
-                except ConnectionClosed:
-                    await asyncio.sleep(1)
-                except AssertionError:
+                except (ConnectionClosed, AssertionError):
                     await asyncio.sleep(1)
                 else:
                     return

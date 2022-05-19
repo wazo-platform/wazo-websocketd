@@ -158,7 +158,10 @@ class Session:
         while True:
             await asyncio.sleep(self._ws_ping_interval)
             logger.debug('sending websocket ping')
-            await self._ws.ping()
+            try:
+                await self._ws.ping()
+            except websockets.ConnectionClosed:
+                raise
 
     async def _task_receive_command(self):
         while True:
@@ -174,7 +177,7 @@ class Session:
         async for event in self._consumer:
             if not self._started:
                 logger.debug(
-                    'Unable to push event to websocket as session hasn\'t started yet'
+                    'unable to push event to websocket as session hasn\'t started yet'
                 )
                 continue
             if self._protocol_version == 1:

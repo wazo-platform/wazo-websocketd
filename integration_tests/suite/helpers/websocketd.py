@@ -16,7 +16,7 @@ class WebSocketdClient:
 
     _DEFAULT_TIMEOUT = 5
 
-    def __init__(self, loop, port):
+    def __init__(self, port, *, loop=None):
         self._loop = loop or asyncio.get_event_loop()
         self._port = port
         self._websocket = None
