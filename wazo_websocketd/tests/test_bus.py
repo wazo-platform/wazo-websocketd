@@ -1,131 +1,197 @@
-# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import unittest
 
-from hamcrest import assert_that, equal_to, none, same_instance
+from hamcrest import assert_that, equal_to, calling, raises
 from unittest.mock import Mock, sentinel
 from xivo.auth_verifier import AccessCheck
 
-from ..bus import _BusEvent, _decode_bus_msg
-from ..exception import BusConnectionLostError
-from ..session import EventTransmitter
+from ..bus import BusConsumer, _Event
+from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
 
 
-class TestBusEvent(unittest.TestCase):
+class TestBusDecoding(unittest.TestCase):
     def setUp(self):
-        self.bus_msg = Mock()
-        self.bus_msg.body = b'{}'
+        token = {
+            'session_uuid': 'some-session',
+            'acl': ['some.acl'],
+            'metadata': {
+                'uuid': 'some-uuid',
+                'tenant_uuid': 'some-tenant',
+            },
+        }
+        self.consumer = BusConsumer(('test', 'headers'), Mock(), token)
 
     def test_bus_msg(self):
-        self.bus_msg.headers = {'name': 'foo', 'required_acl': 'some.acl'}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': 'some.acl',
+            },
+        )
 
-        bus_event = _decode_bus_msg(self.bus_msg)
+        event = self.consumer._decode(message, properties)
 
-        assert_that(bus_event.name, equal_to('foo'))
-        assert_that(bus_event.has_acl, equal_to(True))
-        assert_that(bus_event.acl, equal_to('some.acl'))
-        assert_that(bus_event.msg_body, equal_to(self.bus_msg.body.decode('utf-8')))
+        assert_that(event.name, equal_to('foo'))
+        assert_that(event.acl, equal_to('some.acl'))
+        assert_that(event.message, equal_to(message.decode('utf-8')))
 
     def test_bus_msg_none_required_acl(self):
-        self.bus_msg.headers = {'name': 'foo', 'required_acl': None}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': None,
+            }
+        )
 
-        bus_event = _decode_bus_msg(self.bus_msg)
-
-        assert_that(bus_event.has_acl, equal_to(True))
-        assert_that(bus_event.acl, none())
+        assert_that(
+            self.consumer._decode(message, properties),
+            equal_to(
+                _Event('foo', properties.headers, None, {}, message.decode('utf-8'))
+            ),
+        )
 
     def test_bus_msg_missing_required_acl(self):
-        self.bus_msg.headers = {'name': 'foo'}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+            }
+        )
 
-        bus_event = _decode_bus_msg(self.bus_msg)
-
-        assert_that(bus_event.has_acl, equal_to(False))
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(EventPermissionError),
+        )
 
     def test_bus_msg_missing_name(self):
-        self.bus_msg.headers = {'required_acl': 'some.acl'}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'required_acl': 'some.acl',
+            }
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
     def test_bus_msg_wrong_name_type(self):
-        self.bus_msg.headers = {'name': None, 'required_acl': 'some.acl'}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'name': None,
+                'required_acl': 'some.acl',
+            }
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
     def test_bus_msg_wrong_required_acl_type(self):
-        self.bus_msg.headers = {'name': 'foo', 'required_acl': 2}
+        message = b'{}'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': 2,
+            },
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
     def test_bus_msg_invalid_type(self):
-        self.bus_msg.body = b'{"name": "\xe8"}'
+        message = b'{"name": "\xe8"}'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': 'some.acl',
+            }
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
     def test_bus_msg_invalid_json(self):
-        self.bus_msg.body = b'{invalid'
+        message = b'{invalid'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': 'some.acl',
+            }
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
     def test_bus_msg_invalid_root_object_type(self):
-        self.bus_msg.body = b'2'
+        message = b'2'
+        properties = Mock(
+            headers={
+                'name': 'foo',
+                'required_acl': 'some.acl',
+            }
+        )
 
-        self.assertRaises(ValueError, _decode_bus_msg, self.bus_msg)
+        assert_that(
+            calling(self.consumer._decode).with_args(message, properties),
+            raises(InvalidEvent),
+        )
 
 
-class TestBusEventTransmitter(unittest.TestCase):
+class TestBusDispatching(unittest.TestCase):
     def setUp(self):
-        self.bus_event = _new_bus_event('foo', acl='some.thing')
-        self.event_transmitter = EventTransmitter()
-        self.event_transmitter._access_check = Mock(AccessCheck)
+        self.loop = asyncio.get_event_loop()
+        self.event = _Event(
+            'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.message
+        )
+        self.consumer = BusConsumer(
+            ('exchange', 'type'),
+            Mock(),
+            {
+                'session_uuid': 'some-session-uuid',
+                'metadata': {
+                    'uuid': 'some-user-uuid',
+                    'tenant_uuid': 'some-tenant-uuid',
+                },
+                'acl': ['some.acl'],
+            },
+        )
+        self.consumer._access = Mock(AccessCheck)
 
-    def test_get_connection_lost(self):
-        self.event_transmitter.put_connection_lost()
+    def test_connection_lost(self):
+        async def consume():
+            await self.consumer.connection_lost()
 
-        self.assertRaises(
-            BusConnectionLostError,
-            asyncio.get_event_loop().run_until_complete,
-            self.event_transmitter.get(),
+            async for _ in self.consumer:
+                pass
+
+        assert_that(
+            calling(self.loop.run_until_complete).with_args(consume()),
+            raises(BusConnectionLostError),
         )
 
-    def test_get_event_subscribed_name(self):
-        self.event_transmitter.subscribe_to_event(self.bus_event.name)
-        self.event_transmitter.put(self.bus_event)
-        result = asyncio.get_event_loop().run_until_complete(
-            self.event_transmitter.get()
+    def test_receiving_event(self):
+        async def consume():
+            await self.consumer._queue.put(self.event)
+
+            async for message in self.consumer:
+                return message
+
+        assert_that(
+            self.loop.run_until_complete(consume()),
+            equal_to(self.event),
         )
-
-        assert_that(result, same_instance(self.bus_event))
-
-    def test_get_event_subscribed_star(self):
-        self.event_transmitter.subscribe_to_event('*')
-        self.event_transmitter.put(self.bus_event)
-        result = asyncio.get_event_loop().run_until_complete(
-            self.event_transmitter.get()
-        )
-
-        assert_that(result, same_instance(self.bus_event))
-
-    def test_get_event_not_subscribed(self):
-        self.event_transmitter.subscribe_to_event('some_unknown_event_name')
-        self.event_transmitter.put(self.bus_event)
-
-        assert_that(self.event_transmitter._queue.empty())
-
-    def test_get_event_non_matching_acl(self):
-        self.event_transmitter._access_check.matches_required_access.return_value = (
-            False
-        )
-
-        self.event_transmitter.subscribe_to_event(self.bus_event.name)
-        self.event_transmitter.put(self.bus_event)
-
-        self.event_transmitter._access_check.matches_required_access.assert_called_once_with(
-            self.bus_event.acl
-        )
-        assert_that(self.event_transmitter._queue.empty())
-
-
-def _new_bus_event(name, has_acl=True, acl=None):
-    return _BusEvent(name, has_acl, acl, sentinel.msg_body, sentinel.body)

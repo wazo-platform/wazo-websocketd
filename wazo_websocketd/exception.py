@@ -1,8 +1,12 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
 class NoTokenError(Exception):
+    pass
+
+
+class InvalidTokenError(Exception):
     pass
 
 
@@ -27,4 +31,12 @@ class BusConnectionLostError(BusConnectionError):
 
 
 class UnsupportedVersionError(Exception):
+    pass
+
+
+class InvalidEvent(Exception):
+    pass
+
+
+class EventPermissionError(Exception):
     pass

@@ -4,6 +4,8 @@ websocket:
 
 auth:
   host: auth
+  username: websocketd-service
+  password: websocketd-password
 
 bus:
   host: rabbitmq

@@ -1,4 +1,4 @@
-# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -6,9 +6,7 @@ import logging
 import websockets
 
 from urllib.parse import urlparse, parse_qsl
-
-from xivo.auth_verifier import AccessCheck
-
+from .auth import has_master_tenant
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -25,18 +23,18 @@ logger = logging.getLogger(__name__)
 SUPPORTED_VERSION = (1, 2)
 
 
-class SessionFactory(object):
+class SessionFactory:
     def __init__(
         self,
         config,
         authenticator,
-        bus_event_service,
+        bus_service,
         protocol_encoder,
         protocol_decoder,
     ):
         self._config = config
         self._authenticator = authenticator
-        self._bus_event_service = bus_event_service
+        self._bus_service = bus_service
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
 
@@ -46,7 +44,7 @@ class SessionFactory(object):
         session = Session(
             self._config,
             self._authenticator,
-            self._bus_event_service,
+            self._bus_service,
             self._protocol_encoder,
             self._protocol_decoder,
             ws,
@@ -58,44 +56,7 @@ class SessionFactory(object):
             logger.info('websocket session terminated %s', remote_address)
 
 
-class EventTransmitter(object):
-    def __init__(self):
-        self._queue = asyncio.Queue()
-        self._event_names = set()
-        self._all_events = False
-
-    def set_token(self, token):
-        self._token = token
-        self._access_check = AccessCheck(
-            token['metadata']['uuid'], token['session_uuid'], token['acl']
-        )
-
-    def get_token(self):
-        return self._token
-
-    def subscribe_to_event(self, event_name):
-        if event_name == '*':
-            self._all_events = True
-        else:
-            self._event_names.add(event_name)
-
-    async def get(self):
-        # Raise a BusConnectionLostError when the connection to the bus is lost.
-        bus_event = await self._queue.get()
-        if bus_event is None:
-            raise BusConnectionLostError()
-        return bus_event
-
-    def put(self, bus_event):
-        if self._all_events or bus_event.name in self._event_names:
-            if self._access_check.matches_required_access(bus_event.acl):
-                self._queue.put_nowait(bus_event)
-
-    def put_connection_lost(self):
-        self._queue.put_nowait(None)
-
-
-class Session(object):
+class Session:
 
     _CLOSE_CODE_NO_TOKEN_ID = 4001
     _CLOSE_CODE_AUTH_FAILED = 4002
@@ -106,7 +67,7 @@ class Session(object):
         self,
         config,
         authenticator,
-        bus_event_service,
+        bus_service,
         protocol_encoder,
         protocol_decoder,
         ws,
@@ -114,14 +75,14 @@ class Session(object):
     ):
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._authenticator = authenticator
-        self._bus_event_service = bus_event_service
         self._protocol_version = 1
         self._protocol_encoder = protocol_encoder
         self._protocol_decoder = protocol_decoder
         self._ws = ws
         self._path = path
         self._started = False
-        self._event_transmiter = None
+        self._bus_service = bus_service
+        self._consumer = None
 
     async def run(self):
         try:
@@ -157,16 +118,15 @@ class Session(object):
             await self._ws.close(1011)
 
     async def _run(self):
+        if not has_master_tenant():
+            raise AuthenticationError('unable to determine master tenant')
+
         self._protocol_version = _extract_version_from_path(self._path)
 
         token_id = _extract_token_id(self._ws, self._path)
         _token = await self._authenticator.get_token(token_id)
 
-        self._event_transmiter = EventTransmitter()
-        self._event_transmiter.set_token(_token)
-        await self._bus_event_service.register_event_consumer(self._event_transmiter)
-
-        try:
+        async with await self._bus_service.spawn(_token) as self._consumer:
             await self._ws.send(
                 self._protocol_encoder.encode_init(version=self._protocol_version)
             )
@@ -194,14 +154,14 @@ class Session(object):
             for task in done:
                 task.result()
 
-        finally:
-            self._bus_event_service.unregister_event_consumer(self._event_transmiter)
-
     async def _task_send_ping(self):
         while True:
             await asyncio.sleep(self._ws_ping_interval)
             logger.debug('sending websocket ping')
-            await self._ws.ping()
+            try:
+                await self._ws.ping()
+            except websockets.ConnectionClosed:
+                raise
 
     async def _task_receive_command(self):
         while True:
@@ -214,24 +174,25 @@ class Session(object):
             await func(msg)
 
     async def _task_transmit_event(self):
-        while True:
-            bus_event = await self._event_transmiter.get()
-            if self._started:
-                if self._protocol_version == 1:
-                    await self._ws.send(bus_event.msg_body)
-                else:
-                    await self._ws.send(
-                        self._protocol_encoder.encode_event(bus_event.body)
-                    )
+        async for event in self._consumer:
+            if not self._started:
+                logger.debug(
+                    'unable to push event to websocket as session hasn\'t started yet'
+                )
+                continue
+            if self._protocol_version == 1:
+                payload = event.message
             else:
-                logger.debug('not sending bus event to websocket: session not started')
+                payload = self._protocol_encoder.encode_event(event.payload)
+            await self._ws.send(payload)
 
     async def _task_authentification(self):
-        await self._authenticator.run_check(self._event_transmiter.get_token)
+        await self._authenticator.run_check(self._consumer.get_token)
 
     async def _do_ws_subscribe(self, msg):
-        logger.debug('subscribing to event "%s"', msg.value)
-        self._event_transmiter.subscribe_to_event(msg.value)
+        event_name = msg.value
+        logger.debug('subscribing to event "%s"', event_name)
+        await self._consumer.bind(event_name)
         if not self._started or self._protocol_version == 2:
             await self._ws.send(self._protocol_encoder.encode_subscribe())
 
@@ -241,7 +202,7 @@ class Session(object):
 
     async def _do_ws_token(self, msg):
         token = await self._authenticator.get_token(msg.value)
-        self._event_transmiter.set_token(token)
+        self._consumer.set_token(token)
         if not self._started or self._protocol_version == 2:
             await self._ws.send(self._protocol_encoder.encode_token())
 

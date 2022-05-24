@@ -1,4 +1,4 @@
-# Copyright 2016-2020 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,12 +8,36 @@ import logging
 import requests
 import wazo_auth_client
 
+from itertools import chain, repeat
+from collections import namedtuple
+from functools import partial
 from .exception import AuthenticationError, AuthenticationExpiredError
 
 logger = logging.getLogger(__name__)
+_master_tenant_uuid = None
 
 
-class AsyncAuthClient(object):
+def set_master_tenant(token):
+    global _master_tenant_uuid
+    try:
+        tenant_uuid = token['metadata']['tenant_uuid']
+    except KeyError:
+        logger.error('invalid token, contains no tenant_uuid')
+    else:
+        logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
+        _master_tenant_uuid = tenant_uuid
+
+
+def get_master_tenant():
+    global _master_tenant_uuid
+    return _master_tenant_uuid
+
+
+def has_master_tenant():
+    return get_master_tenant() is not None
+
+
+class AsyncAuthClient:
 
     _ACL = 'websocketd'
 
@@ -41,7 +65,7 @@ class AsyncAuthClient(object):
         )
 
 
-class _StaticIntervalAuthCheck(object):
+class _StaticIntervalAuthCheck:
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
@@ -56,7 +80,7 @@ class _StaticIntervalAuthCheck(object):
                 raise AuthenticationExpiredError()
 
 
-class _DynamicIntervalAuthCheck(object):
+class _DynamicIntervalAuthCheck:
 
     _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
 
@@ -98,7 +122,7 @@ class _DynamicIntervalAuthCheck(object):
 STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAuthCheck}
 
 
-class Authenticator(object):
+class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
         auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
@@ -120,3 +144,70 @@ class Authenticator(object):
         # This function returns a coroutine that raise an AuthenticationExpiredError exception
         # when the token expires.
         return self._auth_check.run(token_getter)
+
+
+class ServiceTokenRenewer:
+    DEFAULT_EXPIRATION = 21600  # 6h
+    DEFAULT_LEEWAY_FACTOR = 0.85
+
+    Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
+
+    def __init__(self, config, *, loop=None):
+        self._client = wazo_auth_client.Client(**config['auth'])
+        self._expiration = self.DEFAULT_EXPIRATION
+        self._callbacks = []
+        self._lock = asyncio.Lock()
+        self._task = None
+        self._loop = loop or asyncio.get_event_loop()
+
+    def __enter__(self):
+        logger.info('service token renewer started')
+        self._task = self._loop.create_task(self._run())
+
+    def __exit__(self, *args):
+        if not self._task.cancelled():
+            self._task.cancel()
+        logger.info('service token renewer stopped')
+
+    def subscribe(self, callback, *, details=False, oneshot=False):
+        callback_ = self.Callback(callback, details, oneshot)
+        self._callbacks.append(callback_)
+
+    def unsubscribe(self, callback, *, details=False, oneshot=False):
+        callback_ = self.Callback(callback, details, oneshot)
+        try:
+            self._callbacks.remove(callback_)
+        except ValueError:
+            pass
+
+    async def _run(self):
+        while True:
+            token = await self._fetch_token()
+            await self._notify(token)
+            await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
+
+    async def _fetch_token(self):
+        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
+        fn = partial(self._client.token.new, expiration=self._expiration)
+        while True:
+            try:
+                return await self._loop.run_in_executor(None, fn)
+            except Exception as exc:
+                interval = next(timeouts)
+                await self.on_error(exc, interval)
+            await asyncio.sleep(interval)
+
+    async def _notify(self, token):
+        callbacks = self._callbacks.copy()
+        for callback in callbacks:
+            if callback.oneshot:
+                async with self._lock:
+                    self._callbacks.remove(callback)
+            payload = token if callback.details else token['token']
+            self._loop.call_soon(callback.method, payload)
+
+    async def on_error(self, exc, interval):
+        logger.error(
+            'Failed to create an access token, retrying in %d seconds',
+            interval,
+        )

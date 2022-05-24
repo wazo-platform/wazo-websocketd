@@ -1,39 +1,59 @@
-# Copyright 2016-2021 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import os
 import json
+import aioamqp
+import asyncio
+from aioamqp.exceptions import AmqpClosedConnection
 
-import asynqp
 
+class BusClient:
+    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
 
-class BusClient(object):
     def __init__(self, port):
         self._port = port
-        self._connection = None
-        self._exchange = None
+        self._transport = None
+        self._protocol = None
+        self._channel = None
 
     async def connect(self):
-        self._connection = await asynqp.connect('127.0.0.1', port=self._port)
-        self._channel = await self._connection.open_channel()
-        self._exchange = await self._channel.declare_exchange(
-            'wazo-websocketd', 'headers', durable=True
-        )
+        await self._try_connect(timeout=self.timeout)
+        self._channel = await self._protocol.channel()
+
+    async def _try_connect(self, timeout):
+        for _ in range(timeout):
+            try:
+                self._transport, self._protocol = await aioamqp.connect(
+                    '127.0.0.1', self._port
+                )
+            except (AmqpClosedConnection, OSError):
+                await asyncio.sleep(1)
+            else:
+                return
+        raise AmqpClosedConnection
 
     async def close(self):
-        if self._connection:
+        if self._channel and self._channel.is_open:
             await self._channel.close()
-            await self._connection.close()
-            self._channel = None
-            self._connection = None
+            await self._protocol.close()
+            self._transport.close()
 
-    def publish_event(self, event):
-        headers = {
-            'name': event['name'],
-            'required_acl': event.get('required_acl', event['name']),
+    async def publish(self, event, tenant_uuid=None):
+        payload = json.dumps(event).encode('utf-8')
+        exchange = 'wazo-websocketd'
+        properties = {
+            'headers': {
+                'name': event['name'],
+            },
         }
-        routing_key = ''
-        self._exchange.publish(
-            asynqp.Message(json.dumps(event), headers=headers),
-            routing_key,
-            mandatory=False,
-        )
+
+        if tenant_uuid:
+            properties['headers']['tenant_uuid'] = str(
+                event.get('tenant_uuid', tenant_uuid)
+            )
+
+        if 'required_acl' in event:
+            properties['headers']['required_acl'] = event['required_acl']
+
+        await self._channel.publish(payload, exchange, '', properties=properties)
