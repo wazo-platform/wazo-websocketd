@@ -6,6 +6,7 @@ import logging
 import json
 import aioamqp
 
+from secrets import token_urlsafe
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from itertools import cycle, repeat, chain
 from collections import namedtuple
@@ -290,7 +291,7 @@ class BusConsumer:
 
         # if not part of master tenant, create (if needed) tenant exchange
         if self._tenant_uuid != get_master_tenant():
-            exchange = self._generate_name('tenant', self._tenant_uuid)
+            exchange = self._generate_name(f'tenant-{self._tenant_uuid}')
             await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
             await channel.exchange_bind(
                 exchange, upstream, '', arguments={'tenant_uuid': self._tenant_uuid}
@@ -301,8 +302,9 @@ class BusConsumer:
         await channel.basic_qos(prefetch_count=1, prefetch_size=0)
 
         # Create exclusive queue on exchange
+        queue_name = self._generate_name(f'user-{self._uuid}', token_urlsafe(4))
         response = await channel.queue(
-            '', durable=False, auto_delete=True, exclusive=True
+            queue_name=queue_name, durable=False, auto_delete=True, exclusive=True
         )
         if response['queue'] is None:
             raise BusConnectionError
