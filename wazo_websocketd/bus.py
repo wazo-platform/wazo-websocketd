@@ -162,7 +162,7 @@ class _BusConnection:
             return await self._protocol.channel()
         except (AmqpClosedConnection, ChannelClosed):
             raise BusConnectionError(
-                '[connection %d] unable to create channel', self._id
+                f'[connection {self._id}] unable to create channel'
             )
 
     def unregister(self, consumer):
