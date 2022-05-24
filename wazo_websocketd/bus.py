@@ -54,9 +54,9 @@ ROUTING_KEYS = [
 
 def create_or_update_exchange(config):
     async def process(config, timeout=30):
-        url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
-        upstream_name = config['bus']['upstream_exchange_name']
-        exchange_name = config['bus']['exchange_name']
+        url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
+        upstream_name = config['upstream_exchange_name']
+        exchange_name = config['exchange_name']
 
         logger.debug('waiting on RabbitMQ... (timeout in %d second(s))', timeout)
         for attempt in range(timeout):
@@ -72,14 +72,14 @@ def create_or_update_exchange(config):
 
         await channel.exchange_declare(
             upstream_name,
-            config['bus']['upstream_exchange_type'],
+            config['upstream_exchange_type'],
             durable=True,
             auto_delete=False,
         )
 
         await channel.exchange_declare(
             exchange_name,
-            config['bus']['exchange_type'],
+            config['exchange_type'],
             durable=True,
             auto_delete=False,
         )
@@ -233,16 +233,14 @@ class BusService:
     _DEFAULT_CONNECTION_POOL_SIZE = 2  # number of worker connections
 
     def __init__(self, config, *, loop=None):
-        self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(
-            **config['bus']
-        )
+        self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
         self._loop = loop or asyncio.get_event_loop()
         self._connection_pool = _BusConnectionPool(
             self._url, self._DEFAULT_CONNECTION_POOL_SIZE
         )
         self._exchange_params = _ExchangeParams(
-            config['bus']['exchange_name'],
-            config['bus']['exchange_type'],
+            config['exchange_name'],
+            config['exchange_type'],
         )
 
     def __enter__(self):

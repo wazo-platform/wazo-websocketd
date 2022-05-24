@@ -26,9 +26,9 @@ def main():
     if config['user']:
         change_user(config['user'])
 
-    create_or_update_exchange(config)
+    create_or_update_exchange(config['bus'])
     authenticator = Authenticator(config)
-    bus_service = BusService(config)
+    bus_service = BusService(config['bus'])
     protocol_encoder = SessionProtocolEncoder()
     protocol_decoder = SessionProtocolDecoder()
     session_factory = SessionFactory(
