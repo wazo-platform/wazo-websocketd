@@ -27,4 +27,4 @@ EXPOSE 9502
 
 # Activate virtual env
 ENV PATH="/opt/venv/bin:$PATH"
-CMD ["wazo-websocketd", "-d"]
+CMD ["wazo-websocketd"]
