@@ -119,6 +119,7 @@ class _BusConnection:
         self._transport = None
         self._protocol = None
         self._consumers = []
+        self._task = None
 
     @property
     def is_closing(self):
@@ -148,7 +149,8 @@ class _BusConnection:
                 await asyncio.sleep(timeout)
             else:
                 self._transport, self._protocol = transport, protocol
-                self._loop.create_task(self._handle_reconnection())
+                if self._task is None:
+                    self._task = self._loop.create_task(self._handle_reconnection())
                 return
 
     async def disconnect(self):
