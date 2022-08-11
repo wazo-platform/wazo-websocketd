@@ -124,9 +124,9 @@ class Session:
         self._protocol_version = _extract_version_from_path(self._path)
 
         token_id = _extract_token_id(self._ws, self._path)
-        _token = await self._authenticator.get_token(token_id)
+        token = await self._authenticator.get_token(token_id)
 
-        async with await self._bus_service.spawn(_token) as self._consumer:
+        async with await self._bus_service.create_consumer(token) as self._consumer:
             await self._ws.send(
                 self._protocol_encoder.encode_init(version=self._protocol_version)
             )

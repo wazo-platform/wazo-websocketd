@@ -109,8 +109,10 @@ def create_or_update_exchange(config):
 
 
 class _BusConnection:
-    def __init__(self, id, url, *, loop=None):
-        self._id = id
+    _id_counter = count(1)
+
+    def __init__(self, url, *, loop=None):
+        self._id = next(_BusConnection._id_counter)
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
@@ -123,14 +125,26 @@ class _BusConnection:
     def is_closing(self):
         return self._closing.is_set()
 
-    @property
-    async def is_open(self):
-        try:
-            await self._protocol.ensure_open()
-        except AmqpClosedConnection:
-            return False
-        else:
-            return True
+    async def run(self):
+        while True:
+            await self.connect()
+
+            # Wait for the connection to terminate
+            await self._protocol.wait_closed()
+            self._transport.close()
+
+            # Notify consumers of disconnection
+            await self._notify_closed()
+
+            # if terminated, exit
+            if self.is_closing:
+                logger.debug('[connection %d] connection to bus closed', self._id)
+                return
+
+            logger.info(
+                '[connection %d] unexpectedly lost connection to bus, attempting to reconnect...',
+                self._id,
+            )
 
     async def connect(self):
         timeouts = chain((1, 2, 4, 8, 16), repeat(32))
@@ -147,8 +161,7 @@ class _BusConnection:
                 await asyncio.sleep(timeout)
             else:
                 self._transport, self._protocol = transport, protocol
-                if self._task is None:
-                    self._task = self._loop.create_task(self._handle_reconnection())
+                logger.info('[connection %d] connected to bus', self._id)
                 return
 
     async def disconnect(self):
@@ -156,37 +169,23 @@ class _BusConnection:
         await self._protocol.close()
         self._transport.close()
 
-    async def register(self, consumer):
-        self._consumers.append(consumer)
+    async def get_channel(self):
         try:
             return await self._protocol.channel()
         except (AmqpClosedConnection, ChannelClosed):
             raise BusConnectionError(
-                f'[connection {self._id}] unable to create channel'
+                f'[connection {self._id}] failed to create a new channel'
             )
 
-    def unregister(self, consumer):
+    def spawn_consumer(self, exchange_params, token):
+        consumer = BusConsumer(self, exchange_params, token)
+        self._consumers.append(consumer)
+        return consumer
+
+    def remove_consumer(self, consumer):
+        if consumer not in self._consumers:
+            raise ValueError('consumer does not belong to this connection')
         self._consumers.remove(consumer)
-
-    async def _handle_reconnection(self):
-        while True:
-            # Wait for the connection to terminate
-            await self._protocol.wait_closed()
-            self._transport.close()
-
-            # Notify consumers of disconnection
-            await self._notify_closed()
-
-            # if terminated, exit
-            if self.is_closing:
-                return
-
-            logger.info(
-                '[connection %d] unexpectedly lost connection to bus, reconnecting...',
-                self._id,
-            )
-            await self.connect()
-            logger.info('[connection %d] reestablished connection to bus', self._id)
 
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
@@ -197,35 +196,34 @@ class _BusConnectionPool:
     def __init__(self, url, pool_size, *, loop=None):
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
-        self._size = pool_size
-        self._connections = []
-        self._iterator = None
+        self._connections = [_BusConnection(url, loop=loop) for _ in range(pool_size)]
+        self._tasks = set()
+        self._iterator = cycle(self._connections)
 
     @property
-    def _round_robin(self):
-        for index in cycle(range(self._size)):
-            yield self._connections[index]
+    def size(self):
+        return len(self._connections)
 
-    async def connect(self):
-        self._connections = [
-            _BusConnection(id + 1, self._url, loop=self._loop)
-            for id in range(self._size)
-        ]
+    async def start(self):
+        self._tasks = {
+            self._loop.create_task(connection.run()) for connection in self._connections
+        }
+        logger.info('bus connection pool initialized with %d connections', self.size)
 
+    async def stop(self):
         await asyncio.gather(
-            *[connection.connect() for connection in self._connections]
+            *{connection.disconnect() for connection in self._connections}
         )
-        logger.info('bus connection pool initialized with %d connections', self._size)
 
-    async def disconnect(self):
-        await asyncio.gather(
-            *[connection.disconnect() for connection in self._connections]
-        )
-        logger.info('bus connection pool closed (%s connections)', self._size)
+        # wait for connections to close gracefully or force after 5 sec
+        _, pending = await asyncio.wait(self._tasks, loop=self._loop, timeout=5.0)
+        if pending:
+            logger.info('some connections did not exit gracefully, forcing...')
+            [task.cancel() for task in pending]
 
-    def connection(self):
-        if not self._iterator:
-            self._iterator = self._round_robin
+        logger.info('bus connection pool closed (%s connections)', self.size)
+
+    def get_connection(self):
         return next(self._iterator)
 
 
@@ -235,28 +233,26 @@ class BusService:
     def __init__(self, config, *, loop=None):
         self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
         self._loop = loop or asyncio.get_event_loop()
-        self._connection_pool = _BusConnectionPool(
-            self._url, self._DEFAULT_CONNECTION_POOL_SIZE
-        )
+        pool_size = config.get('pool_size', self._DEFAULT_CONNECTION_POOL_SIZE)
+        self._connection_pool = _BusConnectionPool(self._url, pool_size)
         self._exchange_params = _ExchangeParams(
             config['exchange_name'],
             config['exchange_type'],
         )
 
     def __enter__(self):
-        self._loop.run_until_complete(self._connection_pool.connect())
+        self._loop.run_until_complete(self._connection_pool.start())
 
     def __exit__(self, *args):
-        self._loop.run_until_complete(self._connection_pool.disconnect())
+        self._loop.run_until_complete(self._connection_pool.stop())
 
-    async def spawn(self, token):
-        connection = self._connection_pool.connection()
-        consumer = BusConsumer(self._exchange_params, connection, token)
-        return consumer
+    async def create_consumer(self, token):
+        connection = self._connection_pool.get_connection()
+        return connection.spawn_consumer(self._exchange_params, token)
 
 
 class BusConsumer:
-    def __init__(self, exchange_params, connection, token):
+    def __init__(self, connection, exchange_params, token):
         self.set_token(token)
 
         self._exchange_params = exchange_params
@@ -284,7 +280,7 @@ class BusConsumer:
         return payload
 
     async def _start_consuming(self):
-        channel = self._channel = await self._connection.register(self)
+        channel = self._channel = await self._connection.get_channel()
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
@@ -321,7 +317,7 @@ class BusConsumer:
             if self._consumer_tag is not None:
                 await self._channel.basic_cancel(self._consumer_tag)
             await self._channel.close()
-        self._connection.unregister(self)
+        self._connection.remove_consumer(self)
 
     async def bind(self, event_name):
         binding = {}
