@@ -1,16 +1,18 @@
 # Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import asyncio
-import logging
-import json
 import aioamqp
+import asyncio
+import json
+import logging
 
-from secrets import token_urlsafe
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
-from itertools import cycle, repeat, chain
 from collections import namedtuple
+from itertools import count, cycle, repeat, chain
+from secrets import token_urlsafe
 from xivo.auth_verifier import AccessCheck
+
+from .auth import get_master_tenant
 from .exception import (
     BusConnectionError,
     BusConnectionLostError,
@@ -18,14 +20,10 @@ from .exception import (
     InvalidEvent,
     EventPermissionError,
 )
-from .auth import get_master_tenant
 
 logger = logging.getLogger(__name__)
 
 _Event = namedtuple('Event', 'name, headers, acl, payload, message')
-_ConnectionParams = namedtuple(
-    '_ConnectionParams', 'host, port, username, password, vhost'
-)
 _ExchangeParams = namedtuple('_ExchangeParams', 'name, type')
 
 ROUTING_KEYS = [
