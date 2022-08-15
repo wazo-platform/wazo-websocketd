@@ -219,7 +219,8 @@ class _BusConnectionPool:
         _, pending = await asyncio.wait(self._tasks, loop=self._loop, timeout=5.0)
         if pending:
             logger.info('some connections did not exit gracefully, forcing...')
-            [task.cancel() for task in pending]
+            for task in pending:
+                task.cancel()
 
         logger.info('bus connection pool closed (%s connections)', self.size)
 
