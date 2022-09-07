@@ -8,17 +8,17 @@ import logging
 
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from collections import namedtuple
-from itertools import count, cycle, repeat, chain
-from secrets import token_urlsafe
+from itertools import chain, count, cycle, repeat
+from secrets import token_hex
 from xivo.auth_verifier import AccessCheck
 
 from .auth import get_master_tenant
 from .exception import (
     BusConnectionError,
     BusConnectionLostError,
-    InvalidTokenError,
-    InvalidEvent,
     EventPermissionError,
+    InvalidEvent,
+    InvalidTokenError,
 )
 
 logger = logging.getLogger(__name__)
@@ -232,9 +232,10 @@ class BusService:
     _DEFAULT_CONNECTION_POOL_SIZE = 2  # number of worker connections
 
     def __init__(self, config, *, loop=None):
+        pool_size = config.get('pool_size', self._DEFAULT_CONNECTION_POOL_SIZE)
+
         self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
         self._loop = loop or asyncio.get_event_loop()
-        pool_size = config.get('pool_size', self._DEFAULT_CONNECTION_POOL_SIZE)
         self._connection_pool = _BusConnectionPool(self._url, pool_size)
         self._exchange_params = _ExchangeParams(
             config['exchange_name'],
@@ -297,7 +298,7 @@ class BusConsumer:
         await channel.basic_qos(prefetch_count=1, prefetch_size=0)
 
         # Create exclusive queue on exchange
-        queue_name = self._generate_name(f'user-{self._uuid}', token_urlsafe(4))
+        queue_name = self._generate_name(f'user-{self._uuid}', token_hex(3))
         response = await channel.queue(
             queue_name=queue_name, durable=False, auto_delete=True, exclusive=True
         )
@@ -325,11 +326,10 @@ class BusConsumer:
         if event_name != '*':
             binding['name'] = event_name
 
-        # TODO: Uncomment when all events are tagged with user_uuid:{uuid} or user_uuid:*
-        # if not self._is_admin:
-        #    binding.update(
-        #        {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-        #    )
+        if not self._is_admin:
+            binding.update(
+                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
+            )
 
         await self._channel.queue_bind(
             self._amqp_queue, self._exchange, '', arguments=binding
@@ -340,11 +340,10 @@ class BusConsumer:
         if event_name != '*':
             binding['name'] = event_name
 
-        # TODO: Uncomment when all events are tagged with user_uuid:{uuid} or user_uuid:*
-        # if not self._is_admin:
-        #    binding.update(
-        #        {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-        #    )
+        if not self._is_admin:
+            binding.update(
+                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
+            )
 
         await self._channel.queue_unbind(
             self._amqp_queue, self._exchange, '', arguments=binding
@@ -448,5 +447,4 @@ class BusConsumer:
 
     @staticmethod
     def _generate_name(*parts):
-        module = __name__.split('.')[0]
-        return '.'.join([module, *parts])
+        return '.'.join(['wazo-websocketd', *parts])
