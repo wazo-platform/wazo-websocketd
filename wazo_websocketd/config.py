@@ -32,10 +32,9 @@ _DEFAULT_CONFIG = {
         'port': 5672,
         'username': 'guest',
         'password': 'guest',
-        'exchange_name': 'wazo-websocketd',
+        'vhost': '',
+        'exchange_name': 'wazo-headers',
         'exchange_type': 'headers',
-        'upstream_exchange_name': 'xivo',
-        'upstream_exchange_type': 'topic',
     },
     'websocket': {
         'listen': '127.0.0.1',

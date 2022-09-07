@@ -42,10 +42,8 @@
 #  port: 5672
 #  username: guest
 #  password: guest
-#  exchange_name: wazo-websocketd
+#  exchange_name: wazo-headers
 #  exchange_type: headers
-#  upstream_exchange_name: xivo
-#  upstream_exchange_type: topic
 
 ## Developer options -- do not use them
 #auth_check_strategy: static
