@@ -35,6 +35,7 @@ class _BusConnection:
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
+        self._connected = asyncio.Event()
         self._transport = None
         self._protocol = None
         self._consumers = []
@@ -44,13 +45,19 @@ class _BusConnection:
     def is_closing(self):
         return self._closing.is_set()
 
+    @property
+    def is_connected(self):
+        return self._connected.is_set()
+
     async def run(self):
         while True:
             await self.connect()
+            self._connected.set()
 
             # Wait for the connection to terminate
             await self._protocol.wait_closed()
             self._transport.close()
+            self._connected.clear()
 
             # Notify consumers of disconnection
             await self._notify_closed()
@@ -88,7 +95,12 @@ class _BusConnection:
         await self._protocol.close()
         self._transport.close()
 
-    async def get_channel(self):
+    async def get_channel(self, *, no_wait=False):
+        if not self.is_connected and no_wait:
+            raise BusConnectionError(
+                f'[connection {self._id}] connection isn\'t established yet'
+            )
+        await self._connected.wait()
         try:
             return await self._protocol.channel()
         except (AmqpClosedConnection, ChannelClosed):
@@ -171,6 +183,31 @@ class BusService:
         connection = self._connection_pool.get_connection()
         return connection.spawn_consumer(self._exchange_params, token)
 
+    def schedule_initialization(self):
+        async def create_exchange():
+            connection = self._connection_pool.get_connection()
+            channel = await connection.get_channel()
+            await channel.exchange(
+                self._exchange_params.name, self._exchange_params.type, durable=True
+            )
+            logger.debug('exchange `%s` initialized', self._exchange_params.name)
+            await channel.close()
+
+        # Migration <22.13
+        # Upgrading from a previous version will keep `wazo-websocketd` exchange
+        # since it is durable, but is no longer needed, so let's delete it if unused
+        async def remove_deprecated():
+            if self._exchange_params.name != 'wazo-websocketd':
+                connection = self._connection_pool.get_connection()
+                channel = await connection.get_channel()
+
+                await channel.exchange_delete('wazo-websocketd', if_unused=True)
+                logger.debug('migration: removed legacy `wazo-websocketd` exchange...')
+                await channel.close()
+
+        self._loop.create_task(create_exchange())
+        self._loop.create_task(remove_deprecated())
+
 
 class BusConsumer:
     def __init__(self, connection, exchange_params, token):
@@ -201,11 +238,11 @@ class BusConsumer:
         return payload
 
     async def _start_consuming(self):
-        channel = self._channel = await self._connection.get_channel()
+        channel = self._channel = await self._connection.get_channel(no_wait=True)
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
-        if self._tenant_uuid != get_master_tenant():
+        if not self._is_admin:
             exchange = self._generate_name(f'tenant-{self._tenant_uuid}')
             await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
             await channel.exchange_bind(

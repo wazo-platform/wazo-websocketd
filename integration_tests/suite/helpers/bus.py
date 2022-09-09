@@ -41,7 +41,7 @@ class BusClient:
 
     async def publish(self, event, tenant_uuid=None):
         payload = json.dumps(event).encode('utf-8')
-        exchange = 'wazo-websocketd'
+        exchange = 'wazo-headers'
         properties = {
             'headers': {
                 'name': event['name'],
