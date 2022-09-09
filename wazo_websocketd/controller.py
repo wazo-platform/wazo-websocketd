@@ -51,6 +51,7 @@ class Controller:
         loop.add_signal_handler(signal.SIGINT, self._stop)
         loop.add_signal_handler(signal.SIGTERM, self._stop)
         self._token_renewer.subscribe(set_master_tenant, details=True, oneshot=True)
+        self._bus_service.schedule_initialization()
 
     def run(self):
         logger.info('wazo-websocketd starting...')

@@ -17,6 +17,9 @@ class BusServiceMock:
     def __exit__(self, *args):
         pass
 
+    def schedule_initialization(self):
+        pass
+
 
 class TestControllerEvent(unittest.TestCase):
     def test_controller_start_stop(self):

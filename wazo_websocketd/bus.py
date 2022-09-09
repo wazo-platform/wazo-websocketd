@@ -8,104 +8,23 @@ import logging
 
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from collections import namedtuple
-from itertools import count, cycle, repeat, chain
-from secrets import token_urlsafe
+from itertools import chain, count, cycle, repeat
+from secrets import token_hex
 from xivo.auth_verifier import AccessCheck
 
 from .auth import get_master_tenant
 from .exception import (
     BusConnectionError,
     BusConnectionLostError,
-    InvalidTokenError,
-    InvalidEvent,
     EventPermissionError,
+    InvalidEvent,
+    InvalidTokenError,
 )
 
 logger = logging.getLogger(__name__)
 
 _Event = namedtuple('Event', 'name, headers, acl, payload, message')
 _ExchangeParams = namedtuple('_ExchangeParams', 'name, type')
-
-ROUTING_KEYS = [
-    'applications.#',
-    'auth.#',
-    'call_log.#',
-    'call_logd.#',
-    'calls.#',
-    'chatd.#',
-    'collectd.#',
-    'conferences.#',
-    'config.#',
-    'directory.#',
-    'faxes.#',
-    'lines.#',
-    'meetings.#',
-    'plugin.#',
-    'service.#',
-    'status.#',
-    'switchboards.#',
-    'sysconfd.#',
-    'trunks.#',
-    'voicemails.#',
-]
-
-
-def create_or_update_exchange(config):
-    async def process(config, timeout=30):
-        url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
-        upstream_name = config['upstream_exchange_name']
-        exchange_name = config['exchange_name']
-
-        logger.debug('waiting on RabbitMQ... (timeout in %d second(s))', timeout)
-        for attempt in range(timeout):
-            try:
-                transport, protocol = await aioamqp.from_url(url, heartbeat=60)
-                break
-            except (AmqpClosedConnection, OSError):
-                if attempt >= (timeout - 1):
-                    raise BusConnectionError
-                await asyncio.sleep(1)
-
-        channel = await protocol.channel()
-
-        await channel.exchange_declare(
-            upstream_name,
-            config['upstream_exchange_type'],
-            durable=True,
-            auto_delete=False,
-        )
-
-        await channel.exchange_declare(
-            exchange_name,
-            config['exchange_type'],
-            durable=True,
-            auto_delete=False,
-        )
-
-        # This unbind and the one in the loop were added in 20.01 because we created
-        # a bind on the wrong exchange (wazo-headers) in a previous version
-        await channel.exchange_unbind(
-            exchange_name, 'wazo-headers', 'trunks.#voicemails.#'
-        )
-        for routing_key in ROUTING_KEYS:
-            await channel.exchange_unbind(
-                exchange_name, 'wazo-headers', routing_key
-            )  # Migrate <20.01
-            await channel.exchange_bind(exchange_name, upstream_name, routing_key)
-
-        await channel.close()
-        await protocol.close()
-        transport.close()
-
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(process(config))
-    except BusConnectionError:
-        logger.error(
-            'Timed out while trying to connect to RabbitMQ, skipping exchange initialization...'
-        )
-    else:
-        logger.debug('done configuring RabbitMQ, continuing...')
 
 
 class _BusConnection:
@@ -116,6 +35,7 @@ class _BusConnection:
         self._url = url
         self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
+        self._connected = asyncio.Event()
         self._transport = None
         self._protocol = None
         self._consumers = []
@@ -125,13 +45,19 @@ class _BusConnection:
     def is_closing(self):
         return self._closing.is_set()
 
+    @property
+    def is_connected(self):
+        return self._connected.is_set()
+
     async def run(self):
         while True:
             await self.connect()
+            self._connected.set()
 
             # Wait for the connection to terminate
             await self._protocol.wait_closed()
             self._transport.close()
+            self._connected.clear()
 
             # Notify consumers of disconnection
             await self._notify_closed()
@@ -169,7 +95,12 @@ class _BusConnection:
         await self._protocol.close()
         self._transport.close()
 
-    async def get_channel(self):
+    async def get_channel(self, *, wait=True):
+        if not self.is_connected and not wait:
+            raise BusConnectionError(
+                f'[connection {self._id}] connection isn\'t established yet'
+            )
+        await self._connected.wait()
         try:
             return await self._protocol.channel()
         except (AmqpClosedConnection, ChannelClosed):
@@ -232,9 +163,10 @@ class BusService:
     _DEFAULT_CONNECTION_POOL_SIZE = 2  # number of worker connections
 
     def __init__(self, config, *, loop=None):
+        pool_size = config.get('pool_size', self._DEFAULT_CONNECTION_POOL_SIZE)
+
         self._url = 'amqp://{username}:{password}@{host}:{port}//'.format(**config)
         self._loop = loop or asyncio.get_event_loop()
-        pool_size = config.get('pool_size', self._DEFAULT_CONNECTION_POOL_SIZE)
         self._connection_pool = _BusConnectionPool(self._url, pool_size)
         self._exchange_params = _ExchangeParams(
             config['exchange_name'],
@@ -250,6 +182,31 @@ class BusService:
     async def create_consumer(self, token):
         connection = self._connection_pool.get_connection()
         return connection.spawn_consumer(self._exchange_params, token)
+
+    def schedule_initialization(self):
+        async def create_exchange():
+            connection = self._connection_pool.get_connection()
+            channel = await connection.get_channel(wait=True)
+            await channel.exchange(
+                self._exchange_params.name, self._exchange_params.type, durable=True
+            )
+            logger.debug('exchange `%s` initialized', self._exchange_params.name)
+            await channel.close()
+
+        # Migration <22.13
+        # Upgrading from a previous version will keep `wazo-websocketd` exchange
+        # since it is durable, but is no longer needed, so let's delete it if unused
+        async def remove_deprecated():
+            if self._exchange_params.name != 'wazo-websocketd':
+                connection = self._connection_pool.get_connection()
+                channel = await connection.get_channel(wait=True)
+
+                await channel.exchange_delete('wazo-websocketd', if_unused=True)
+                logger.debug('migration: removed legacy `wazo-websocketd` exchange...')
+                await channel.close()
+
+        self._loop.create_task(create_exchange())
+        self._loop.create_task(remove_deprecated())
 
 
 class BusConsumer:
@@ -281,11 +238,11 @@ class BusConsumer:
         return payload
 
     async def _start_consuming(self):
-        channel = self._channel = await self._connection.get_channel()
+        channel = self._channel = await self._connection.get_channel(wait=False)
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
-        if self._tenant_uuid != get_master_tenant():
+        if not self._is_admin:
             exchange = self._generate_name(f'tenant-{self._tenant_uuid}')
             await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
             await channel.exchange_bind(
@@ -297,7 +254,7 @@ class BusConsumer:
         await channel.basic_qos(prefetch_count=1, prefetch_size=0)
 
         # Create exclusive queue on exchange
-        queue_name = self._generate_name(f'user-{self._uuid}', token_urlsafe(4))
+        queue_name = self._generate_name(f'user-{self._uuid}', token_hex(3))
         response = await channel.queue(
             queue_name=queue_name, durable=False, auto_delete=True, exclusive=True
         )
@@ -325,11 +282,10 @@ class BusConsumer:
         if event_name != '*':
             binding['name'] = event_name
 
-        # TODO: Uncomment when all events are tagged with user_uuid:{uuid} or user_uuid:*
-        # if not self._is_admin:
-        #    binding.update(
-        #        {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-        #    )
+        if not self._is_admin:
+            binding.update(
+                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
+            )
 
         await self._channel.queue_bind(
             self._amqp_queue, self._exchange, '', arguments=binding
@@ -340,11 +296,10 @@ class BusConsumer:
         if event_name != '*':
             binding['name'] = event_name
 
-        # TODO: Uncomment when all events are tagged with user_uuid:{uuid} or user_uuid:*
-        # if not self._is_admin:
-        #    binding.update(
-        #        {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-        #    )
+        if not self._is_admin:
+            binding.update(
+                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
+            )
 
         await self._channel.queue_unbind(
             self._amqp_queue, self._exchange, '', arguments=binding
@@ -448,5 +403,4 @@ class BusConsumer:
 
     @staticmethod
     def _generate_name(*parts):
-        module = __name__.split('.')[0]
-        return '.'.join([module, *parts])
+        return '.'.join(['wazo-websocketd', *parts])
