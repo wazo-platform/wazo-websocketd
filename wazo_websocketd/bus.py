@@ -95,8 +95,8 @@ class _BusConnection:
         await self._protocol.close()
         self._transport.close()
 
-    async def get_channel(self, *, no_wait=False):
-        if not self.is_connected and no_wait:
+    async def get_channel(self, *, wait=True):
+        if not self.is_connected and not wait:
             raise BusConnectionError(
                 f'[connection {self._id}] connection isn\'t established yet'
             )
@@ -186,7 +186,7 @@ class BusService:
     def schedule_initialization(self):
         async def create_exchange():
             connection = self._connection_pool.get_connection()
-            channel = await connection.get_channel()
+            channel = await connection.get_channel(wait=True)
             await channel.exchange(
                 self._exchange_params.name, self._exchange_params.type, durable=True
             )
@@ -199,7 +199,7 @@ class BusService:
         async def remove_deprecated():
             if self._exchange_params.name != 'wazo-websocketd':
                 connection = self._connection_pool.get_connection()
-                channel = await connection.get_channel()
+                channel = await connection.get_channel(wait=True)
 
                 await channel.exchange_delete('wazo-websocketd', if_unused=True)
                 logger.debug('migration: removed legacy `wazo-websocketd` exchange...')
@@ -238,7 +238,7 @@ class BusConsumer:
         return payload
 
     async def _start_consuming(self):
-        channel = self._channel = await self._connection.get_channel(no_wait=True)
+        channel = self._channel = await self._connection.get_channel(wait=False)
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
