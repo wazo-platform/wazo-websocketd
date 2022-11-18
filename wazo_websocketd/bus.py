@@ -281,32 +281,28 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name):
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
+        bindings = [{}]
         if not self._is_admin:
-            binding.update(
-                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-            )
+            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._uuid, '*')]
 
-        await self._channel.queue_bind(
-            self._amqp_queue, self._exchange, '', arguments=binding
-        )
+        for binding in bindings:
+            if event_name != '*':
+                binding['name'] = event_name
+            await self._channel.queue_bind(
+                self._amqp_queue, self._exchange, '', arguments=binding
+            )
 
     async def unbind(self, event_name):
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
+        bindings = [{}]
         if not self._is_admin:
-            binding.update(
-                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-            )
+            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._uuid, '*')]
 
-        await self._channel.queue_unbind(
-            self._amqp_queue, self._exchange, '', arguments=binding
-        )
+        for binding in bindings or [{}]:
+            if event_name != '*':
+                binding['name'] = event_name
+            await self._channel.queue_unbind(
+                self._amqp_queue, self._exchange, '', arguments=binding
+            )
 
     async def connection_lost(self):
         await self._queue.put(BusConnectionLostError())
