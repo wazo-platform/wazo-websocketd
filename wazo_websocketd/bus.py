@@ -242,7 +242,7 @@ class BusConsumer:
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
-        if not self._is_admin:
+        if not self._is_master_tenant:
             exchange = self._generate_name(f'tenant-{self._tenant_uuid}')
             await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
             await channel.exchange_bind(
@@ -269,6 +269,9 @@ class BusConsumer:
         if response['consumer_tag'] is None:
             raise BusConnectionError
         self._consumer_tag = response['consumer_tag']
+        logger.debug(
+            f'''user `{self._uuid}` consuming {"all" if self._is_master_tenant else "tenant's" if self._is_admin else "user's"} events'''
+        )
 
     async def _stop_consuming(self):
         if self._channel.is_open:
@@ -325,6 +328,14 @@ class BusConsumer:
             self._access = AccessCheck(uuid, session, acl)
 
     @property
+    def _is_admin(self):
+        try:
+            purpose = self._token['metadata']['purpose']
+            return self._is_master_tenant or purpose in ('internal', 'external_api')
+        except KeyError:
+            return False
+
+    @property
     def _uuid(self):
         try:
             return self._token['metadata']['uuid']
@@ -346,7 +357,7 @@ class BusConsumer:
             return None
 
     @property
-    def _is_admin(self):
+    def _is_master_tenant(self):
         try:
             return self._token['metadata']['tenant_uuid'] == get_master_tenant()
         except KeyError:
