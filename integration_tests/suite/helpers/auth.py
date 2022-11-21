@@ -5,7 +5,7 @@ from requests.packages.urllib3 import disable_warnings
 from contextlib import contextmanager
 from wazo_test_helpers.auth import AuthClient as Client, MockUserToken
 
-from .constants import TENANT1_UUID
+from .constants import TENANT1_UUID, USER1_UUID
 
 
 class AuthClient:
@@ -21,15 +21,20 @@ class AuthClient:
         self,
         *,
         token_uuid=None,
-        user_uuid=None,
+        user_uuid=USER1_UUID,
         tenant_uuid=TENANT1_UUID,
         session_uuid='my-session-uuid',
-        acl=['websocketd']
+        acl=['websocketd'],
+        purpose='user',
     ):
-        metadata = {'tenant_uuid': str(tenant_uuid)}
+        metadata = {'tenant_uuid': str(tenant_uuid), 'purpose': purpose}
+
         if token_uuid is None:
             token = MockUserToken.some_token(
-                session_uuid=str(session_uuid), acl=acl, metadata=metadata
+                user_uuid=str(user_uuid),
+                session_uuid=str(session_uuid),
+                acl=acl,
+                metadata=metadata,
             )
         else:
             token = MockUserToken(
@@ -47,10 +52,11 @@ class AuthClient:
         self,
         *,
         token_uuid=None,
-        user_uuid=None,
+        user_uuid=USER1_UUID,
         tenant_uuid=TENANT1_UUID,
         session_uuid='my-session-uuid',
-        acl=['websocketd']
+        acl=['websocketd'],
+        purpose='user',
     ):
         token = self.make_token(
             token_uuid=token_uuid,
@@ -58,6 +64,7 @@ class AuthClient:
             tenant_uuid=tenant_uuid,
             session_uuid=session_uuid,
             acl=acl,
+            purpose=purpose,
         )
         try:
             yield token

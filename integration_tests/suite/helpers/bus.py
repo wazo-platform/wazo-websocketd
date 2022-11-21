@@ -7,6 +7,8 @@ import aioamqp
 import asyncio
 from aioamqp.exceptions import AmqpClosedConnection
 
+from .constants import TENANT1_UUID, USER1_UUID
+
 
 class BusClient:
     timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
@@ -39,7 +41,7 @@ class BusClient:
             await self._protocol.close()
             self._transport.close()
 
-    async def publish(self, event, tenant_uuid=None):
+    async def publish(self, event, tenant_uuid=TENANT1_UUID, user_uuid=USER1_UUID):
         payload = json.dumps(event).encode('utf-8')
         exchange = 'wazo-headers'
         properties = {
@@ -49,11 +51,12 @@ class BusClient:
         }
 
         if tenant_uuid:
-            properties['headers']['tenant_uuid'] = str(
-                event.get('tenant_uuid', tenant_uuid)
-            )
+            properties['headers'].update(tenant_uuid=str(tenant_uuid))
+
+        if user_uuid:
+            properties['headers'].update({f'user_uuid:{user_uuid}': True})
 
         if 'required_acl' in event:
-            properties['headers']['required_acl'] = event['required_acl']
+            properties['headers'].update(required_acl=event['required_acl'])
 
         await self._channel.publish(payload, exchange, '', properties=properties)

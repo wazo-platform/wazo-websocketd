@@ -242,7 +242,7 @@ class BusConsumer:
         exchange = upstream = self._exchange_params.name
 
         # if not part of master tenant, create (if needed) tenant exchange
-        if not self._is_admin:
+        if not self._is_master_tenant:
             exchange = self._generate_name(f'tenant-{self._tenant_uuid}')
             await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
             await channel.exchange_bind(
@@ -270,6 +270,14 @@ class BusConsumer:
             raise BusConnectionError
         self._consumer_tag = response['consumer_tag']
 
+        if self._is_master_tenant:
+            consumed_events = 'all'
+        elif self._is_admin:
+            consumed_events = 'tenant\'s'
+        else:
+            consumed_events = 'user\'s'
+        logger.debug('user `%s` consuming %s events', self._uuid, consumed_events)
+
     async def _stop_consuming(self):
         if self._channel.is_open:
             if self._consumer_tag is not None:
@@ -278,32 +286,28 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name):
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
+        bindings = [{}]
         if not self._is_admin:
-            binding.update(
-                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-            )
+            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._uuid, '*')]
 
-        await self._channel.queue_bind(
-            self._amqp_queue, self._exchange, '', arguments=binding
-        )
+        for binding in bindings:
+            if event_name != '*':
+                binding['name'] = event_name
+            await self._channel.queue_bind(
+                self._amqp_queue, self._exchange, '', arguments=binding
+            )
 
     async def unbind(self, event_name):
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
+        bindings = [{}]
         if not self._is_admin:
-            binding.update(
-                {f'user_uuid:{self._uuid}': True, 'user_uuid:*': True, 'x-match': 'any'}
-            )
+            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._uuid, '*')]
 
-        await self._channel.queue_unbind(
-            self._amqp_queue, self._exchange, '', arguments=binding
-        )
+        for binding in bindings or [{}]:
+            if event_name != '*':
+                binding['name'] = event_name
+            await self._channel.queue_unbind(
+                self._amqp_queue, self._exchange, '', arguments=binding
+            )
 
     async def connection_lost(self):
         await self._queue.put(BusConnectionLostError())
@@ -323,6 +327,14 @@ class BusConsumer:
         else:
             self._token = token
             self._access = AccessCheck(uuid, session, acl)
+
+    @property
+    def _is_admin(self):
+        try:
+            purpose = self._token['metadata']['purpose']
+            return self._is_master_tenant or purpose in ('internal', 'external_api')
+        except KeyError:
+            return False
 
     @property
     def _uuid(self):
@@ -346,7 +358,7 @@ class BusConsumer:
             return None
 
     @property
-    def _is_admin(self):
+    def _is_master_tenant(self):
         try:
             return self._token['metadata']['tenant_uuid'] == get_master_tenant()
         except KeyError:
