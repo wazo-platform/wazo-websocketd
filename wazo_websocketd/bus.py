@@ -332,7 +332,12 @@ class BusConsumer:
     def _is_admin(self):
         try:
             purpose = self._token['metadata']['purpose']
-            return self._is_master_tenant or purpose in ('internal', 'external_api')
+            is_admin = self._token['metadata'].get('admin', False)
+            return (
+                self._is_master_tenant
+                or purpose in ('internal', 'external_api')
+                or is_admin
+            )
         except KeyError:
             return False
 
