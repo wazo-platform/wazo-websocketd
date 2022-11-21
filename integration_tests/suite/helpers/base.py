@@ -72,7 +72,9 @@ class IntegrationTest(AssetLaunchingTestCase):
             return
 
         token = cls.auth_client.make_token(
-            token_uuid=TOKEN_UUID, user_uuid=MASTER_USER_UUID, tenant_uuid=MASTER_TENANT_UUID
+            token_uuid=TOKEN_UUID,
+            user_uuid=MASTER_USER_UUID,
+            tenant_uuid=MASTER_TENANT_UUID,
         )
         credentials = MockCredentials('websocketd-service', 'websocketd-password')
         cls.auth_client.set_valid_credentials(credentials, token)
