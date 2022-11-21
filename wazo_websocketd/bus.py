@@ -269,9 +269,14 @@ class BusConsumer:
         if response['consumer_tag'] is None:
             raise BusConnectionError
         self._consumer_tag = response['consumer_tag']
-        logger.debug(
-            f'''user `{self._uuid}` consuming {"all" if self._is_master_tenant else "tenant's" if self._is_admin else "user's"} events'''
-        )
+
+        if self._is_master_tenant:
+            consumed_events = 'all'
+        elif self._is_admin:
+            consumed_events = 'tenant\'s'
+        else:
+            consumed_events = 'user\'s'
+        logger.debug('user `%s` consuming %s events', self._uuid, consumed_events)
 
     async def _stop_consuming(self):
         if self._channel.is_open:
