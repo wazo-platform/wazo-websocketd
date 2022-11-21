@@ -7,7 +7,7 @@ import aioamqp
 import asyncio
 from aioamqp.exceptions import AmqpClosedConnection
 
-from .constants import TENANT1_UUID
+from .constants import TENANT1_UUID, USER1_UUID
 
 
 class BusClient:
@@ -41,7 +41,7 @@ class BusClient:
             await self._protocol.close()
             self._transport.close()
 
-    async def publish(self, event, tenant_uuid=TENANT1_UUID, user_uuid=None):
+    async def publish(self, event, tenant_uuid=TENANT1_UUID, user_uuid=USER1_UUID):
         payload = json.dumps(event).encode('utf-8')
         exchange = 'wazo-headers'
         properties = {

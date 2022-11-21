@@ -5,7 +5,7 @@ from requests.packages.urllib3 import disable_warnings
 from contextlib import contextmanager
 from wazo_test_helpers.auth import AuthClient as Client, MockUserToken
 
-from .constants import TENANT1_UUID
+from .constants import TENANT1_UUID, USER1_UUID
 
 
 class AuthClient:
@@ -21,7 +21,7 @@ class AuthClient:
         self,
         *,
         token_uuid=None,
-        user_uuid=None,
+        user_uuid=USER1_UUID,
         tenant_uuid=TENANT1_UUID,
         session_uuid='my-session-uuid',
         acl=['websocketd'],
@@ -52,7 +52,7 @@ class AuthClient:
         self,
         *,
         token_uuid=None,
-        user_uuid=None,
+        user_uuid=USER1_UUID,
         tenant_uuid=TENANT1_UUID,
         session_uuid='my-session-uuid',
         acl=['websocketd'],
