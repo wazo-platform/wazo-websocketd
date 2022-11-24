@@ -20,7 +20,7 @@ class TimeWaitStrategy(WaitStrategy):
 
 
 class WaitUntilValidConnection(WaitStrategy):
-    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
+    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
 
     def wait(self, test):
         loop = asyncio.get_event_loop()

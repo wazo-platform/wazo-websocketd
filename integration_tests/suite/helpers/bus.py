@@ -11,7 +11,7 @@ from .constants import TENANT1_UUID, USER1_UUID
 
 
 class BusClient:
-    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
+    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
 
     def __init__(self, port):
         self._port = port
