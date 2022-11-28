@@ -47,6 +47,20 @@ class WebSocketdClient:
         await self.connect(token_id, version)
         await self.wait_for_close(code)
 
+    # FIXME: until proper /status route is available, this method attempts to connect
+    # until we hit timeout
+    async def retry_connect_and_wait_for_init(self, token_id, version=1, timeout=60):
+        for _ in range(timeout):
+            try:
+                await self.connect_and_wait_for_init(token_id, version)
+            except websockets.ConnectionClosed:
+                await asyncio.sleep(1)
+            else:
+                return
+        raise WebSocketdTimeoutError(
+            'failed to connect within {} seconds'.format(timeout)
+        )
+
     async def wait_for_close(self, code=None):
         # close code are defined in the "constants" module
         try:
