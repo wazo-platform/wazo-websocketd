@@ -1,11 +1,12 @@
 # Copyright 2022-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import os
 import time
 import asyncio
 
 from websockets import ConnectionClosed
+
+from .constants import START_TIMEOUT
 from .websocketd import WebSocketdClient, WebSocketdTimeoutError
 
 
@@ -20,7 +21,7 @@ class TimeWaitStrategy(WaitStrategy):
 
 
 class WaitUntilValidConnection(WaitStrategy):
-    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '30'))
+    timeout = START_TIMEOUT
 
     def wait(self, test):
         loop = asyncio.get_event_loop()
