@@ -7,6 +7,8 @@ import uuid
 
 import websockets
 
+from .constants import START_TIMEOUT
+
 
 class WebSocketdTimeoutError(Exception):
     pass
@@ -49,7 +51,9 @@ class WebSocketdClient:
 
     # FIXME: until proper /status route is available, this method attempts to connect
     # until we hit timeout
-    async def retry_connect_and_wait_for_init(self, token_id, version=1, timeout=60):
+    async def retry_connect_and_wait_for_init(
+        self, token_id, version=1, timeout=START_TIMEOUT
+    ):
         for _ in range(timeout):
             try:
                 await self.connect_and_wait_for_init(token_id, version)

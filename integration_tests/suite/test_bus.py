@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
-import os
 
 from contextlib import asynccontextmanager
 from uuid import uuid4
@@ -254,7 +253,6 @@ class TestBusConnectionLost(IntegrationTest):
 class TestRabbitMQRestart(IntegrationTest):
 
     asset = 'basic'
-    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
 
     @run_with_loop
     async def test_can_connect_after_rabbitmq_restart(self):
@@ -268,9 +266,7 @@ class TestRabbitMQRestart(IntegrationTest):
             await self.websocketd_client.close()
             self.bus_client = self.make_bus()
             await self.bus_client.connect()
-            await self.websocketd_client.retry_connect_and_wait_for_init(
-                token, timeout=self.timeout
-            )
+            await self.websocketd_client.retry_connect_and_wait_for_init(token)
             await self.websocketd_client.op_subscribe('foo')
             await self.websocketd_client.op_start()
             await self.bus_client.publish(event)

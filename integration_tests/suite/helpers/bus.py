@@ -1,17 +1,16 @@
 # Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import os
 import json
 import aioamqp
 import asyncio
 from aioamqp.exceptions import AmqpClosedConnection
 
-from .constants import TENANT1_UUID, USER1_UUID
+from .constants import TENANT1_UUID, USER1_UUID, START_TIMEOUT
 
 
 class BusClient:
-    timeout = int(os.environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
+    timeout = START_TIMEOUT
 
     def __init__(self, port):
         self._port = port
