@@ -26,8 +26,11 @@ class AuthClient:
         session_uuid='my-session-uuid',
         acl=['websocketd'],
         purpose='user',
+        admin=False,
     ):
         metadata = {'tenant_uuid': str(tenant_uuid), 'purpose': purpose}
+        if purpose == 'user':
+            metadata.update(admin=admin)
 
         if token_uuid is None:
             token = MockUserToken.some_token(
@@ -57,6 +60,7 @@ class AuthClient:
         session_uuid='my-session-uuid',
         acl=['websocketd'],
         purpose='user',
+        admin=False,
     ):
         token = self.make_token(
             token_uuid=token_uuid,
@@ -65,6 +69,7 @@ class AuthClient:
             session_uuid=session_uuid,
             acl=acl,
             purpose=purpose,
+            admin=admin,
         )
         try:
             yield token

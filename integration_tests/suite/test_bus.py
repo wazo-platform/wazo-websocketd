@@ -133,6 +133,28 @@ class TestBus(IntegrationTest):
             await self.websocketd_client.wait_for_nothing()
 
     @run_with_loop
+    async def test_user_receives_all_tenant_events_when_admin(self):
+        event = {'name': 'foo', 'required_acl': 'event.foo'}
+
+        async with self._connect(event, purpose='user', admin=True):
+            await self.bus_client.publish(event, user_uuid=USER1_UUID)
+            self.assertEqual(event, await self.websocketd_client.recv_msg())
+
+            await self.bus_client.publish(event, user_uuid='*')
+            self.assertEqual(event, await self.websocketd_client.recv_msg())
+
+            await self.bus_client.publish(event, user_uuid=USER2_UUID)
+            self.assertEqual(event, await self.websocketd_client.recv_msg())
+
+    @run_with_loop
+    async def test_user_dont_receive_events_from_other_tenants_when_admin(self):
+        event = {'name': 'foo', 'required_acl': 'event.foo'}
+
+        async with self._connect(event, purpose='user', admin=True):
+            await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
+            await self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
     async def test_master_tenant_user_receives_all_messages(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -217,12 +239,14 @@ class TestBus(IntegrationTest):
         user_uuid=USER1_UUID,
         tenant_uuid=TENANT1_UUID,
         purpose='user',
+        admin=False,
     ):
         token = self.auth_client.make_token(
             user_uuid=user_uuid,
             tenant_uuid=tenant_uuid,
             purpose=purpose,
             acl=['websocketd', event['required_acl']],
+            admin=admin,
         )
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init(token, version=version)
