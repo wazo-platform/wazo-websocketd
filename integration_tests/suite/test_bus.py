@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -17,7 +17,6 @@ from .helpers.base import IntegrationTest, run_with_loop
 
 
 class TestBus(IntegrationTest):
-
     asset = 'basic'
 
     def setUp(self):
@@ -261,7 +260,6 @@ class TestBus(IntegrationTest):
 
 
 class TestBusConnectionLost(IntegrationTest):
-
     asset = 'basic'
 
     @run_with_loop
@@ -275,7 +273,6 @@ class TestBusConnectionLost(IntegrationTest):
 
 
 class TestRabbitMQRestart(IntegrationTest):
-
     asset = 'basic'
 
     @run_with_loop
@@ -300,7 +297,6 @@ class TestRabbitMQRestart(IntegrationTest):
 
 
 class TestClientPing(IntegrationTest):
-
     asset = 'basic'
 
     @run_with_loop
