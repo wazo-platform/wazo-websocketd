@@ -4,8 +4,8 @@ wazo-websocketd is a WebSocket server that delivers Wazo related events to clien
 
 ## Dependencies
 
-* python >= 3.6
-* see requirements.txt
+* Python 3.9
+* See requirements.txt
 
 ## Running integration tests
 
