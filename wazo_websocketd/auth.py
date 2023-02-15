@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -38,7 +38,6 @@ def has_master_tenant():
 
 
 class AsyncAuthClient:
-
     _ACL = 'websocketd'
 
     def __init__(self, config):
@@ -81,7 +80,6 @@ class _StaticIntervalAuthCheck:
 
 
 class _DynamicIntervalAuthCheck:
-
     _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
 
     def __init__(self, async_auth_client, config):

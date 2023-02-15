@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -57,7 +57,6 @@ class SessionFactory:
 
 
 class Session:
-
     _CLOSE_CODE_NO_TOKEN_ID = 4001
     _CLOSE_CODE_AUTH_FAILED = 4002
     _CLOSE_CODE_AUTH_EXPIRED = 4003

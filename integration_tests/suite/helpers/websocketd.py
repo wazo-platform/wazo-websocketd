@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -15,7 +15,6 @@ class WebSocketdTimeoutError(Exception):
 
 
 class WebSocketdClient:
-
     _DEFAULT_TIMEOUT = 5
 
     def __init__(self, port, *, loop=None):

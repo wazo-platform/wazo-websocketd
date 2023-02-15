@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import websockets
@@ -16,7 +16,6 @@ from .helpers.constants import (
 
 
 class TestAuthentication(IntegrationTest):
-
     asset = 'basic'
 
     @run_with_loop
@@ -44,7 +43,6 @@ class TestAuthentication(IntegrationTest):
 
 
 class TestNoAuth(IntegrationTest):
-
     asset = 'no_auth_server'
     wait_strategy = TimeWaitStrategy()
 
@@ -54,7 +52,6 @@ class TestNoAuth(IntegrationTest):
 
 
 class TestTokenExpiration(IntegrationTest):
-
     asset = 'token_expiration'
 
     _TIMEOUT = 15
