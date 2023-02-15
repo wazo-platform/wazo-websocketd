@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import aioamqp
@@ -408,7 +408,8 @@ class BusConsumer:
         if 'required_acl' not in headers:
             raise EventPermissionError(f'event \'{name}\' contains no ACL')
         acl = headers.get('required_acl')
-
+        if isinstance(acl, bytes):
+            acl = acl.decode('utf-8')
         if acl is not None and not isinstance(acl, str):
             raise InvalidEvent('ACL must be string, not {}'.format(type(acl)))
         if not self._has_access(acl):
