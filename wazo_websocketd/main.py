@@ -1,7 +1,9 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
+import uvloop
+import asyncio
 
 from xivo import xivo_logging
 from xivo.user_rights import change_user
@@ -15,6 +17,7 @@ from wazo_websocketd.session import SessionFactory
 
 
 def main():
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     config = load_config()
 
     xivo_logging.setup_logging(
