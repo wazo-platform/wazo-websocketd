@@ -4,17 +4,21 @@
 import asyncio
 import datetime
 import logging
-
 import requests
 import wazo_auth_client
 
 from itertools import chain, repeat
 from collections import namedtuple
 from functools import partial
+from itertools import chain, repeat
+from multiprocessing import Array
+from typing import Callable, Dict, List
+from wazo_auth_client import Client as AuthClient
+
 from .exception import AuthenticationError, AuthenticationExpiredError
 
 logger = logging.getLogger(__name__)
-_master_tenant_uuid = None
+_master_tenant_uuid = Array('c', b'00000000-0000-0000-0000-000000000000')
 
 
 def set_master_tenant(token):
@@ -25,12 +29,12 @@ def set_master_tenant(token):
         logger.error('invalid token, contains no tenant_uuid')
     else:
         logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
-        _master_tenant_uuid = tenant_uuid
+        _master_tenant_uuid.value = str.encode(tenant_uuid)
 
 
 def get_master_tenant():
     global _master_tenant_uuid
-    return _master_tenant_uuid
+    return _master_tenant_uuid.value
 
 
 def has_master_tenant():
