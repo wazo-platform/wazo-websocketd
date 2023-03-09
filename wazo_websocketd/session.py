@@ -180,13 +180,13 @@ class Session:
                 )
                 continue
             if self._protocol_version == 1:
-                payload = event.message
+                payload = event.content.encode()
             else:
-                payload = self._protocol_encoder.encode_event(event.payload)
+                payload = self._protocol_encoder.encode_event(event.content)
             await self._ws.send(payload)
 
     async def _task_authentification(self):
-        await self._authenticator.run_check(self._consumer.get_token)
+        await self._authenticator.run_check(self._consumer.get_token_id)
 
     async def _do_ws_subscribe(self, msg):
         event_name = msg.value
