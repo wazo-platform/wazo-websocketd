@@ -44,6 +44,8 @@ _DEFAULT_CONFIG = {
         'private_key': None,
         'ping_interval': 60,
     },
+    'process_workers': 'auto',
+    'worker_connections': 1,
 }
 
 
