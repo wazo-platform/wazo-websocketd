@@ -11,11 +11,10 @@ from aioamqp.channel import Channel
 from aioamqp.envelope import Envelope
 from aioamqp.properties import Properties
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
-from collections import namedtuple
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import Dict, List
+from typing import Dict, List, NamedTuple
 from xivo.auth_verifier import AccessCheck
 
 from .auth import get_master_tenant
@@ -28,8 +27,6 @@ from .exception import (
 )
 
 logger = logging.getLogger(__name__)
-
-_Event = namedtuple('Event', 'name, headers, acl, content')
 
 
 class _UserHelper:
@@ -244,7 +241,7 @@ class BusConsumer:
     def __aiter__(self):
         return self
 
-    async def __anext__(self):
+    async def __anext__(self) -> 'BusMessage':
         payload = await self._queue.get()
         if isinstance(payload, Exception):
             raise payload
@@ -284,11 +281,12 @@ class BusConsumer:
             raise BusConnectionError
         return response['queue']
 
-    def _decode_content(self, content: bytes, properties: Properties):
+    def _decode_content(self, content: bytes, properties: Properties) -> 'BusMessage':
         headers = properties.headers
         try:
-            message = json.loads(content)
-        except json.JSONDecodeError:
+            decoded = content.decode('utf-8')
+            message = json.loads(decoded)
+        except (UnicodeDecodeError, json.JSONDecodeError):
             raise InvalidEvent('unable to decode message')
 
         if not isinstance(message, dict):
@@ -302,12 +300,17 @@ class BusConsumer:
             raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
         acl = headers.get('required_acl')
 
+        if acl and not isinstance(acl, str):
+            raise InvalidEvent(
+                'event ACL is not a string (type: %s)', type(acl).__name__
+            )
+
         if not self._has_access(acl):
             raise EventPermissionError(
                 f'user `{self._user.uuid}` doesn\'t have the required ACL for event `{event_name}` (missing: {acl})'
             )
 
-        return _Event(event_name, headers, acl, message)
+        return BusMessage(event_name, headers, acl, message, content.decode())
 
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
@@ -372,7 +375,7 @@ class BusConsumer:
             )
 
     async def connection_lost(self) -> None:
-        await self._queue.put_nowait(BusConnectionLostError())
+        self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
         bindings = [{}]
@@ -396,6 +399,14 @@ class BusConsumer:
     @staticmethod
     def _generate_name(*parts: str) -> str:
         return '.'.join(['wazo-websocketd', *parts])
+
+
+class BusMessage(NamedTuple):
+    name: str
+    headers: Dict
+    acl: str
+    content: Dict
+    raw: str
 
 
 class BusService:
