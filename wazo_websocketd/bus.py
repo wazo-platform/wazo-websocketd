@@ -143,8 +143,9 @@ class _BusConnection:
 
     async def disconnect(self):
         self._closing.set()
-        await self._protocol.close()
-        self._transport.close()
+        if self.is_connected:
+            await self._protocol.close()
+            self._transport.close()
 
     async def get_channel(self, *, wait: bool = True) -> Channel:
         if not self.is_connected and not wait:
