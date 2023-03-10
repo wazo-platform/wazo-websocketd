@@ -24,7 +24,7 @@ class TestWebSocketdAuthClient(unittest.TestCase):
     def setUp(self):
         self.auth_client = Mock()
         patcher = patch(
-            "wazo_websocketd.auth.wazo_auth_client.Client",
+            "wazo_websocketd.auth.AuthClient",
             return_value=self.auth_client,
         )
         patcher.start()
@@ -76,7 +76,7 @@ class TestAuthenticator(unittest.TestCase):
 
         self.auth_client = Mock()
         patcher = patch(
-            "wazo_websocketd.auth.wazo_auth_client.Client",
+            "wazo_websocketd.auth.AuthClient",
             return_value=self.auth_client,
         )
         patcher.start()
