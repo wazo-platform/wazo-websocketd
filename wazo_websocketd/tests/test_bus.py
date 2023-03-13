@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -8,7 +8,7 @@ from hamcrest import assert_that, equal_to, calling, raises
 from unittest.mock import Mock, sentinel
 from xivo.auth_verifier import AccessCheck
 
-from ..bus import BusConsumer, _Event
+from ..bus import BusConsumer, BusMessage
 from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
 
 
@@ -33,11 +33,12 @@ class TestBusDecoding(unittest.TestCase):
             },
         )
 
-        event = self.consumer._decode(message, properties)
+        event = self.consumer._decode_content(message, properties)
 
         assert_that(event.name, equal_to('foo'))
         assert_that(event.acl, equal_to('some.acl'))
-        assert_that(event.message, equal_to(message.decode('utf-8')))
+        assert_that(event.content, equal_to({}))
+        assert_that(event.raw, equal_to(message.decode('utf-8')))
 
     def test_bus_msg_none_required_acl(self):
         message = b'{}'
@@ -49,9 +50,9 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            self.consumer._decode(message, properties),
+            self.consumer._decode_content(message, properties),
             equal_to(
-                _Event('foo', properties.headers, None, {}, message.decode('utf-8'))
+                BusMessage('foo', properties.headers, None, {}, message.decode('utf-8'))
             ),
         )
 
@@ -64,7 +65,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(EventPermissionError),
         )
 
@@ -77,7 +78,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -91,7 +92,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -105,7 +106,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -119,7 +120,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -133,7 +134,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -147,7 +148,7 @@ class TestBusDecoding(unittest.TestCase):
         )
 
         assert_that(
-            calling(self.consumer._decode).with_args(message, properties),
+            calling(self.consumer._decode_content).with_args(message, properties),
             raises(InvalidEvent),
         )
 
@@ -155,8 +156,8 @@ class TestBusDecoding(unittest.TestCase):
 class TestBusDispatching(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.get_event_loop()
-        self.event = _Event(
-            'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.message
+        self.event = BusMessage(
+            'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.content
         )
         self.consumer = BusConsumer(
             ('exchange', 'type'),

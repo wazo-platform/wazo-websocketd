@@ -5,8 +5,11 @@ import asyncio
 import logging
 import websockets
 
+from typing import Optional
 from urllib.parse import urlparse, parse_qsl
+
 from .auth import has_master_tenant
+from .bus import BusConsumer, BusService
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -80,8 +83,8 @@ class Session:
         self._ws = ws
         self._path = path
         self._started = False
-        self._bus_service = bus_service
-        self._consumer = None
+        self._bus_service: BusService = bus_service
+        self._consumer: Optional[BusConsumer] = None
 
     async def run(self):
         try:
@@ -173,20 +176,20 @@ class Session:
             await func(msg)
 
     async def _task_transmit_event(self):
-        async for event in self._consumer:
+        async for message in self._consumer:
             if not self._started:
                 logger.debug(
                     'unable to push event to websocket as session hasn\'t started yet'
                 )
                 continue
             if self._protocol_version == 1:
-                payload = event.message
+                payload = message.raw
             else:
-                payload = self._protocol_encoder.encode_event(event.payload)
+                payload = self._protocol_encoder.encode_event(message.content)
             await self._ws.send(payload)
 
     async def _task_authentification(self):
-        await self._authenticator.run_check(self._consumer.get_token)
+        await self._authenticator.run_check(self._consumer.get_token_id)
 
     async def _do_ws_subscribe(self, msg):
         event_name = msg.value
