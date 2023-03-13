@@ -5,7 +5,9 @@ import asyncio
 import logging
 import websockets
 
+from typing import Optional
 from urllib.parse import urlparse, parse_qsl
+
 from .auth import has_master_tenant
 from .bus import BusConsumer, BusService
 from .exception import (
@@ -82,7 +84,7 @@ class Session:
         self._path = path
         self._started = False
         self._bus_service: BusService = bus_service
-        self._consumer: BusConsumer = None
+        self._consumer: Optional[BusConsumer] = None
 
     async def run(self):
         try:

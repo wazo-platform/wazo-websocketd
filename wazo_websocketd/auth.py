@@ -10,7 +10,7 @@ from collections import namedtuple
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array, Event
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional
 from wazo_auth_client import Client as AuthClient
 
 from .exception import AuthenticationError, AuthenticationExpiredError
@@ -32,7 +32,7 @@ def set_master_tenant(token: Dict) -> None:
             _master_tenant_uuid.value = str.encode(tenant_uuid)
 
 
-def get_master_tenant() -> str:
+def get_master_tenant() -> Optional[str]:
     if not _master_tenant_initialized.is_set():
         return None
     with _master_tenant_uuid:
@@ -209,9 +209,9 @@ class ServiceTokenRenewer:
         while True:
             try:
                 return await self._loop.run_in_executor(None, fn)
-            except Exception as exc:
+            except Exception:
                 interval = next(timeouts)
-                await self.on_error(exc, interval)
+                await self.on_error(interval)
             await asyncio.sleep(interval)
 
     async def _notify(self, token: Dict):
@@ -223,7 +223,7 @@ class ServiceTokenRenewer:
             payload = token if callback.details else token['token']
             self._loop.call_soon(callback.method, payload)
 
-    async def on_error(self, exc: Exception, interval: int):
+    async def on_error(self, interval: int):
         logger.error(
             'Failed to create an access token, retrying in %d seconds',
             interval,

@@ -14,7 +14,7 @@ from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 from xivo.auth_verifier import AccessCheck
 
 from .auth import get_master_tenant
@@ -223,11 +223,11 @@ class BusConsumer:
         prefetch: int = None,
     ):
         self.set_token(token)
-        self._amqp_queue: str = None
-        self._bound_exchange: str = None
+        self._amqp_queue: Optional[str] = None
+        self._bound_exchange: Optional[str] = None
         self._channel: Channel = None
         self._connection: '_BusConnection' = connection
-        self._consumer_tag: str = None
+        self._consumer_tag: Optional[str] = None
         self._exchange_name: str = exchange
         self._prefetch: int = prefetch or self.DEFAULT_PREFETCH_COUNT
         self._queue = asyncio.Queue()
@@ -390,7 +390,7 @@ class BusConsumer:
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
 
-    def get_token_id(self) -> str:
+    def get_token_id(self) -> Dict[str, str]:
         return {'token': self._user.token_id}
 
     def set_token(self, token: Dict):

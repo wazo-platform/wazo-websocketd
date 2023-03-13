@@ -8,7 +8,7 @@ import websockets
 from multiprocessing import Process
 from os import getpid, sched_getaffinity
 from signal import SIGTERM
-from typing import Dict, List
+from typing import Dict, List, Union
 
 from .auth import Authenticator
 from .bus import BusService
@@ -73,13 +73,14 @@ class ProcessWorker(Process):
 
 class ProcessPool:
     def __init__(self, config: Dict):
-        workers = config['process_workers']
-        if not isinstance(workers, int) or workers < 1:
-            if not workers == 'auto':
-                raise ValueError(
-                    'configuration `process_workers` must have a numeric value or be `auto`'
-                )
+        workers: Union[int, str] = config['process_workers']
+        if workers == 'auto':
             workers = len(sched_getaffinity(0))
+
+        if not isinstance(workers, int) or workers < 1:
+            raise ValueError(
+                'configuration key `process_workers` must be a positive integer or `auto`'
+            )
 
         self._config: Dict = config
         self._poolsize: int = workers
