@@ -311,7 +311,7 @@ class BusConsumer:
                 f'user `{self._user.uuid}` doesn\'t have the required ACL for event `{event_name}` (missing: {acl})'
             )
 
-        return BusMessage(event_name, headers, acl, message, content.decode())
+        return BusMessage(event_name, headers, acl, message, decoded)
 
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
