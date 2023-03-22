@@ -164,6 +164,8 @@ class Session:
                 await self._ws.ping()
             except websockets.ConnectionClosed:
                 raise
+            except asyncio.CancelledError:
+                pass
 
     async def _task_receive_command(self):
         while True:
