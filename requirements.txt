@@ -6,4 +6,4 @@ requests==2.25.1
 stevedore==3.2.2
 websockets==8.1
 aioamqp==0.14.0
-uvloop==0.15.0  # To simplify wheel installation, bullseye has 0.14.0
+uvloop==0.17.0  # from uvicorn (Bullseye has 0.14.0, but it won't build from pip)
