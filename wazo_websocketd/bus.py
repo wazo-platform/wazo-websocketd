@@ -159,10 +159,11 @@ class _BusConnection:
             raise BusConnectionError(
                 f'[connection {self._id}] connection isn\'t established yet'
             )
-        await self._connected.wait()
+
         try:
+            await self._wait_for_connection()
             return await self._protocol.channel()
-        except (AmqpClosedConnection, ChannelClosed):
+        except (AmqpClosedConnection, BusConnectionError, ChannelClosed):
             raise BusConnectionError(
                 f'[connection {self._id}] failed to create a new channel'
             )
@@ -182,6 +183,12 @@ class _BusConnection:
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
         await asyncio.gather(*tasks, loop=self._loop)
+
+    async def _wait_for_connection(self):
+        futs = [self._closing.wait(), self._connected.wait()]
+        await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
+        if self.is_closing:
+            raise BusConnectionError(f'[connection {self._id}] connection is closing')
 
 
 class _BusConnectionPool:
