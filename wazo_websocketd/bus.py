@@ -102,8 +102,8 @@ class _BusConnection:
 
     async def run(self):
         while True:
-            await self.connect()
-            self._connected.set()
+            if not await self.connect():
+                return
 
             # Wait for the connection to terminate
             await self._protocol.wait_closed()
@@ -135,11 +135,18 @@ class _BusConnection:
                     self._id,
                     timeout,
                 )
-                await asyncio.sleep(timeout)
+                try:
+                    await asyncio.wait_for(self._closing.wait(), timeout)
+                except asyncio.TimeoutError:
+                    continue
+                logger.info('[connection %d] cancelling connection...', self._id)
+                self._closing.set()
+                return False
             else:
                 self._transport, self._protocol = transport, protocol
+                self._connected.set()
                 logger.info('[connection %d] connected to bus', self._id)
-                return
+                return True
 
     async def disconnect(self):
         self._closing.set()
