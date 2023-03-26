@@ -450,26 +450,27 @@ class BusService:
         return connection.spawn_consumer(exchange, token, prefetch=prefetch)
 
     async def initialize_exchanges(self):
-        async def create_exchange(config):
+        async def create_exchange(config: Dict, channel: Channel):
             name: str = config['bus']['exchange_name']
-            connection = self._connection_pool.get_connection()
-            channel = await connection.get_channel(wait=True)
-            await channel.exchange(name, config['bus']['exchange_type'], durable=True)
+            type_: str = config['bus']['exchange_type']
+            await channel.exchange(name, type_, durable=True)
             logger.info('exchange `%s` initialized', name)
-            await channel.close()
 
         # Migration <22.13
         # Upgrading from a previous version will keep `wazo-websocketd` exchange
         # since it is durable, but is no longer needed, so let's delete it if unused
-        async def remove_deprecated(config):
+        async def remove_deprecated(config: Dict, channel: Channel):
             if config['bus']['exchange_name'] != 'wazo-websocketd':
-                connection = self._connection_pool.get_connection()
-                channel = await connection.get_channel(wait=True)
-
                 await channel.exchange_delete('wazo-websocketd', if_unused=True)
                 logger.info('migration: removed legacy `wazo-websocketd` exchange...')
-                await channel.close()
 
         logger.info('configuring RabbitMQ for wazo-websocketd...')
-        await create_exchange(self._config)
-        await remove_deprecated(self._config)
+        connection = self._connection_pool.get_connection()
+        try:
+            channel = await connection.get_channel(wait=True)
+        except BusConnectionError:
+            return
+
+        await create_exchange(self._config, channel)
+        await remove_deprecated(self._config, channel)
+        await channel.close()
