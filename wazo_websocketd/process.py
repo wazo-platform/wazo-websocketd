@@ -69,7 +69,15 @@ class ProcessWorker(Process):
             loop.add_signal_handler(SIGTERM, server.stop)
             await server.serve()
 
-        asyncio.run(serve(config))
+        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
+        # Can be simplified after upgrading to any version above 0.14
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(serve(config))
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
 
 
 class ProcessPool:
