@@ -17,7 +17,7 @@ from secrets import token_hex
 from typing import Dict, List, NamedTuple, Optional
 from xivo.auth_verifier import AccessCheck
 
-from .auth import get_master_tenant
+from .auth import MasterTenantProxy
 from .exception import (
     BusConnectionError,
     BusConnectionLostError,
@@ -47,7 +47,7 @@ class _UserHelper:
         )
 
     def is_master_tenant(self) -> bool:
-        return self.tenant_uuid == get_master_tenant()
+        return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
 
     @classmethod
     def from_token(cls, token: Dict):

@@ -13,7 +13,7 @@ from signal import SIGINT, SIGTERM
 from typing import Dict, List, Union
 from xivo.xivo_logging import silence_loggers
 
-from .auth import Authenticator
+from .auth import Authenticator, MasterTenantProxy
 from .bus import BusService
 from .protocol import SessionProtocolEncoder, SessionProtocolDecoder
 from .session import SessionFactory
@@ -64,6 +64,9 @@ class ProcessWorker(Process):
     def __init__(self, config: Dict, *sync_vars):
         super().__init__(target=self._run_server, args=(config, *sync_vars))
 
+    def _setup_master_tenant(self, proxy: Synchronized):
+        MasterTenantProxy.proxy = proxy
+
     def _setup_logging(self, config: Dict, log_queue: JoinableQueue):
         handler = QueueHandler(log_queue)
         process_logger = logging.getLogger()
@@ -74,7 +77,9 @@ class ProcessWorker(Process):
         )
         silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
 
-    def _run_server(self, config: Dict, log_queue: JoinableQueue):
+    def _run_server(
+        self, config: Dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
+    ):
         async def serve(config):
             loop = asyncio.get_event_loop()
             server = WebsocketServer(config)
@@ -83,6 +88,7 @@ class ProcessWorker(Process):
             await server.serve()
 
         self._setup_logging(config, log_queue)
+        self._setup_master_tenant(master_tenant_proxy)
         asyncio.run(serve(config))
 
 
@@ -108,7 +114,10 @@ class ProcessPool:
         return len(self._workers)
 
     async def __aenter__(self):
-        self._workers = {ProcessWorker(self._config, self._log_queue) for _ in range(self._poolsize)}
+        self._workers = {
+            ProcessWorker(self._config, self._log_queue, MasterTenantProxy.proxy)
+            for _ in range(self._poolsize)
+        }
         logger.info('starting %d worker process(es)', self._poolsize)
         self._log_listener.start()
         for worker in self._workers:
