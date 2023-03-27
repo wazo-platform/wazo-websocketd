@@ -102,8 +102,8 @@ class _BusConnection:
 
     async def run(self):
         while True:
-            await self.connect()
-            self._connected.set()
+            if not await self.connect():
+                return
 
             # Wait for the connection to terminate
             await self._protocol.wait_closed()
@@ -135,11 +135,18 @@ class _BusConnection:
                     self._id,
                     timeout,
                 )
-                await asyncio.sleep(timeout)
+                try:
+                    await asyncio.wait_for(self._closing.wait(), timeout)
+                except asyncio.TimeoutError:
+                    continue
+                logger.info('[connection %d] cancelling connection...', self._id)
+                self._closing.set()
+                return False
             else:
                 self._transport, self._protocol = transport, protocol
+                self._connected.set()
                 logger.info('[connection %d] connected to bus', self._id)
-                return
+                return True
 
     async def disconnect(self):
         self._closing.set()
@@ -152,10 +159,11 @@ class _BusConnection:
             raise BusConnectionError(
                 f'[connection {self._id}] connection isn\'t established yet'
             )
-        await self._connected.wait()
+
         try:
+            await self._wait_for_connection()
             return await self._protocol.channel()
-        except (AmqpClosedConnection, ChannelClosed):
+        except (AmqpClosedConnection, BusConnectionError, ChannelClosed):
             raise BusConnectionError(
                 f'[connection {self._id}] failed to create a new channel'
             )
@@ -175,6 +183,12 @@ class _BusConnection:
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
         await asyncio.gather(*tasks, loop=self._loop)
+
+    async def _wait_for_connection(self):
+        futs = [self._closing.wait(), self._connected.wait()]
+        await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
+        if self.is_closing:
+            raise BusConnectionError(f'[connection {self._id}] connection is closing')
 
 
 class _BusConnectionPool:
@@ -436,26 +450,27 @@ class BusService:
         return connection.spawn_consumer(exchange, token, prefetch=prefetch)
 
     async def initialize_exchanges(self):
-        async def create_exchange(config):
+        async def create_exchange(config: Dict, channel: Channel):
             name: str = config['bus']['exchange_name']
-            connection = self._connection_pool.get_connection()
-            channel = await connection.get_channel(wait=True)
-            await channel.exchange(name, config['bus']['exchange_type'], durable=True)
+            type_: str = config['bus']['exchange_type']
+            await channel.exchange(name, type_, durable=True)
             logger.info('exchange `%s` initialized', name)
-            await channel.close()
 
         # Migration <22.13
         # Upgrading from a previous version will keep `wazo-websocketd` exchange
         # since it is durable, but is no longer needed, so let's delete it if unused
-        async def remove_deprecated(config):
+        async def remove_deprecated(config: Dict, channel: Channel):
             if config['bus']['exchange_name'] != 'wazo-websocketd':
-                connection = self._connection_pool.get_connection()
-                channel = await connection.get_channel(wait=True)
-
                 await channel.exchange_delete('wazo-websocketd', if_unused=True)
                 logger.info('migration: removed legacy `wazo-websocketd` exchange...')
-                await channel.close()
 
         logger.info('configuring RabbitMQ for wazo-websocketd...')
-        await create_exchange(self._config)
-        await remove_deprecated(self._config)
+        connection = self._connection_pool.get_connection()
+        try:
+            channel = await connection.get_channel(wait=True)
+        except BusConnectionError:
+            return
+
+        await create_exchange(self._config, channel)
+        await remove_deprecated(self._config, channel)
+        await channel.close()

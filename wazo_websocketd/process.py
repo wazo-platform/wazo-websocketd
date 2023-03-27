@@ -7,7 +7,7 @@ import websockets
 
 from multiprocessing import Process
 from os import getpid, sched_getaffinity
-from signal import SIGTERM
+from signal import SIGINT, SIGTERM
 from typing import Dict, List, Union
 
 from .auth import Authenticator
@@ -65,6 +65,7 @@ class ProcessWorker(Process):
         async def serve(config):
             loop = asyncio.get_event_loop()
             server = WebsocketServer(config)
+            loop.add_signal_handler(SIGINT, server.stop)
             loop.add_signal_handler(SIGTERM, server.stop)
             await server.serve()
 

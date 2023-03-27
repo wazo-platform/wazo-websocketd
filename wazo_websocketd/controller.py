@@ -4,6 +4,7 @@
 import asyncio
 import logging
 
+from asyncio import FIRST_COMPLETED, Future
 from signal import SIGINT, SIGTERM
 
 from .auth import ServiceTokenRenewer, set_master_tenant
@@ -17,6 +18,11 @@ class Controller:
     def __init__(self, config):
         self._config = config
 
+    async def _initialize(self, tombstone: Future):
+        async with BusService(self._config) as service:
+            futs = {service.initialize_exchanges(), tombstone}
+            await asyncio.wait(futs, return_when=FIRST_COMPLETED)
+
     async def _run(self):
         tombstone = asyncio.Future()
         logger.info('wazo-websocketd starting...')
@@ -25,14 +31,14 @@ class Controller:
         loop.add_signal_handler(SIGINT, tombstone.set_result, True)
         loop.add_signal_handler(SIGTERM, tombstone.set_result, True)
 
-        async with BusService(self._config) as service:
-            await service.initialize_exchanges()
+        await self._initialize(tombstone)
 
-        async with ServiceTokenRenewer(self._config) as token_renewer:
-            token_renewer.subscribe(set_master_tenant, details=True, oneshot=True)
+        if not tombstone.done():
+            async with ServiceTokenRenewer(self._config) as token_renewer:
+                token_renewer.subscribe(set_master_tenant, details=True, oneshot=True)
 
-            async with ProcessPool(self._config):
-                await tombstone  # wait for SIGTERM or SIGINT
+                async with ProcessPool(self._config):
+                    await tombstone  # wait for SIGTERM or SIGINT`
 
         logger.info('wazo-websocketd stopped')
 
