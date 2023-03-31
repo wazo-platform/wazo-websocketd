@@ -6,41 +6,18 @@ import datetime
 import logging
 import requests
 
+from ctypes import c_wchar
 from collections import namedtuple
 from functools import partial
 from itertools import chain, repeat
-from multiprocessing import Array, Event
+from multiprocessing import Array
+from multiprocessing.sharedctypes import SynchronizedString
 from typing import Callable, Dict, List, Optional
 from wazo_auth_client import Client as AuthClient
 
 from .exception import AuthenticationError, AuthenticationExpiredError
 
 logger = logging.getLogger(__name__)
-_master_tenant_initialized = Event()
-_master_tenant_uuid = Array('c', 36, lock=True)
-
-
-def set_master_tenant(token: Dict) -> None:
-    try:
-        tenant_uuid = token['metadata']['tenant_uuid']
-    except KeyError:
-        logger.error('invalid token, contains no tenant_uuid')
-    else:
-        logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
-        with _master_tenant_uuid:
-            _master_tenant_initialized.set()
-            _master_tenant_uuid.value = str.encode(tenant_uuid)
-
-
-def get_master_tenant() -> Optional[str]:
-    if not _master_tenant_initialized.is_set():
-        return None
-    with _master_tenant_uuid:
-        return str(_master_tenant_uuid.value, encoding='utf-8')
-
-
-def has_master_tenant() -> bool:
-    return get_master_tenant() is not None
 
 
 class AsyncAuthClient:
@@ -148,6 +125,28 @@ class Authenticator:
         # This function returns a coroutine that raise an AuthenticationExpiredError exception
         # when the token expires.
         return self._auth_check.run(token_getter)
+
+
+class MasterTenantProxy:
+    proxy: SynchronizedString = Array(c_wchar, 36, lock=False)
+
+    @classmethod
+    def set_master_tenant(cls, token: Dict):
+        try:
+            tenant_uuid = token['metadata']['tenant_uuid']
+        except KeyError:
+            logger.error('invalid token, contains no tenant_uuid')
+        else:
+            logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
+            cls.proxy.value = tenant_uuid
+
+    @classmethod
+    def get_master_tenant(cls) -> Optional[str]:
+        return cls.proxy.value
+
+    @classmethod
+    def has_master_tenant(cls) -> bool:
+        return cls.proxy.value is not None
 
 
 class ServiceTokenRenewer:

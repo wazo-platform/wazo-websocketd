@@ -8,7 +8,7 @@ import websockets
 from typing import Optional
 from urllib.parse import urlparse, parse_qsl
 
-from .auth import has_master_tenant
+from .auth import MasterTenantProxy
 from .bus import BusConsumer, BusService
 from .exception import (
     AuthenticationError,
@@ -120,7 +120,7 @@ class Session:
             await self._ws.close(1011)
 
     async def _run(self):
-        if not has_master_tenant():
+        if not MasterTenantProxy.has_master_tenant():
             raise AuthenticationError('unable to determine master tenant')
 
         self._protocol_version = _extract_version_from_path(self._path)

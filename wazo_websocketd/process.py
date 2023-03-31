@@ -5,12 +5,15 @@ import asyncio
 import logging
 import websockets
 
-from multiprocessing import Process
+from logging.handlers import QueueHandler, QueueListener
+from multiprocessing import JoinableQueue, Process
+from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity
 from signal import SIGINT, SIGTERM
 from typing import Dict, List, Union
+from xivo.xivo_logging import silence_loggers
 
-from .auth import Authenticator
+from .auth import Authenticator, MasterTenantProxy
 from .bus import BusService
 from .protocol import SessionProtocolEncoder, SessionProtocolDecoder
 from .session import SessionFactory
@@ -58,10 +61,25 @@ class WebsocketServer:
 
 
 class ProcessWorker(Process):
-    def __init__(self, config: Dict):
-        super().__init__(target=self._run_server, args=(config,))
+    def __init__(self, config: Dict, *sync_vars):
+        super().__init__(target=self._run_server, args=(config, *sync_vars))
 
-    def _run_server(self, config):
+    def _setup_master_tenant(self, proxy: Synchronized):
+        MasterTenantProxy.proxy = proxy
+
+    def _setup_logging(self, config: Dict, log_queue: JoinableQueue):
+        handler = QueueHandler(log_queue)
+        process_logger = logging.getLogger()
+        process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
+        process_logger.addHandler(handler)  # send log messages to a queue
+        process_logger.setLevel(
+            logging.DEBUG if config.get('debug') else config['log_level']
+        )
+        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+
+    def _run_server(
+        self, config: Dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
+    ):
         async def serve(config):
             loop = asyncio.get_event_loop()
             server = WebsocketServer(config)
@@ -69,11 +87,14 @@ class ProcessWorker(Process):
             loop.add_signal_handler(SIGTERM, server.stop)
             await server.serve()
 
+        self._setup_logging(config, log_queue)
+        self._setup_master_tenant(master_tenant_proxy)
         asyncio.run(serve(config))
 
 
 class ProcessPool:
     def __init__(self, config: Dict):
+        handlers = logging.getLogger().handlers
         workers: Union[int, str] = config['process_workers']
         if workers == 'auto':
             workers = len(sched_getaffinity(0))
@@ -85,14 +106,20 @@ class ProcessPool:
 
         self._config: Dict = config
         self._poolsize: int = workers
+        self._log_queue = JoinableQueue()
+        self._log_listener = QueueListener(self._log_queue, *handlers)
         self._workers: List[ProcessWorker] = []
 
     def __len__(self):
         return len(self._workers)
 
     async def __aenter__(self):
-        self._workers = {ProcessWorker(self._config) for _ in range(self._poolsize)}
+        self._workers = {
+            ProcessWorker(self._config, self._log_queue, MasterTenantProxy.proxy)
+            for _ in range(self._poolsize)
+        }
         logger.info('starting %d worker process(es)', self._poolsize)
+        self._log_listener.start()
         for worker in self._workers:
             worker.start()
         return self
@@ -100,3 +127,7 @@ class ProcessPool:
     async def __aexit__(self, *args):
         for worker in self._workers:
             worker.join()
+            worker.close()
+        logger.info('processing queued log messages...')
+        self._log_queue.join()
+        self._log_listener.stop()

@@ -7,7 +7,7 @@ import logging
 from asyncio import FIRST_COMPLETED, Future
 from signal import SIGINT, SIGTERM
 
-from .auth import ServiceTokenRenewer, set_master_tenant
+from .auth import MasterTenantProxy, ServiceTokenRenewer
 from .bus import BusService
 from .process import ProcessPool
 
@@ -35,7 +35,9 @@ class Controller:
 
         if not tombstone.done():
             async with ServiceTokenRenewer(self._config) as token_renewer:
-                token_renewer.subscribe(set_master_tenant, details=True, oneshot=True)
+                token_renewer.subscribe(
+                    MasterTenantProxy.set_master_tenant, details=True, oneshot=True
+                )
 
                 async with ProcessPool(self._config):
                     await tombstone  # wait for SIGTERM or SIGINT`
