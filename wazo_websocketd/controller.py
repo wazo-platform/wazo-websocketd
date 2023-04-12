@@ -45,4 +45,12 @@ class Controller:
         logger.info('wazo-websocketd stopped')
 
     def run(self):
-        asyncio.run(self._run())
+        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
+        # Can be simplified after upgrading to any version above 0.14 (ex: Bookworm)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._run())
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()

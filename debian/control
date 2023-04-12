@@ -2,9 +2,9 @@ Source: wazo-websocketd
 Section: python
 Priority: extra
 Maintainer: Wazo Maintainers <dev@wazo.community>
-Build-Depends: debhelper (>= 9), dh-python, dh-systemd (>= 1.5), python3-all, python3-setuptools
+Build-Depends: debhelper (>= 12), dh-python, python3-all, python3-setuptools
 Standards-Version: 3.9.6
-X-Python3-Version: >= 3.4
+X-Python3-Version: >= 3.9
 
 Package: wazo-websocketd
 Architecture: all

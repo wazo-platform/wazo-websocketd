@@ -315,6 +315,8 @@ class BusConsumer:
             raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
         acl = headers.get('required_acl')
 
+        if isinstance(acl, bytes):
+            acl = acl.decode('utf-8')
         if acl and not isinstance(acl, str):
             raise InvalidEvent(
                 'event ACL is not a string (type: %s)', type(acl).__name__
