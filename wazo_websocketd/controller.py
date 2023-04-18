@@ -25,7 +25,7 @@ class Controller:
 
     async def _run(self):
         tombstone = asyncio.Future()
-        logger.info('wazo-websocketd starting...')
+        logger.info('wazo-websocketd starting without logger...')
 
         loop = asyncio.get_event_loop()
         loop.add_signal_handler(SIGINT, tombstone.set_result, True)
