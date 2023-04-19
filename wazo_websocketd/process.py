@@ -70,12 +70,12 @@ class ProcessWorker(Process):
     def _setup_logging(self, config: Dict, log_queue: JoinableQueue):
         handler = QueueHandler(log_queue)
         process_logger = logging.getLogger()
-        process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
-        process_logger.addHandler(handler)  # send log messages to a queue
-        process_logger.setLevel(
-            logging.DEBUG if config.get('debug') else config['log_level']
-        )
-        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+        # process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
+        # process_logger.addHandler(handler)  # send log messages to a queue
+        # process_logger.setLevel(
+        #     logging.DEBUG if config.get('debug') else config['log_level']
+        # )
+        # silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
 
     def _run_server(
         self, config: Dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
