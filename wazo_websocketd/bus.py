@@ -1,5 +1,6 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import aioamqp
 import asyncio
@@ -14,7 +15,7 @@ from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import Dict, List, NamedTuple, Optional
+from typing import NamedTuple
 from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenantProxy
@@ -30,11 +31,11 @@ logger = logging.getLogger(__name__)
 
 
 class _UserHelper:
-    def __init__(self, token: Dict):
+    def __init__(self, token: dict):
         self._token = token
 
     @property
-    def acl(self) -> List[str]:
+    def acl(self) -> list[str]:
         return self._token['acl']
 
     def is_admin(self) -> bool:
@@ -50,7 +51,7 @@ class _UserHelper:
         return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
 
     @classmethod
-    def from_token(cls, token: Dict):
+    def from_token(cls, token: dict):
         if 'metadata' not in token:
             raise InvalidTokenError('Malformed token received, missing token details')
         return cls(token)
@@ -81,7 +82,7 @@ class _BusConnection:
         self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
         self._connected = asyncio.Event()
-        self._consumers: List['BusConsumer'] = []
+        self._consumers: list[BusConsumer] = []
         self._protocol: AmqpProtocol = None
         self._transport = None
         self._task: asyncio.Task = None
@@ -170,7 +171,7 @@ class _BusConnection:
 
     def spawn_consumer(
         self, exchange: str, token: str, *, prefetch: int = None
-    ) -> 'BusConsumer':
+    ) -> BusConsumer:
         consumer = BusConsumer(self, exchange, token, prefetch=prefetch)
         self._consumers.append(consumer)
         return consumer
@@ -230,18 +231,18 @@ class BusConsumer:
 
     def __init__(
         self,
-        connection: '_BusConnection',
+        connection: _BusConnection,
         exchange: str,
         token: str,
         *,
         prefetch: int = None,
     ):
         self.set_token(token)
-        self._amqp_queue: Optional[str] = None
-        self._bound_exchange: Optional[str] = None
+        self._amqp_queue: str | None = None
+        self._bound_exchange: str | None = None
         self._channel: Channel = None
-        self._connection: '_BusConnection' = connection
-        self._consumer_tag: Optional[str] = None
+        self._connection: _BusConnection = connection
+        self._consumer_tag: str | None = None
         self._exchange_name: str = exchange
         self._prefetch: int = prefetch or self.DEFAULT_PREFETCH_COUNT
         self._queue = asyncio.Queue()
@@ -296,7 +297,7 @@ class BusConsumer:
             raise BusConnectionError
         return response['queue']
 
-    def _decode_content(self, content: bytes, properties: Properties) -> 'BusMessage':
+    def _decode_content(self, content: bytes, properties: Properties) -> BusMessage:
         headers = properties.headers
         try:
             decoded = content.decode('utf-8')
@@ -406,10 +407,10 @@ class BusConsumer:
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
 
-    def get_token_id(self) -> Dict[str, str]:
+    def get_token_id(self) -> dict[str, str]:
         return {'token': self._user.token_id}
 
-    def set_token(self, token: Dict):
+    def set_token(self, token: dict):
         self._user = user = _UserHelper.from_token(token)
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
@@ -420,14 +421,14 @@ class BusConsumer:
 
 class BusMessage(NamedTuple):
     name: str
-    headers: Dict
+    headers: dict
     acl: str
-    content: Dict
+    content: dict
     raw: str
 
 
 class BusService:
-    def __init__(self, config: Dict, *, loop: asyncio.AbstractEventLoop = None):
+    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop = None):
         poolsize: int = config.get('worker_connections', 1)
         url: str = 'amqp://{username}:{password}@{host}:{port}//'.format(
             **config['bus']
@@ -452,7 +453,7 @@ class BusService:
         return connection.spawn_consumer(exchange, token, prefetch=prefetch)
 
     async def initialize_exchanges(self):
-        async def create_exchange(config: Dict, channel: Channel):
+        async def create_exchange(config: dict, channel: Channel):
             name: str = config['bus']['exchange_name']
             type_: str = config['bus']['exchange_type']
             await channel.exchange(name, type_, durable=True)
@@ -461,7 +462,7 @@ class BusService:
         # Migration <22.13
         # Upgrading from a previous version will keep `wazo-websocketd` exchange
         # since it is durable, but is no longer needed, so let's delete it if unused
-        async def remove_deprecated(config: Dict, channel: Channel):
+        async def remove_deprecated(config: dict, channel: Channel):
             if config['bus']['exchange_name'] != 'wazo-websocketd':
                 await channel.exchange_delete('wazo-websocketd', if_unused=True)
                 logger.info('migration: removed legacy `wazo-websocketd` exchange...')

@@ -1,5 +1,6 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import collections
 import json
@@ -41,7 +42,7 @@ class SessionProtocolDecoder:
     def decode(self, data):
         if not isinstance(data, str):
             raise SessionProtocolError(
-                'expected text frame: got data with type {}'.format(type(data))
+                f'expected text frame: got data with type {type(data)}'
             )
         try:
             deserialized_data = json.loads(data)
@@ -55,7 +56,7 @@ class SessionProtocolDecoder:
         if not isinstance(operation, str):
             raise SessionProtocolError('object "op" value is not a string')
 
-        func_name = '_decode_{}'.format(operation)
+        func_name = f'_decode_{operation}'
         func = getattr(self, func_name, self._decode)
         return func(operation, deserialized_data)
 
@@ -79,14 +80,12 @@ class SessionProtocolDecoder:
             raise SessionProtocolError('object "data" value is not an object')
         elif attribute not in deserialized_data['data']:
             raise SessionProtocolError(
-                'object "data" is missing required "{}" key'.format(attribute)
+                f'object "data" is missing required "{attribute}" key'
             )
 
         value = deserialized_data['data'][attribute]
         if not isinstance(value, str):
-            raise SessionProtocolError(
-                'object data "{}" value is not a string'.format(value)
-            )
+            raise SessionProtocolError(f'object data "{value}" value is not a string')
 
         return _Message(operation, value)
 
