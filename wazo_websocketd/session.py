@@ -1,11 +1,11 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import asyncio
 import logging
 import websockets
 
-from typing import Optional
 from urllib.parse import urlparse, parse_qsl
 
 from .auth import MasterTenantProxy
@@ -84,7 +84,7 @@ class Session:
         self._path = path
         self._started = False
         self._bus_service: BusService = bus_service
-        self._consumer: Optional[BusConsumer] = None
+        self._consumer: BusConsumer | None = None
 
     async def run(self):
         try:
@@ -169,10 +169,10 @@ class Session:
         while True:
             data = await self._ws.recv()
             msg = self._protocol_decoder.decode(data)
-            func_name = '_do_ws_{}'.format(msg.op)
+            func_name = f'_do_ws_{msg.op}'
             func = getattr(self, func_name, None)
             if func is None:
-                raise SessionProtocolError('unknown operation "{}"'.format(msg.op))
+                raise SessionProtocolError(f'unknown operation "{msg.op}"')
             await func(msg)
 
     async def _task_transmit_event(self):

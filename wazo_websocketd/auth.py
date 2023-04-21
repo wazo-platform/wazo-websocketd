@@ -1,5 +1,6 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import asyncio
 import datetime
@@ -12,7 +13,7 @@ from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
 from multiprocessing.sharedctypes import SynchronizedString
-from typing import Callable, Dict, List, Optional
+from typing import Callable
 from wazo_auth_client import Client as AuthClient
 
 from .exception import AuthenticationError, AuthenticationExpiredError
@@ -131,7 +132,7 @@ class MasterTenantProxy:
     proxy: SynchronizedString = Array(c_wchar, 36, lock=False)
 
     @classmethod
-    def set_master_tenant(cls, token: Dict):
+    def set_master_tenant(cls, token: dict):
         try:
             tenant_uuid = token['metadata']['tenant_uuid']
         except KeyError:
@@ -141,7 +142,7 @@ class MasterTenantProxy:
             cls.proxy.value = tenant_uuid
 
     @classmethod
-    def get_master_tenant(cls) -> Optional[str]:
+    def get_master_tenant(cls) -> str | None:
         return cls.proxy.value
 
     @classmethod
@@ -155,8 +156,8 @@ class ServiceTokenRenewer:
 
     Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
 
-    def __init__(self, config: Dict, *, loop: asyncio.AbstractEventLoop = None):
-        self._callbacks: List[ServiceTokenRenewer.Callback] = []
+    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop = None):
+        self._callbacks: list[ServiceTokenRenewer.Callback] = []
         self._client = AuthClient(**config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
         self._lock = asyncio.Lock()
@@ -178,7 +179,7 @@ class ServiceTokenRenewer:
         callback: Callable[[str], None],
         *,
         details: bool = False,
-        oneshot: bool = False
+        oneshot: bool = False,
     ) -> None:
         callback_ = self.Callback(callback, details, oneshot)
         self._callbacks.append(callback_)
@@ -188,7 +189,7 @@ class ServiceTokenRenewer:
         callback: Callable[[str], None],
         *,
         details: bool = False,
-        oneshot: bool = False
+        oneshot: bool = False,
     ) -> None:
         callback_ = self.Callback(callback, details, oneshot)
         try:
@@ -202,7 +203,7 @@ class ServiceTokenRenewer:
             await self._notify(token)
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
-    async def _fetch_token(self) -> Dict:
+    async def _fetch_token(self) -> dict:
         timeouts = chain((1, 2, 4, 8, 16), repeat(32))
         fn = partial(self._client.token.new, expiration=self._expiration)
         while True:
@@ -213,7 +214,7 @@ class ServiceTokenRenewer:
                 await self.on_error(interval)
             await asyncio.sleep(interval)
 
-    async def _notify(self, token: Dict):
+    async def _notify(self, token: dict):
         callbacks = self._callbacks.copy()
         for callback in callbacks:
             if callback.oneshot:

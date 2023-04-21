@@ -1,4 +1,4 @@
-# Copyright 2016-2019 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
@@ -130,7 +130,7 @@ class TestProtocolDecoder(unittest.TestCase):
 
     def test_decode_token(self):
         token = "bc9571dd-bc62-4044-b78f-0bfb8a1481e4"
-        data = '{{"op": "token", "data": {{"token": "{}"}}}}'.format(token)
+        data = f'{{"op": "token", "data": {{"token": "{token}"}}}}'
 
         msg = self.decoder.decode(data)
 

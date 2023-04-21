@@ -32,11 +32,11 @@ class WebSocketdClient:
 
     async def connect(self, token_id, version=1):
         self._version = version
-        url = 'ws://127.0.0.1:{port}/?'.format(port=self._port)
+        url = f'ws://127.0.0.1:{self._port}/?'
         if token_id is not None:
-            url += 'token={}&'.format(token_id)
+            url += f'token={token_id}&'
         if version > 1:
-            url += 'version={}&'.format(version)
+            url += f'version={version}&'
 
         self._websocket = await websockets.connect(url)
 
@@ -60,9 +60,7 @@ class WebSocketdClient:
                 await asyncio.sleep(1)
             else:
                 return
-        raise WebSocketdTimeoutError(
-            'failed to connect within {} seconds'.format(timeout)
-        )
+        raise WebSocketdTimeoutError(f'failed to connect within {timeout} seconds')
 
     async def wait_for_close(self, code=None):
         # close code are defined in the "constants" module
@@ -70,12 +68,10 @@ class WebSocketdClient:
             data = await self._recv()
         except websockets.ConnectionClosed as e:
             if code is not None and e.code != code:
-                raise AssertionError(
-                    'expected close code {}: got {}'.format(code, e.code)
-                )
+                raise AssertionError(f'expected close code {code}: got {e.code}')
             return
         else:
-            raise AssertionError('got unexpected data: {!r}'.format(data))
+            raise AssertionError(f'got unexpected data: {data!r}')
 
     async def wait_for_init(self):
         msg = await self._expect_msg('init')
@@ -88,9 +84,7 @@ class WebSocketdClient:
         except WebSocketdTimeoutError:
             pass
         else:
-            raise AssertionError(
-                'got unexpected data from websocket: {!r}'.format(data)
-            )
+            raise AssertionError(f'got unexpected data from websocket: {data!r}')
 
     async def recv_msg(self):
         raw_msg = await self._recv()
@@ -102,9 +96,7 @@ class WebSocketdClient:
         await asyncio.wait([task], timeout=timeout)
         if not task.done():
             task.cancel()
-            raise WebSocketdTimeoutError(
-                'recv() did not return in {} seconds'.format(timeout)
-            )
+            raise WebSocketdTimeoutError(f'recv() did not return in {timeout} seconds')
         return task.result()
 
     async def _expect_msg(self, op, data=None):

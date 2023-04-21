@@ -1,5 +1,6 @@
 # Copyright 2023-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import asyncio
 import logging
@@ -10,7 +11,6 @@ from multiprocessing import JoinableQueue, Process
 from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity
 from signal import SIGINT, SIGTERM
-from typing import Dict, List, Union
 from xivo.xivo_logging import silence_loggers
 
 from .auth import Authenticator, MasterTenantProxy
@@ -28,7 +28,7 @@ class WebsocketServer:
         self._tombstone = asyncio.Future()
 
     def _create_server(self):
-        config: Dict = self._config
+        config: dict = self._config
         authenticator: Authenticator = Authenticator(config)
         service: BusService = BusService(config)
         factory: SessionFactory = SessionFactory(
@@ -61,13 +61,13 @@ class WebsocketServer:
 
 
 class ProcessWorker(Process):
-    def __init__(self, config: Dict, *sync_vars):
+    def __init__(self, config: dict, *sync_vars):
         super().__init__(target=self._run_server, args=(config, *sync_vars))
 
     def _setup_master_tenant(self, proxy: Synchronized):
         MasterTenantProxy.proxy = proxy
 
-    def _setup_logging(self, config: Dict, log_queue: JoinableQueue):
+    def _setup_logging(self, config: dict, log_queue: JoinableQueue):
         handler = QueueHandler(log_queue)
         process_logger = logging.getLogger()
         process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
@@ -78,7 +78,7 @@ class ProcessWorker(Process):
         silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
 
     def _run_server(
-        self, config: Dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
+        self, config: dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
     ):
         async def serve(config):
             loop = asyncio.get_event_loop()
@@ -102,9 +102,9 @@ class ProcessWorker(Process):
 
 
 class ProcessPool:
-    def __init__(self, config: Dict):
+    def __init__(self, config: dict):
         handlers = logging.getLogger().handlers
-        workers: Union[int, str] = config['process_workers']
+        workers: int | str = config['process_workers']
         if workers == 'auto':
             workers = len(sched_getaffinity(0))
 
@@ -113,11 +113,11 @@ class ProcessPool:
                 'configuration key `process_workers` must be a positive integer or `auto`'
             )
 
-        self._config: Dict = config
+        self._config: dict = config
         self._poolsize: int = workers
         self._log_queue = JoinableQueue()
         self._log_listener = QueueListener(self._log_queue, *handlers)
-        self._workers: List[ProcessWorker] = []
+        self._workers: list[ProcessWorker] = []
 
     def __len__(self):
         return len(self._workers)
