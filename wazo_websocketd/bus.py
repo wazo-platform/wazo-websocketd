@@ -348,7 +348,6 @@ class BusConsumer:
             logger.debug('discarding event (reason: %s)', exc)
         else:
             self._queue.put_nowait(event)
-            logger.debug('dispatching %s', event)
         finally:
             await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
 
