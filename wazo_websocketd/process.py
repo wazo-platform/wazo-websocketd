@@ -10,6 +10,7 @@ from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import JoinableQueue, Process
 from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity
+from setproctitle import setproctitle
 from signal import SIGINT, SIGTERM
 from xivo.xivo_logging import silence_loggers
 
@@ -87,6 +88,7 @@ class ProcessWorker(Process):
             loop.add_signal_handler(SIGTERM, server.stop)
             await server.serve()
 
+        setproctitle('wazo-websocketd: worker process')
         self._setup_logging(config, log_queue)
         self._setup_master_tenant(master_tenant_proxy)
 
