@@ -366,11 +366,11 @@ class BusConsumer:
         self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
 
         if self._user.is_master_tenant():
-            logger.debug('user `%s` now consuming all events', self._user.uuid)
+            logger.debug('user `%s` connected as global admin', self._user.uuid)
         elif self._user.is_admin():
-            logger.debug('user `%s` now consuming tenant\'s events', self._user.uuid)
+            logger.debug('user `%s` connected as tenant\'s admin', self._user.uuid)
         else:
-            logger.debug('user `%s` now consuming user\'s events', self._user.uuid)
+            logger.debug('user `%s` connected as user', self._user.uuid)
 
     async def _stop_consuming(self) -> None:
         if self._channel.is_open:
