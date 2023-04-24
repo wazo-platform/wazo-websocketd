@@ -6,9 +6,9 @@ import asyncio
 import logging
 import websockets
 
+from itertools import repeat
 from logging.handlers import QueueHandler, QueueListener
 from multiprocessing import Queue, get_context
-from multiprocessing.context import SpawnProcess as Process, BaseContext
 from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity
 from setproctitle import setproctitle
@@ -63,57 +63,6 @@ class WebsocketServer:
         self._tombstone.set_result(True)
 
 
-class ProcessWorker:
-    def __init__(self, context: BaseContext, config: dict, *sync_vars):
-        self._process: Process = context.Process(
-            target=self._run_server, args=(config, *sync_vars)
-        )
-
-    def join(self):
-        self._process.join()
-
-    def start(self):
-        self._process.start()
-
-    def _run_server(
-        self, config: dict, log_queue: Queue, master_tenant_proxy: Synchronized
-    ):
-        setproctitle('wazo-websocketd: worker process')
-        self._setup_logging(config, log_queue)
-        self._setup_master_tenant(master_tenant_proxy)
-
-        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
-        # Can be simplified after upgrading to any version above 0.14 (ex: Bookworm)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(self._serve(config))
-        finally:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
-
-    @staticmethod
-    async def _serve(config: dict):
-        loop = asyncio.get_event_loop()
-        server = WebsocketServer(config)
-        loop.add_signal_handler(SIGINT, server.stop)
-        loop.add_signal_handler(SIGTERM, server.stop)
-        await server.serve()
-
-    def _setup_master_tenant(self, proxy: Synchronized):
-        MasterTenantProxy.proxy = proxy
-
-    def _setup_logging(self, config: dict, log_queue: Queue):
-        handler = QueueHandler(log_queue)
-        process_logger = logging.getLogger()
-        process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
-        process_logger.addHandler(handler)  # send log messages to a queue
-        process_logger.setLevel(
-            logging.DEBUG if config.get('debug') else config['log_level']
-        )
-        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
-
-
 class ProcessPool:
     def __init__(self, config: dict):
         workers: int | str = config['process_workers']
@@ -124,28 +73,56 @@ class ProcessPool:
             raise ValueError(
                 'configuration key `process_workers` must be a positive integer or `auto`'
             )
+        self._workers = workers
+        self._config = config
 
         context = get_context('spawn')
-        log_queue = context.JoinableQueue(10000)
+        log_queue = context.Queue(1000)
         handlers = logging.getLogger().handlers
         self._log_listener = QueueListener(
             log_queue, *handlers, respect_handler_level=True
         )
 
-        self._workers: set[ProcessWorker] = {
-            ProcessWorker(context, config, log_queue, MasterTenantProxy.proxy)
-            for _ in range(workers)
-        }
+        self._pool = context.Pool(
+            workers, self._init_worker, (config, log_queue, MasterTenantProxy.proxy)
+        )
 
     async def __aenter__(self):
-        logger.info('starting %d worker process(es)', len(self._workers))
+        logger.info('starting %d worker process(es)', self._workers)
         self._log_listener.start()
-        for worker in self._workers:
-            worker.start()
+        self._pool.map_async(self._run_worker, repeat(self._config, self._workers))
         return self
 
     async def __aexit__(self, *args):
-        for worker in self._workers:
-            worker.join()
+        self._pool.close()
+        self._pool.join()
         logger.info('processing remaining log messages...')
         self._log_listener.stop()
+
+    @staticmethod
+    def _init_worker(config: dict, log_queue: Queue, master_tenant_proxy: Synchronized):
+        setproctitle('wazo-websocketd: worker')
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        MasterTenantProxy.proxy = master_tenant_proxy
+
+        handler = QueueHandler(log_queue)
+        process_logger = logging.getLogger()
+        process_logger.addHandler(handler)
+        process_logger.setLevel(
+            logging.DEBUG if config.get('debug') else config['log_level']
+        )
+        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+
+    @staticmethod
+    def _run_worker(config: dict):
+        loop = asyncio.get_event_loop()
+        server = WebsocketServer(config)
+        loop.add_signal_handler(SIGINT, server.stop)
+        loop.add_signal_handler(SIGTERM, server.stop)
+
+        try:
+            loop.run_until_complete(server.serve())
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()
