@@ -6,12 +6,13 @@ import asyncio
 import logging
 import websockets
 
-from logging.handlers import QueueHandler, QueueListener
-from multiprocessing import JoinableQueue, Process
+from multiprocessing import get_context
 from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity
+from setproctitle import setproctitle
 from signal import SIGINT, SIGTERM
-from xivo.xivo_logging import silence_loggers
+from websockets.server import Serve
+from xivo.xivo_logging import silence_loggers, setup_logging
 
 from .auth import Authenticator, MasterTenantProxy
 from .bus import BusService
@@ -23,12 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 class WebsocketServer:
-    def __init__(self, config):
+    def __init__(self, config: dict):
         self._config = config
         self._tombstone = asyncio.Future()
 
-    def _create_server(self):
-        config: dict = self._config
+    def _create_server(self) -> tuple[BusService, Serve]:
+        config = self._config
         authenticator: Authenticator = Authenticator(config)
         service: BusService = BusService(config)
         factory: SessionFactory = SessionFactory(
@@ -60,50 +61,8 @@ class WebsocketServer:
         self._tombstone.set_result(True)
 
 
-class ProcessWorker(Process):
-    def __init__(self, config: dict, *sync_vars):
-        super().__init__(target=self._run_server, args=(config, *sync_vars))
-
-    def _setup_master_tenant(self, proxy: Synchronized):
-        MasterTenantProxy.proxy = proxy
-
-    def _setup_logging(self, config: dict, log_queue: JoinableQueue):
-        handler = QueueHandler(log_queue)
-        process_logger = logging.getLogger()
-        process_logger.handlers.clear()  # clear default handlers (file, stderr, etc)
-        process_logger.addHandler(handler)  # send log messages to a queue
-        process_logger.setLevel(
-            logging.DEBUG if config.get('debug') else config['log_level']
-        )
-        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
-
-    def _run_server(
-        self, config: dict, log_queue: JoinableQueue, master_tenant_proxy: Synchronized
-    ):
-        async def serve(config):
-            loop = asyncio.get_event_loop()
-            server = WebsocketServer(config)
-            loop.add_signal_handler(SIGINT, server.stop)
-            loop.add_signal_handler(SIGTERM, server.stop)
-            await server.serve()
-
-        self._setup_logging(config, log_queue)
-        self._setup_master_tenant(master_tenant_proxy)
-
-        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
-        # Can be simplified after upgrading to any version above 0.14 (ex: Bookworm)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(serve(config))
-        finally:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
-
-
 class ProcessPool:
     def __init__(self, config: dict):
-        handlers = logging.getLogger().handlers
         workers: int | str = config['process_workers']
         if workers == 'auto':
             workers = len(sched_getaffinity(0))
@@ -112,31 +71,47 @@ class ProcessPool:
             raise ValueError(
                 'configuration key `process_workers` must be a positive integer or `auto`'
             )
+        self._workers = workers
+        self._config = config
 
-        self._config: dict = config
-        self._poolsize: int = workers
-        self._log_queue = JoinableQueue()
-        self._log_listener = QueueListener(self._log_queue, *handlers)
-        self._workers: list[ProcessWorker] = []
-
-    def __len__(self):
-        return len(self._workers)
+        context = get_context('spawn')
+        self._pool = context.Pool(
+            workers, self._init_worker, (config, MasterTenantProxy.proxy)
+        )
 
     async def __aenter__(self):
-        self._workers = {
-            ProcessWorker(self._config, self._log_queue, MasterTenantProxy.proxy)
-            for _ in range(self._poolsize)
-        }
-        logger.info('starting %d worker process(es)', self._poolsize)
-        self._log_listener.start()
-        for worker in self._workers:
-            worker.start()
+        logger.info('starting %d worker process(es)', self._workers)
+        for _ in range(self._workers):
+            self._pool.apply_async(self._run, (self._config,))
         return self
 
     async def __aexit__(self, *args):
-        for worker in self._workers:
-            worker.join()
-            worker.close()
-        logger.info('processing queued log messages...')
-        self._log_queue.join()
-        self._log_listener.stop()
+        self._pool.close()
+        self._pool.join()
+
+    @staticmethod
+    def _init_worker(config: dict, master_tenant_proxy: Synchronized):
+        setproctitle('wazo-websocketd: worker')
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        MasterTenantProxy.proxy = master_tenant_proxy
+
+        setup_logging(
+            config['log_file'], debug=config['debug'], log_level=config['log_level']
+        )
+        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+
+    @staticmethod
+    def _run(config: dict):
+        server = WebsocketServer(config)
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(SIGINT, server.stop)
+        loop.add_signal_handler(SIGTERM, server.stop)
+
+        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
+        # Can be simplified after upgrading to any version above 0.14 (ex: Bookworm)
+        try:
+            loop.run_until_complete(server.serve())
+        finally:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.close()

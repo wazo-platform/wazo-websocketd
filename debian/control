@@ -13,6 +13,7 @@ Depends:
  ${misc:Depends},
  adduser,
  python3-aioamqp,
+ python3-setproctitle,
  python3-websockets,
  python3-yaml,
  python3-uvloop,
