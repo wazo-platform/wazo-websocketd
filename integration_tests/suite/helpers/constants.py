@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from os import path, environ
@@ -8,6 +8,7 @@ from uuid import UUID
 
 ASSET_ROOT = path.join(os.path.dirname(__file__), '..', '..', 'assets')
 
+WAZO_ORIGIN_UUID = 'the-predefined-wazo-uuid'
 START_TIMEOUT = int(environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
 
 INVALID_TOKEN_ID = 'invalid-token'

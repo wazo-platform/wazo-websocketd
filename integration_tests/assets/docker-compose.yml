@@ -25,3 +25,4 @@ services:
       - "9502"
     environment:
       HOME: "/usr/src/wazo-websocketd"
+      XIVO_UUID: "the-predefined-wazo-uuid"

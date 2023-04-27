@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import json
@@ -6,7 +6,7 @@ import aioamqp
 import asyncio
 from aioamqp.exceptions import AmqpClosedConnection
 
-from .constants import TENANT1_UUID, USER1_UUID, START_TIMEOUT
+from .constants import START_TIMEOUT, TENANT1_UUID, USER1_UUID, WAZO_ORIGIN_UUID
 
 
 class BusClient:
@@ -26,7 +26,7 @@ class BusClient:
         for _ in range(timeout):
             try:
                 self._transport, self._protocol = await aioamqp.connect(
-                    '127.0.0.1', self._port
+                    '127.0.0.1', self._port, login_method='PLAIN'
                 )
             except (AmqpClosedConnection, OSError):
                 await asyncio.sleep(1)
@@ -40,12 +40,20 @@ class BusClient:
             await self._protocol.close()
             self._transport.close()
 
-    async def publish(self, event, tenant_uuid=TENANT1_UUID, user_uuid=USER1_UUID):
+    async def publish(
+        self,
+        event: dict,
+        tenant_uuid: str = TENANT1_UUID,
+        user_uuid: str = USER1_UUID,
+        *,
+        origin_uuid: str = None,
+    ) -> None:
         payload = json.dumps(event).encode('utf-8')
         exchange = 'wazo-headers'
         properties = {
             'headers': {
                 'name': event['name'],
+                'origin_uuid': origin_uuid or WAZO_ORIGIN_UUID,
             },
         }
 
