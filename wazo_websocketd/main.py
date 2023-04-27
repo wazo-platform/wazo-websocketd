@@ -6,10 +6,14 @@ import logging
 import uvloop
 
 from xivo import xivo_logging
+from xivo.config_helper import set_xivo_uuid
 from xivo.user_rights import change_user
 
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
+
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -21,6 +25,7 @@ def main():
     )
     xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
     xivo_logging.silence_loggers(['aioamqp'], logging.WARNING)
+    set_xivo_uuid(config, logger)
 
     if config['user']:
         change_user(config['user'])
