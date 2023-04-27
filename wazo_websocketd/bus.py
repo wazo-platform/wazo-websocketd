@@ -323,6 +323,21 @@ class BusConsumer:
 
         return BusMessage(event_name, headers, acl, message, decoded)
 
+    def _generate_bindings(self, event_name: str) -> list[dict]:
+        binding = {}
+        if event_name != '*':
+            binding['name'] = event_name
+
+        if self._user.is_admin():
+            binding['origin_uuid'] = self._origin_uuid
+            return [binding]
+
+        # note: users don't need origin_uuid because the tenant exchange takes care of it
+        return [
+            binding | {f'user_uuid:{self._user.uuid}': True},
+            binding | {'user_uuid:*': True},
+        ]
+
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
 
@@ -373,13 +388,7 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name: str) -> None:
-        bindings = [{'origin_uuid': self._origin_uuid}]
-        if not self._user.is_admin():
-            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._user.uuid, '*')]
-
-        for binding in bindings:
-            if event_name != '*':
-                binding['name'] = event_name
+        for binding in self._generate_bindings(event_name):
             await self._channel.queue_bind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
@@ -388,13 +397,7 @@ class BusConsumer:
         self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
-        bindings = [{'origin_uuid': self._origin_uuid}]
-        if not self._user.is_admin():
-            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._user.uuid, '*')]
-
-        for binding in bindings or [{}]:
-            if event_name != '*':
-                binding['name'] = event_name
+        for binding in self._generate_bindings(event_name):
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
