@@ -225,8 +225,6 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    DEFAULT_PREFETCH_COUNT: int = 200
-
     def __init__(self, connection: _BusConnection, config: dict, token: str):
         self.set_token(token)
         self._amqp_queue: str | None = None
@@ -235,9 +233,7 @@ class BusConsumer:
         self._connection: _BusConnection = connection
         self._consumer_tag: str | None = None
         self._exchange_name: str = config['bus']['exchange_name']
-        self._prefetch: int = (
-            config['bus']['consumer_prefetch'] or self.DEFAULT_PREFETCH_COUNT
-        )
+        self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
         self._queue = asyncio.Queue()
 
