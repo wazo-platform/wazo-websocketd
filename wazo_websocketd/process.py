@@ -103,7 +103,7 @@ class ProcessPool:
         setup_logging(
             config['log_file'], debug=config['debug'], log_level=config['log_level']
         )
-        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+        silence_loggers(['aioamqp', 'urllib3', 'stevedore.extension'], logging.WARNING)
 
     @staticmethod
     def _run(config: dict):
