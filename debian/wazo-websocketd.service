@@ -6,7 +6,8 @@ StartLimitBurst=15
 StartLimitIntervalSec=150
 
 [Service]
-ExecStart=/usr/bin/python3 -u /usr/bin/wazo-websocketd
+ExecStart=/usr/bin/wazo-websocketd
+ExecStartPost=/usr/bin/wazo-websocketd-wait-online
 Restart=on-failure
 RestartSec=5
 
