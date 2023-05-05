@@ -1,5 +1,5 @@
 https://github.com/wazo-platform/wazo-test-helpers/archive/master.zip
 aioamqp
 pytest
-requests<2.30  # avoid to break docker from wazo-test-helpers
+requests
 websockets
