@@ -74,7 +74,7 @@ class _UserHelper:
 
 
 class _BusConnection:
-    _id_counter = Value('i', 1)  # process-safe shared counter
+    _id_counter = Value('i', 1)
 
     def __init__(self, url: str, *, loop: asyncio.AbstractEventLoop = None):
         self._id: int = self._get_unique_id()
@@ -169,10 +169,8 @@ class _BusConnection:
                 f'[connection {self._id}] failed to create a new channel'
             )
 
-    def spawn_consumer(
-        self, exchange: str, token: str, *, prefetch: int = None
-    ) -> BusConsumer:
-        consumer = BusConsumer(self, exchange, token, prefetch=prefetch)
+    def spawn_consumer(self, config: dict, token: str) -> BusConsumer:
+        consumer = BusConsumer(self, config, token)
         self._consumers.append(consumer)
         return consumer
 
@@ -227,24 +225,16 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    DEFAULT_PREFETCH_COUNT: int = 200
-
-    def __init__(
-        self,
-        connection: _BusConnection,
-        exchange: str,
-        token: str,
-        *,
-        prefetch: int = None,
-    ):
+    def __init__(self, connection: _BusConnection, config: dict, token: str):
         self.set_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
         self._channel: Channel = None
         self._connection: _BusConnection = connection
         self._consumer_tag: str | None = None
-        self._exchange_name: str = exchange
-        self._prefetch: int = prefetch or self.DEFAULT_PREFETCH_COUNT
+        self._exchange_name: str = config['bus']['exchange_name']
+        self._prefetch: int = config['bus']['consumer_prefetch']
+        self._origin_uuid: str = config['uuid']
         self._queue = asyncio.Queue()
 
     async def __aenter__(self):
@@ -257,7 +247,7 @@ class BusConsumer:
     def __aiter__(self):
         return self
 
-    async def __anext__(self) -> 'BusMessage':
+    async def __anext__(self) -> BusMessage:
         payload = await self._queue.get()
         if isinstance(payload, Exception):
             raise payload
@@ -280,7 +270,10 @@ class BusConsumer:
         )
 
         await channel.exchange_bind(
-            tenant_exchange, exchange, '', arguments={'tenant_uuid': tenant_uuid}
+            tenant_exchange,
+            exchange,
+            '',
+            arguments={'origin_uuid': self._origin_uuid, 'tenant_uuid': tenant_uuid},
         )
 
         return tenant_exchange
@@ -329,6 +322,21 @@ class BusConsumer:
             )
 
         return BusMessage(event_name, headers, acl, message, decoded)
+
+    def _generate_bindings(self, event_name: str) -> list[dict]:
+        binding = {}
+        if event_name != '*':
+            binding['name'] = event_name
+
+        if self._user.is_admin():
+            binding['origin_uuid'] = self._origin_uuid
+            return [binding]
+
+        # note: users don't need origin_uuid because the tenant exchange takes care of it
+        return [
+            binding | {f'user_uuid:{self._user.uuid}': True},
+            binding | {'user_uuid:*': True},
+        ]
 
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
@@ -380,13 +388,7 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name: str) -> None:
-        bindings = [{}]
-        if not self._user.is_admin():
-            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._user.uuid, '*')]
-
-        for binding in bindings:
-            if event_name != '*':
-                binding['name'] = event_name
+        for binding in self._generate_bindings(event_name):
             await self._channel.queue_bind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
@@ -395,13 +397,7 @@ class BusConsumer:
         self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
-        bindings = [{}]
-        if not self._user.is_admin():
-            bindings = [{f'user_uuid:{uuid}': True} for uuid in (self._user.uuid, '*')]
-
-        for binding in bindings or [{}]:
-            if event_name != '*':
-                binding['name'] = event_name
+        for binding in self._generate_bindings(event_name):
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
@@ -446,10 +442,7 @@ class BusService:
 
     async def create_consumer(self, token: str) -> BusConsumer:
         connection = self._connection_pool.get_connection()
-        exchange = self._config['bus']['exchange_name']
-        prefetch = self._config['bus']['consumer_prefetch']
-
-        return connection.spawn_consumer(exchange, token, prefetch=prefetch)
+        return connection.spawn_consumer(self._config, token)
 
     async def initialize_exchanges(self):
         async def create_exchange(config: dict, channel: Channel):

@@ -4,17 +4,26 @@
 import asyncio
 import unittest
 
-from hamcrest import assert_that, equal_to, calling, raises
+from hamcrest import (
+    assert_that,
+    calling,
+    contains_inanyorder,
+    equal_to,
+    has_entries,
+    raises,
+)
 from unittest.mock import Mock, sentinel
 from xivo.auth_verifier import AccessCheck
 
 from ..bus import BusConsumer, BusMessage
+from ..config import _DEFAULT_CONFIG
 from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
 
 
 class TestBusDecoding(unittest.TestCase):
     def setUp(self):
-        token = {
+        mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
+        mock_token = {
             'session_uuid': 'some-session',
             'acl': ['some.acl'],
             'metadata': {
@@ -22,7 +31,7 @@ class TestBusDecoding(unittest.TestCase):
                 'tenant_uuid': 'some-tenant',
             },
         }
-        self.consumer = BusConsumer(('test', 'headers'), Mock(), token)
+        self.consumer = BusConsumer(Mock(), mock_config, mock_token)
 
     def test_bus_msg(self):
         message = b'{}'
@@ -159,18 +168,17 @@ class TestBusDispatching(unittest.TestCase):
         self.event = BusMessage(
             'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.content
         )
-        self.consumer = BusConsumer(
-            ('exchange', 'type'),
-            Mock(),
-            {
-                'session_uuid': 'some-session-uuid',
-                'metadata': {
-                    'uuid': 'some-user-uuid',
-                    'tenant_uuid': 'some-tenant-uuid',
-                },
-                'acl': ['some.acl'],
+        mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
+        mock_token = {
+            'session_uuid': 'some-session-uuid',
+            'metadata': {
+                'uuid': 'some-user-uuid',
+                'tenant_uuid': 'some-tenant-uuid',
             },
-        )
+            'acl': ['some.acl'],
+        }
+
+        self.consumer = BusConsumer(Mock(), mock_config, mock_token)
         self.consumer._access = Mock(AccessCheck)
 
     def test_connection_lost(self):
@@ -195,4 +203,92 @@ class TestBusDispatching(unittest.TestCase):
         assert_that(
             self.loop.run_until_complete(consume()),
             equal_to(self.event),
+        )
+
+
+class TestBusBindings(unittest.TestCase):
+    def setUp(self):
+        self.origin_uuid = Mock()
+        self.mock_config = dict(_DEFAULT_CONFIG, uuid=self.origin_uuid)
+
+    def _make_consumer(self, purpose: str, admin: bool = None):
+        mock_token = {
+            'session_uuid': Mock(),
+            'metadata': {
+                'uuid': 'some-user-uuid',
+                'tenant_uuid': Mock(),
+                'purpose': purpose,
+            },
+            'acl': ['some.acl'],
+        }
+
+        if admin is not None:
+            mock_token['metadata']['admin'] = admin
+
+        return BusConsumer(Mock(), self.mock_config, mock_token)
+
+    def test_user_bindings(self):
+        consumer = self._make_consumer(purpose='user', admin=False)
+        assert_that(
+            consumer._generate_bindings('some_event'),
+            contains_inanyorder(
+                has_entries({'name': 'some_event', 'user_uuid:some-user-uuid': True}),
+                has_entries({'name': 'some_event', 'user_uuid:*': True}),
+            ),
+        )
+
+        assert_that(
+            consumer._generate_bindings('*'),
+            contains_inanyorder(
+                has_entries({'user_uuid:some-user-uuid': True}),
+                has_entries({'user_uuid:*': True}),
+            ),
+        )
+
+    def test_admin_bindings(self):
+        consumer = self._make_consumer(purpose='user', admin=True)
+        assert_that(
+            consumer._generate_bindings('some_event'),
+            contains_inanyorder(
+                has_entries(name='some_event', origin_uuid=self.origin_uuid),
+            ),
+        )
+
+        assert_that(
+            consumer._generate_bindings('*'),
+            contains_inanyorder(
+                has_entries(origin_uuid=self.origin_uuid),
+            ),
+        )
+
+    def test_internal_user_bindings(self):
+        consumer = self._make_consumer(purpose='internal')
+        assert_that(
+            consumer._generate_bindings('some_event'),
+            contains_inanyorder(
+                has_entries(name='some_event', origin_uuid=self.origin_uuid),
+            ),
+        )
+
+        assert_that(
+            consumer._generate_bindings('*'),
+            contains_inanyorder(
+                has_entries(origin_uuid=self.origin_uuid),
+            ),
+        )
+
+    def test_extenal_api_bindings(self):
+        consumer = self._make_consumer(purpose='external_api')
+        assert_that(
+            consumer._generate_bindings('some_event'),
+            contains_inanyorder(
+                has_entries(name='some_event', origin_uuid=self.origin_uuid),
+            ),
+        )
+
+        assert_that(
+            consumer._generate_bindings('*'),
+            contains_inanyorder(
+                has_entries(origin_uuid=self.origin_uuid),
+            ),
         )

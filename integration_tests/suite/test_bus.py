@@ -215,6 +215,30 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
+    @run_with_loop
+    async def test_user_dont_receive_message_from_other_origin_uuid(self):
+        event = {'name': 'foo', 'required_acl': 'event.foo'}
+
+        async with self._connect(event):
+            await self.bus_client.publish(event, origin_uuid='some-other-wazo-uuid')
+            await self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    async def test_admin_dont_receive_message_from_other_origin_uuid(self):
+        event = {'name': 'foo', 'required_acl': 'event.foo'}
+
+        async with self._connect(event, admin=True):
+            await self.bus_client.publish(event, origin_uuid='some-other-wazo-uuid')
+            await self.websocketd_client.wait_for_nothing()
+
+    @run_with_loop
+    async def test_internal_user_dont_receive_message_from_other_origin_uuid(self):
+        event = {'name': 'foo', 'required_acl': 'event.foo'}
+
+        async with self._connect(event, purpose='internal'):
+            await self.bus_client.publish(event, origin_uuid='some-other-wazo-uuid')
+            await self.websocketd_client.wait_for_nothing()
+
     async def _prepare(self, skip_start=False, version=1, skip_publish=False):
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init(

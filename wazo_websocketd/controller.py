@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 class Controller:
-    def __init__(self, config):
+    def __init__(self, config: dict):
         self._config = config
 
     async def _initialize(self, tombstone: Future):
         async with BusService(self._config) as service:
-            futs = {service.initialize_exchanges(), tombstone}
-            await asyncio.wait(futs, return_when=FIRST_COMPLETED)
+            results = {service.initialize_exchanges(), tombstone}
+            await asyncio.wait(results, return_when=FIRST_COMPLETED)
 
     async def _run(self):
         tombstone = asyncio.Future()
@@ -40,7 +40,7 @@ class Controller:
                 )
 
                 async with ProcessPool(self._config):
-                    await tombstone  # wait for SIGTERM or SIGINT`
+                    await tombstone  # wait for SIGTERM or SIGINT
 
         logger.info('wazo-websocketd stopped')
 
