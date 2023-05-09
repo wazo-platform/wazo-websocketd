@@ -8,9 +8,10 @@ import websockets
 
 from multiprocessing import get_context
 from multiprocessing.sharedctypes import Synchronized
-from os import getpid, sched_getaffinity
+from os import getpid, sched_getaffinity, chdir
 from setproctitle import setproctitle
 from signal import SIGINT, SIGTERM
+from tempfile import TemporaryDirectory
 from websockets.server import Serve
 from xivo.xivo_logging import silence_loggers, setup_logging
 
@@ -73,8 +74,10 @@ class ProcessPool:
             )
         self._workers = workers
         self._config = config
+        self._dir = TemporaryDirectory(prefix="wazo-websocketd-")
 
         context = get_context('spawn')
+        chdir(self._dir.name)
         self._pool = context.Pool(
             workers, self._init_worker, (config, MasterTenantProxy.proxy)
         )
@@ -88,6 +91,7 @@ class ProcessPool:
     async def __aexit__(self, *args):
         self._pool.close()
         self._pool.join()
+        self._dir.cleanup()
 
     @staticmethod
     def _init_worker(config: dict, master_tenant_proxy: Synchronized):
@@ -99,7 +103,7 @@ class ProcessPool:
         setup_logging(
             config['log_file'], debug=config['debug'], log_level=config['log_level']
         )
-        silence_loggers(['aioamqp', 'urllib3'], logging.WARNING)
+        silence_loggers(['aioamqp', 'urllib3', 'stevedore.extension'], logging.WARNING)
 
     @staticmethod
     def _run(config: dict):
