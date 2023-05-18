@@ -12,7 +12,7 @@ from xivo.chain_map import ChainMap
 from xivo.config_helper import read_config_file_hierarchy
 
 
-HOST = 'localhost'
+HOST = '127.0.0.1'
 RETRY_INTERVAL = 0.5
 TIMEOUT = 60
 
@@ -22,7 +22,7 @@ async def wait_opened(host: str, port: int, timeout: float, interval: float):
         while True:
             try:
                 connection = await connect(f'ws://{host}:{port}')
-            except ConnectionRefusedError:
+            except OSError:
                 await asyncio.sleep(interval)
                 continue
             else:
