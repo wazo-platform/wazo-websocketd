@@ -69,6 +69,10 @@ class _UserHelper:
         return self._token['token']
 
     @property
+    def token_utc_expires_at(self) -> str:
+        return self._token['utc_expires_at']
+
+    @property
     def uuid(self) -> str:
         return self._token['metadata']['uuid']
 
@@ -402,8 +406,11 @@ class BusConsumer:
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
 
-    def get_token_id(self) -> dict[str, str]:
-        return {'token': self._user.token_id}
+    def get_token(self) -> dict[str, str]:
+        return {
+            'token': self._user.token_id,
+            'utc_expires_at': self._user.token_utc_expires_at,
+        }
 
     def set_token(self, token: dict):
         self._user = user = _UserHelper.from_token(token)

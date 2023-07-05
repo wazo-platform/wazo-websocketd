@@ -64,8 +64,6 @@ class _StaticIntervalAuthCheck:
 
 
 class _DynamicIntervalAuthCheck:
-    _ISO_DATETIME = '%Y-%m-%dT%H:%M:%S.%f'
-
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
 
@@ -73,14 +71,8 @@ class _DynamicIntervalAuthCheck:
         while True:
             token = token_getter()
             token_id = token['token']
-            # FIXME if wazo-websocketd and wazo-auth are not in the same
-            #       timezone, this doesn't work -- but this needs to be fixed
-            #       in wazo-auth, which should returns data in UTC instead of
-            #       in local time
-            now = datetime.datetime.now()
-            expires_at = datetime.datetime.strptime(
-                token['expires_at'], self._ISO_DATETIME
-            )
+            now = datetime.datetime.utcnow()
+            expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
             next_check = self._calculate_next_check(now, expires_at)
             await asyncio.sleep(next_check)
             logger.debug('dynamic auth check: testing token validity')
