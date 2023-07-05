@@ -110,9 +110,26 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
 
 
 class TestTokenExpiration(IntegrationTest):
-    asset = 'token_expiration'
+    asset = 'basic'
 
     _TIMEOUT = 15
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.filesystem = cls.make_filesystem()
+        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
+        cls.filesystem.create_file(
+            config_file,
+            content=dedent(
+                '''
+                auth_check_strategy: static
+                auth_check_static_interval: 10
+                '''
+            ),
+        )
+        cls.restart_service('websocketd')
+        cls.wait_strategy.wait(cls)
 
     @run_with_loop
     async def test_token_expire_closes_websocket(self):
