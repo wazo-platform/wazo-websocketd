@@ -10,6 +10,7 @@ from wazo_test_helpers.asset_launching_test_case import (
     NoSuchService,
 )
 from wazo_test_helpers.auth import MockCredentials
+from wazo_test_helpers.filesystem import FileSystemClient
 
 from .auth import AuthClient
 from .bus import BusClient
@@ -94,6 +95,10 @@ class IntegrationTest(AssetLaunchingTestCase):
                 'parent_uuid': str(MASTER_TENANT_UUID),
             },
         )
+
+    @classmethod
+    def make_filesystem(cls):
+        return FileSystemClient(execute=cls.docker_exec)
 
     @classmethod
     def make_auth(cls):

@@ -1,5 +1,7 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+from datetime import datetime, timedelta
 
 from requests.packages.urllib3 import disable_warnings
 from contextlib import contextmanager
@@ -27,8 +29,10 @@ class AuthClient:
         acl=['websocketd'],
         purpose='user',
         admin=False,
+        expiration=60,
     ):
         metadata = {'tenant_uuid': str(tenant_uuid), 'purpose': purpose}
+        utc_expires_at = str(datetime.utcnow() + timedelta(seconds=expiration))
         if purpose == 'user':
             metadata.update(admin=admin)
 
@@ -38,6 +42,7 @@ class AuthClient:
                 session_uuid=str(session_uuid),
                 acl=acl,
                 metadata=metadata,
+                utc_expires_at=utc_expires_at,
             )
         else:
             token = MockUserToken(
@@ -46,6 +51,7 @@ class AuthClient:
                 session_uuid=str(session_uuid),
                 metadata=metadata,
                 acl=acl,
+                utc_expires_at=utc_expires_at,
             )
         self._client.set_token(token)
         return token.token_id
@@ -61,6 +67,7 @@ class AuthClient:
         acl=['websocketd'],
         purpose='user',
         admin=False,
+        expiration=60,
     ):
         token = self.make_token(
             token_uuid=token_uuid,
@@ -70,6 +77,7 @@ class AuthClient:
             acl=acl,
             purpose=purpose,
             admin=admin,
+            expiration=expiration,
         )
         try:
             yield token
