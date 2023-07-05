@@ -1,10 +1,11 @@
-# Copyright 2022-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2022-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import time
 import asyncio
 
 from websockets import ConnectionClosed
+from websockets.exceptions import InvalidMessage
 
 from .constants import START_TIMEOUT
 from .websocketd import WebSocketdClient, WebSocketdTimeoutError
@@ -37,7 +38,7 @@ class WaitUntilValidConnection(WaitStrategy):
             for _ in range(self.timeout):
                 try:
                     await client.connect_and_wait_for_init(token)
-                except (ConnectionClosed, AssertionError):
+                except (ConnectionClosed, AssertionError, InvalidMessage):
                     await asyncio.sleep(1)
                 else:
                     return
