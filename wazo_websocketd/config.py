@@ -25,8 +25,7 @@ _DEFAULT_CONFIG = {
         'https': False,
         'key_file': '/var/lib/wazo-auth-keys/wazo-websocketd-key.yml',
     },
-    'auth_check_strategy': 'static',
-    'auth_check_static_interval': 60,
+    'auth_check_strategy': 'dynamic',
     'bus': {
         'host': 'localhost',
         'port': 5672,

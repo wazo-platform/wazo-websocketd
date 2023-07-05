@@ -1,5 +1,10 @@
 # Changelog
 
+## 23.10
+
+* Default configuration for `auth_check_strategy` has been changed from `static`
+  to `dynamic`
+
 ## 20.09
 
 * Deprecate SSL configuration
