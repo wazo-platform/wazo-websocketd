@@ -82,10 +82,6 @@ class TestTokenExpiration(IntegrationTest):
 
     _TIMEOUT = 15
 
-    def setUp(self):
-        super().setUp()
-        self.token_id = 'dynamic-token'
-
     @run_with_loop
     async def test_token_expire_closes_websocket(self):
         with self.auth_client.token() as token:
