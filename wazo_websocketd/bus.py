@@ -322,7 +322,8 @@ class BusConsumer:
 
         if not self._has_access(acl):
             raise EventPermissionError(
-                f'user `{self._user.uuid}` doesn\'t have the required ACL for event `{event_name}` (missing: {acl})'
+                f'user `{self._user.uuid}` doesn\'t have '
+                f'the required ACL for event `{event_name}` (missing: {acl})'
             )
 
         return BusMessage(event_name, headers, acl, message, decoded)
