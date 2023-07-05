@@ -229,7 +229,7 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    def __init__(self, connection: _BusConnection, config: dict, token: str):
+    def __init__(self, connection: _BusConnection, config: dict, token: dict):
         self.set_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
