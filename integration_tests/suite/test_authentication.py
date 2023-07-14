@@ -1,6 +1,8 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from textwrap import dedent
+
 import websockets
 
 from .helpers.wait_strategy import TimeWaitStrategy
@@ -51,14 +53,83 @@ class TestNoAuth(IntegrationTest):
         await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
 
 
+class TestTokenExpirationCheckDynamic(IntegrationTest):
+    asset = 'basic'
+
+    _CLIENT_TIMEOUT = 20
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.filesystem = cls.make_filesystem()
+        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-dynamic-interval.yml'
+        cls.filesystem.create_file(
+            config_file,
+            content='auth_check_strategy: dynamic',
+        )
+        cls.restart_service('websocketd')
+        cls.wait_strategy.wait(cls)
+
+    @run_with_loop
+    async def test_token_expire_use_dynamic_strategy(self):
+        token_expiration = 0
+        with self.auth_client.token(expiration=token_expiration) as token:
+            await self.websocketd_client.connect_and_wait_for_init(token)
+        self.websocketd_client.timeout = self._CLIENT_TIMEOUT
+        await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+
+
+class TestTokenExpirationCheckStatic(IntegrationTest):
+    asset = 'basic'
+
+    _CLIENT_TIMEOUT = 15
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.filesystem = cls.make_filesystem()
+        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
+        cls.filesystem.create_file(
+            config_file,
+            content=dedent(
+                '''
+                auth_check_strategy: static
+                auth_check_static_interval: 10
+                '''
+            ),
+        )
+        cls.restart_service('websocketd')
+        cls.wait_strategy.wait(cls)
+
+    @run_with_loop
+    async def test_token_expire_use_static_strategy(self):
+        with self.auth_client.token() as token:
+            await self.websocketd_client.connect_and_wait_for_init(token)
+        self.websocketd_client.timeout = self._CLIENT_TIMEOUT
+        await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+
+
 class TestTokenExpiration(IntegrationTest):
-    asset = 'token_expiration'
+    asset = 'basic'
 
     _TIMEOUT = 15
 
-    def setUp(self):
-        super().setUp()
-        self.token_id = 'dynamic-token'
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.filesystem = cls.make_filesystem()
+        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
+        cls.filesystem.create_file(
+            config_file,
+            content=dedent(
+                '''
+                auth_check_strategy: static
+                auth_check_static_interval: 10
+                '''
+            ),
+        )
+        cls.restart_service('websocketd')
+        cls.wait_strategy.wait(cls)
 
     @run_with_loop
     async def test_token_expire_closes_websocket(self):

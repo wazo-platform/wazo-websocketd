@@ -45,5 +45,4 @@
 #  exchange_type: headers
 
 ## Developer options -- do not use them
-#auth_check_strategy: static
-#auth_check_static_interval: 60
+#auth_check_strategy: dynamic

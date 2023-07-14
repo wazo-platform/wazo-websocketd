@@ -189,7 +189,7 @@ class Session:
             await self._ws.send(payload)
 
     async def _task_authentification(self):
-        await self._authenticator.run_check(self._consumer.get_token_id)
+        await self._authenticator.run_check(self._consumer.get_token)
 
     async def _do_ws_subscribe(self, msg):
         event_name = msg.value
