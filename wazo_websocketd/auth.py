@@ -12,7 +12,6 @@ from collections import namedtuple
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
-from multiprocessing.sharedctypes import SynchronizedString
 from typing import Callable
 from wazo_auth_client import Client as AuthClient
 
@@ -99,7 +98,9 @@ STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAut
 class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
+        auth_check_class: Callable | None = STRATEGIES.get(
+            config['auth_check_strategy']
+        )
         if not auth_check_class:
             raise Exception(
                 'unknown auth_check_strategy {}'.format(config['auth_check_strategy'])
@@ -121,7 +122,7 @@ class Authenticator:
 
 
 class MasterTenantProxy:
-    proxy: SynchronizedString = Array(c_wchar, 36, lock=False)
+    proxy: c_wchar = Array(c_wchar, 36, lock=False)
 
     @classmethod
     def set_master_tenant(cls, token: dict):
@@ -148,13 +149,13 @@ class ServiceTokenRenewer:
 
     Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
 
-    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop = None):
+    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop | None = None):
         self._callbacks: list[ServiceTokenRenewer.Callback] = []
         self._client = AuthClient(**config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
         self._lock = asyncio.Lock()
         self._loop = loop or asyncio.get_event_loop()
-        self._task: asyncio.Task = None
+        self._task: asyncio.Task = None  # type: ignore[assignment]
 
     async def __aenter__(self):
         logger.info('service token renewer started')

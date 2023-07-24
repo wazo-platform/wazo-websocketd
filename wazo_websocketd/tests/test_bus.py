@@ -12,6 +12,7 @@ from hamcrest import (
     has_entries,
     raises,
 )
+from typing import Any
 from unittest.mock import Mock, sentinel
 from xivo.auth_verifier import AccessCheck
 
@@ -211,8 +212,8 @@ class TestBusBindings(unittest.TestCase):
         self.origin_uuid = Mock()
         self.mock_config = dict(_DEFAULT_CONFIG, uuid=self.origin_uuid)
 
-    def _make_consumer(self, purpose: str, admin: bool = None):
-        mock_token = {
+    def _make_consumer(self, purpose: str, admin: bool | None = None):
+        mock_token: dict[str, Any] = {
             'session_uuid': Mock(),
             'metadata': {
                 'uuid': 'some-user-uuid',

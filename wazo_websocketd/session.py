@@ -84,7 +84,7 @@ class Session:
         self._path = path
         self._started = False
         self._bus_service: BusService = bus_service
-        self._consumer: BusConsumer | None = None
+        self._consumer: BusConsumer = None  # type: ignore[assignment]
 
     async def run(self):
         try:

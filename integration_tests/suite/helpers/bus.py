@@ -4,7 +4,9 @@
 import json
 import aioamqp
 import asyncio
+
 from aioamqp.exceptions import AmqpClosedConnection
+from uuid import UUID
 
 from .constants import START_TIMEOUT, TENANT1_UUID, USER1_UUID, WAZO_ORIGIN_UUID
 
@@ -14,9 +16,9 @@ class BusClient:
 
     def __init__(self, port):
         self._port = port
-        self._transport = None
-        self._protocol = None
-        self._channel = None
+        self._transport: asyncio.Transport = None  # type: ignore[assignment]
+        self._protocol: aioamqp.protocol.AmqpProtocol = None  # type: ignore[assignment]
+        self._channel: aioamqp.channel.Channel = None  # type: ignore[assignment]
 
     async def connect(self):
         await self._try_connect(timeout=self.timeout)
@@ -43,10 +45,10 @@ class BusClient:
     async def publish(
         self,
         event: dict,
-        tenant_uuid: str = TENANT1_UUID,
-        user_uuid: str = USER1_UUID,
+        tenant_uuid: str | UUID = TENANT1_UUID,
+        user_uuid: str | UUID = USER1_UUID,
         *,
-        origin_uuid: str = None,
+        origin_uuid: str | None = None,
     ) -> None:
         payload = json.dumps(event).encode('utf-8')
         exchange = 'wazo-headers'

@@ -18,7 +18,7 @@ TIMEOUT = 60
 
 
 async def wait_opened(host: str, port: int, timeout: float, interval: float):
-    async def retry_connection(host: str, port: int, interval: float) -> bool:
+    async def retry_connection(host: str, port: int, interval: float) -> None:
         while True:
             try:
                 connection = await connect(f'ws://{host}:{port}')
