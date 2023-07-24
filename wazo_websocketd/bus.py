@@ -80,10 +80,9 @@ class _UserHelper:
 class _BusConnection:
     _id_counter = Value('i', 1)
 
-    def __init__(self, url: str, *, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, url: str):
         self._id: int = self._get_unique_id()
         self._url: str = url
-        self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
         self._connected = asyncio.Event()
         self._consumers: list[BusConsumer] = []
@@ -185,7 +184,7 @@ class _BusConnection:
 
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
-        await asyncio.gather(*tasks, loop=self._loop)  # type: ignore[call-overload]
+        await asyncio.gather(*tasks)
 
     async def _wait_for_connection(self):
         futs = [self._closing.wait(), self._connected.wait()]
@@ -195,9 +194,9 @@ class _BusConnection:
 
 
 class _BusConnectionPool:
-    def __init__(self, url: str, pool_size: int, *, loop=None):
-        self._loop = loop or asyncio.get_event_loop()
-        self._connections = [_BusConnection(url, loop=loop) for _ in range(pool_size)]
+    def __init__(self, url: str, pool_size: int):
+        self._loop = asyncio.get_event_loop()
+        self._connections = [_BusConnection(url) for _ in range(pool_size)]
         self._tasks: set = set()
         self._iterator = cycle(self._connections)
 
@@ -216,11 +215,7 @@ class _BusConnectionPool:
         )
 
         # wait for connections to close gracefully or force after 5 sec
-        _, pending = await asyncio.wait(
-            self._tasks,
-            loop=self._loop,  # type: ignore[call-overload]
-            timeout=5.0,
-        )
+        _, pending = await asyncio.wait(self._tasks, timeout=5.0)
 
         if pending:
             logger.info('some connections did not exit gracefully, forcing...')
@@ -436,15 +431,14 @@ class BusMessage(NamedTuple):
 
 
 class BusService:
-    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, config: dict):
         poolsize: int = config.get('worker_connections', 1)
         url: str = 'amqp://{username}:{password}@{host}:{port}//'.format(
             **config['bus']
         )
 
         self._config = config
-        self._loop = loop or asyncio.get_event_loop()
-        self._connection_pool = _BusConnectionPool(url, poolsize, loop=loop)
+        self._connection_pool = _BusConnectionPool(url, poolsize)
 
     async def __aenter__(self):
         await self._connection_pool.start()

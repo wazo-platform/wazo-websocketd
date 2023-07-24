@@ -149,12 +149,12 @@ class ServiceTokenRenewer:
 
     Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
 
-    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop | None = None):
+    def __init__(self, config: dict):
         self._callbacks: list[ServiceTokenRenewer.Callback] = []
         self._client = AuthClient(**config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
         self._lock = asyncio.Lock()
-        self._loop = loop or asyncio.get_event_loop()
+        self._loop = asyncio.get_event_loop()
         self._task: asyncio.Task = None  # type: ignore[assignment]
 
     async def __aenter__(self):
