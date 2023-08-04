@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import unittest
 
 from datetime import datetime
@@ -228,7 +229,7 @@ class TestBusBindings(unittest.TestCase):
         admin: bool | None = None,
         user_uuid: str | None = None,
     ):
-        mock_token: TokenDict = _DEFAULT_TOKEN
+        mock_token: TokenDict = copy.deepcopy(_DEFAULT_TOKEN)
         mock_token['metadata']['uuid'] = user_uuid
         mock_token['metadata']['purpose'] = purpose
         if admin is not None:
