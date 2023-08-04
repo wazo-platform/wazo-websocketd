@@ -15,6 +15,7 @@ from itertools import chain, repeat
 from multiprocessing import Array
 from typing import Callable, Type
 from wazo_auth_client import Client as AuthClient
+from wazo_auth_client.types import TokenDict
 
 from .exception import AuthenticationError, AuthenticationExpiredError
 
@@ -139,7 +140,7 @@ class MasterTenantProxy:
     proxy: c_wchar = Array(c_wchar, 36, lock=False)
 
     @classmethod
-    def set_master_tenant(cls, token: dict):
+    def set_master_tenant(cls, token: TokenDict):
         try:
             tenant_uuid = token['metadata']['tenant_uuid']
         except KeyError:
@@ -210,7 +211,7 @@ class ServiceTokenRenewer:
             await self._notify(token)
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
-    async def _fetch_token(self) -> dict:
+    async def _fetch_token(self) -> TokenDict:
         timeouts = chain((1, 2, 4, 8, 16), repeat(32))
         fn = partial(self._client.token.new, expiration=self._expiration)
         while True:
@@ -221,7 +222,7 @@ class ServiceTokenRenewer:
                 await self.on_error(interval)
             await asyncio.sleep(interval)
 
-    async def _notify(self, token: dict):
+    async def _notify(self, token: TokenDict):
         callbacks = self._callbacks.copy()
         for callback in callbacks:
             if callback.oneshot:

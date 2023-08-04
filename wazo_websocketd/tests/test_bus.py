@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from datetime import datetime
 from hamcrest import (
     assert_that,
     calling,
@@ -13,26 +14,41 @@ from hamcrest import (
     has_entries,
     raises,
 )
-from typing import Any
+from uuid import uuid4
 from unittest.mock import Mock, sentinel
+from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
 from ..bus import BusConsumer, BusMessage
 from ..config import _DEFAULT_CONFIG
 from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
 
+_DEFAULT_TOKEN = {
+    'token': f'{uuid4()}',
+    'session_uuid': f'{uuid4()}',
+    'acl': ['some.acl'],
+    'metadata': {
+        'uuid': f'{uuid4()}',
+        'tenant_uuid': f'{uuid4()}',
+        'auth_id': f'{uuid4()}',
+        'pbx_user_uuid': f'{uuid4()}',
+        'xivo_uuid': f'{uuid4()}',
+    },
+    'utc_expires_at': f'{datetime.now()}',
+    'expires_at': f'{datetime.utcnow()}',
+    'issued_at': f'{datetime.now()}',
+    'utc_issued_at': f'{datetime.utcnow()}',
+    'user_agent': 'some-user-agent',
+    'remote_addr': '127.0.0.1',
+    'xivo_uuid': f'{uuid4()}',
+    'auth_id': f'{uuid4()}',
+}
+
 
 class TestBusDecoding(unittest.TestCase):
     def setUp(self):
         mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
-        mock_token = {
-            'session_uuid': 'some-session',
-            'acl': ['some.acl'],
-            'metadata': {
-                'uuid': 'some-uuid',
-                'tenant_uuid': 'some-tenant',
-            },
-        }
+        mock_token: TokenDict = _DEFAULT_TOKEN
         self.consumer = BusConsumer(Mock(), mock_config, mock_token)
 
     def test_bus_msg(self):
@@ -171,14 +187,7 @@ class TestBusDispatching(unittest.TestCase):
             'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.content
         )
         mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
-        mock_token = {
-            'session_uuid': 'some-session-uuid',
-            'metadata': {
-                'uuid': 'some-user-uuid',
-                'tenant_uuid': 'some-tenant-uuid',
-            },
-            'acl': ['some.acl'],
-        }
+        mock_token = _DEFAULT_TOKEN
 
         self.consumer = BusConsumer(Mock(), mock_config, mock_token)
         self.consumer._access = Mock(AccessCheck)
@@ -213,28 +222,27 @@ class TestBusBindings(unittest.TestCase):
         self.origin_uuid = Mock()
         self.mock_config = dict(_DEFAULT_CONFIG, uuid=self.origin_uuid)
 
-    def _make_consumer(self, purpose: str, admin: bool | None = None):
-        mock_token: dict[str, Any] = {
-            'session_uuid': Mock(),
-            'metadata': {
-                'uuid': 'some-user-uuid',
-                'tenant_uuid': Mock(),
-                'purpose': purpose,
-            },
-            'acl': ['some.acl'],
-        }
-
+    def _make_consumer(
+        self,
+        purpose: str,
+        admin: bool | None = None,
+        user_uuid: str | None = None,
+    ):
+        mock_token: TokenDict = _DEFAULT_TOKEN
+        mock_token['metadata']['uuid'] = user_uuid
+        mock_token['metadata']['purpose'] = purpose
         if admin is not None:
             mock_token['metadata']['admin'] = admin
 
         return BusConsumer(Mock(), self.mock_config, mock_token)
 
     def test_user_bindings(self):
-        consumer = self._make_consumer(purpose='user', admin=False)
+        user_uuid = str(uuid4())
+        consumer = self._make_consumer(purpose='user', admin=False, user_uuid=user_uuid)
         assert_that(
             consumer._generate_bindings('some_event'),
             contains_inanyorder(
-                has_entries({'name': 'some_event', 'user_uuid:some-user-uuid': True}),
+                has_entries({'name': 'some_event', f'user_uuid:{user_uuid}': True}),
                 has_entries({'name': 'some_event', 'user_uuid:*': True}),
             ),
         )
@@ -242,7 +250,7 @@ class TestBusBindings(unittest.TestCase):
         assert_that(
             consumer._generate_bindings('*'),
             contains_inanyorder(
-                has_entries({'user_uuid:some-user-uuid': True}),
+                has_entries({f'user_uuid:{user_uuid}': True}),
                 has_entries({'user_uuid:*': True}),
             ),
         )

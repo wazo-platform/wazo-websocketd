@@ -10,12 +10,13 @@ import logging
 from aioamqp import AmqpProtocol
 from aioamqp.channel import Channel
 from aioamqp.envelope import Envelope
-from aioamqp.properties import Properties
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
+from aioamqp.properties import Properties
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
 from typing import NamedTuple
+from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenantProxy
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class _UserHelper:
-    def __init__(self, token: dict):
+    def __init__(self, token: TokenDict):
         self._token = token
 
     @property
@@ -40,7 +41,7 @@ class _UserHelper:
 
     def is_admin(self) -> bool:
         purpose = self._token['metadata'].get('purpose', None)
-        is_tenant_admin = self._token['metadata'].get('admin', False)
+        is_tenant_admin = bool(self._token['metadata'].get('admin', False))
         return (
             self.is_master_tenant()
             or is_tenant_admin
@@ -51,7 +52,7 @@ class _UserHelper:
         return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
 
     @classmethod
-    def from_token(cls, token: dict):
+    def from_token(cls, token: TokenDict):
         if 'metadata' not in token:
             raise InvalidTokenError('Malformed token received, missing token details')
         return cls(token)
@@ -172,7 +173,7 @@ class _BusConnection:
                 f'[connection {self._id}] failed to create a new channel'
             )
 
-    def spawn_consumer(self, config: dict, token: dict) -> BusConsumer:
+    def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
         consumer = BusConsumer(self, config, token)
         self._consumers.append(consumer)
         return consumer
@@ -229,7 +230,7 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    def __init__(self, connection: _BusConnection, config: dict, token: dict):
+    def __init__(self, connection: _BusConnection, config: dict, token: TokenDict):
         self.set_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
@@ -413,7 +414,7 @@ class BusConsumer:
             'utc_expires_at': self._user.token_utc_expires_at,
         }
 
-    def set_token(self, token: dict):
+    def set_token(self, token: TokenDict):
         self._user = user = _UserHelper.from_token(token)
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
@@ -447,7 +448,7 @@ class BusService:
     async def __aexit__(self, *args):
         await self._connection_pool.stop()
 
-    async def create_consumer(self, token: dict) -> BusConsumer:
+    async def create_consumer(self, token: TokenDict) -> BusConsumer:
         connection = self._connection_pool.get_connection()
         return connection.spawn_consumer(self._config, token)
 
