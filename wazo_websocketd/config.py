@@ -1,9 +1,12 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import logging
 import argparse
 import ssl
+
+from typing import Any
 
 from xivo.chain_map import ChainMap
 from xivo.config_helper import read_config_file_hierarchy, parse_config_file
@@ -88,7 +91,7 @@ def _parse_cli_args():
 
 
 def _get_reinterpreted_raw_values(config):
-    result = {'websocket': {}}
+    result: dict[str, Any] = {'websocket': {}}
 
     ssl_context = None
     if config['websocket']['certificate'] and config['websocket']['private_key']:

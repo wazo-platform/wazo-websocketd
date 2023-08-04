@@ -7,14 +7,15 @@ import datetime
 import logging
 import requests
 
+from abc import ABC, abstractmethod
 from ctypes import c_wchar
 from collections import namedtuple
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
-from multiprocessing.sharedctypes import SynchronizedString
-from typing import Callable
+from typing import Callable, Type
 from wazo_auth_client import Client as AuthClient
+from wazo_auth_client.types import TokenDict
 
 from .exception import AuthenticationError, AuthenticationExpiredError
 
@@ -48,7 +49,17 @@ class AsyncAuthClient:
         )
 
 
-class _StaticIntervalAuthCheck:
+class _AuthChecker(ABC):
+    @abstractmethod
+    def __init__(self, async_auth_client: AsyncAuthClient, config: dict) -> None:
+        ...
+
+    @abstractmethod
+    async def run(self, token_getter: Callable[[], dict]) -> None:
+        ...
+
+
+class _StaticIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
@@ -63,7 +74,7 @@ class _StaticIntervalAuthCheck:
                 raise AuthenticationExpiredError()
 
 
-class _DynamicIntervalAuthCheck:
+class _DynamicIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
 
@@ -93,13 +104,18 @@ class _DynamicIntervalAuthCheck:
         return 43200
 
 
-STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAuthCheck}
+STRATEGIES = {
+    'static': _StaticIntervalAuthChecker,
+    'dynamic': _DynamicIntervalAuthChecker,
+}
 
 
 class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class = STRATEGIES.get(config['auth_check_strategy'])
+        auth_check_class: Type[_AuthChecker] | None = STRATEGIES.get(
+            config['auth_check_strategy']
+        )
         if not auth_check_class:
             raise Exception(
                 'unknown auth_check_strategy {}'.format(config['auth_check_strategy'])
@@ -121,10 +137,10 @@ class Authenticator:
 
 
 class MasterTenantProxy:
-    proxy: SynchronizedString = Array(c_wchar, 36, lock=False)
+    proxy: c_wchar = Array(c_wchar, 36, lock=False)
 
     @classmethod
-    def set_master_tenant(cls, token: dict):
+    def set_master_tenant(cls, token: TokenDict):
         try:
             tenant_uuid = token['metadata']['tenant_uuid']
         except KeyError:
@@ -148,13 +164,13 @@ class ServiceTokenRenewer:
 
     Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
 
-    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop = None):
+    def __init__(self, config: dict):
         self._callbacks: list[ServiceTokenRenewer.Callback] = []
         self._client = AuthClient(**config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
         self._lock = asyncio.Lock()
-        self._loop = loop or asyncio.get_event_loop()
-        self._task: asyncio.Task = None
+        self._loop = asyncio.get_event_loop()
+        self._task: asyncio.Task = None  # type: ignore[assignment]
 
     async def __aenter__(self):
         logger.info('service token renewer started')
@@ -195,7 +211,7 @@ class ServiceTokenRenewer:
             await self._notify(token)
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
-    async def _fetch_token(self) -> dict:
+    async def _fetch_token(self) -> TokenDict:
         timeouts = chain((1, 2, 4, 8, 16), repeat(32))
         fn = partial(self._client.token.new, expiration=self._expiration)
         while True:
@@ -206,7 +222,7 @@ class ServiceTokenRenewer:
                 await self.on_error(interval)
             await asyncio.sleep(interval)
 
-    async def _notify(self, token: dict):
+    async def _notify(self, token: TokenDict):
         callbacks = self._callbacks.copy()
         for callback in callbacks:
             if callback.oneshot:

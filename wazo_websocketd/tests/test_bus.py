@@ -1,9 +1,13 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
+from __future__ import annotations
 
 import asyncio
 import unittest
 
+from datetime import datetime
+
+import pytest
 from hamcrest import (
     assert_that,
     calling,
@@ -12,7 +16,9 @@ from hamcrest import (
     has_entries,
     raises,
 )
+from uuid import uuid4
 from unittest.mock import Mock, sentinel
+from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
 from ..bus import BusConsumer, BusMessage
@@ -20,18 +26,37 @@ from ..config import _DEFAULT_CONFIG
 from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
 
 
+@pytest.fixture
+def mock_token_fixture(request: pytest.FixtureRequest) -> None:
+    request.cls.mock_token = {
+        'token': f'{uuid4()}',
+        'session_uuid': f'{uuid4()}',
+        'acl': ['some.acl'],
+        'metadata': {
+            'uuid': f'{uuid4()}',
+            'tenant_uuid': f'{uuid4()}',
+            'auth_id': f'{uuid4()}',
+            'pbx_user_uuid': f'{uuid4()}',
+            'xivo_uuid': f'{uuid4()}',
+        },
+        'utc_expires_at': f'{datetime.now()}',
+        'expires_at': f'{datetime.utcnow()}',
+        'issued_at': f'{datetime.now()}',
+        'utc_issued_at': f'{datetime.utcnow()}',
+        'user_agent': 'some-user-agent',
+        'remote_addr': '127.0.0.1',
+        'xivo_uuid': f'{uuid4()}',
+        'auth_id': f'{uuid4()}',
+    }
+
+
+@pytest.mark.usefixtures('mock_token_fixture')
 class TestBusDecoding(unittest.TestCase):
+    mock_token: TokenDict
+
     def setUp(self):
         mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
-        mock_token = {
-            'session_uuid': 'some-session',
-            'acl': ['some.acl'],
-            'metadata': {
-                'uuid': 'some-uuid',
-                'tenant_uuid': 'some-tenant',
-            },
-        }
-        self.consumer = BusConsumer(Mock(), mock_config, mock_token)
+        self.consumer = BusConsumer(Mock(), mock_config, self.mock_token)
 
     def test_bus_msg(self):
         message = b'{}'
@@ -162,23 +187,18 @@ class TestBusDecoding(unittest.TestCase):
         )
 
 
+@pytest.mark.usefixtures('mock_token_fixture')
 class TestBusDispatching(unittest.TestCase):
+    mock_token: TokenDict
+
     def setUp(self):
         self.loop = asyncio.get_event_loop()
         self.event = BusMessage(
             'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.content
         )
         mock_config = dict(_DEFAULT_CONFIG, uuid=Mock())
-        mock_token = {
-            'session_uuid': 'some-session-uuid',
-            'metadata': {
-                'uuid': 'some-user-uuid',
-                'tenant_uuid': 'some-tenant-uuid',
-            },
-            'acl': ['some.acl'],
-        }
 
-        self.consumer = BusConsumer(Mock(), mock_config, mock_token)
+        self.consumer = BusConsumer(Mock(), mock_config, self.mock_token)
         self.consumer._access = Mock(AccessCheck)
 
     def test_connection_lost(self):
@@ -206,33 +226,34 @@ class TestBusDispatching(unittest.TestCase):
         )
 
 
+@pytest.mark.usefixtures('mock_token_fixture')
 class TestBusBindings(unittest.TestCase):
+    mock_token: TokenDict
+
     def setUp(self):
         self.origin_uuid = Mock()
         self.mock_config = dict(_DEFAULT_CONFIG, uuid=self.origin_uuid)
 
-    def _make_consumer(self, purpose: str, admin: bool = None):
-        mock_token = {
-            'session_uuid': Mock(),
-            'metadata': {
-                'uuid': 'some-user-uuid',
-                'tenant_uuid': Mock(),
-                'purpose': purpose,
-            },
-            'acl': ['some.acl'],
-        }
-
+    def _make_consumer(
+        self,
+        purpose: str,
+        admin: bool | None = None,
+        user_uuid: str | None = None,
+    ):
+        self.mock_token['metadata']['uuid'] = user_uuid
+        self.mock_token['metadata']['purpose'] = purpose
         if admin is not None:
-            mock_token['metadata']['admin'] = admin
+            self.mock_token['metadata']['admin'] = admin
 
-        return BusConsumer(Mock(), self.mock_config, mock_token)
+        return BusConsumer(Mock(), self.mock_config, self.mock_token)
 
     def test_user_bindings(self):
-        consumer = self._make_consumer(purpose='user', admin=False)
+        user_uuid = str(uuid4())
+        consumer = self._make_consumer(purpose='user', admin=False, user_uuid=user_uuid)
         assert_that(
             consumer._generate_bindings('some_event'),
             contains_inanyorder(
-                has_entries({'name': 'some_event', 'user_uuid:some-user-uuid': True}),
+                has_entries({'name': 'some_event', f'user_uuid:{user_uuid}': True}),
                 has_entries({'name': 'some_event', 'user_uuid:*': True}),
             ),
         )
@@ -240,7 +261,7 @@ class TestBusBindings(unittest.TestCase):
         assert_that(
             consumer._generate_bindings('*'),
             contains_inanyorder(
-                has_entries({'user_uuid:some-user-uuid': True}),
+                has_entries({f'user_uuid:{user_uuid}': True}),
                 has_entries({'user_uuid:*': True}),
             ),
         )

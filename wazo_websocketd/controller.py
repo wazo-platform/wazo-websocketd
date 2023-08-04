@@ -24,7 +24,7 @@ class Controller:
             await asyncio.wait(results, return_when=FIRST_COMPLETED)
 
     async def _run(self):
-        tombstone = asyncio.Future()
+        tombstone: asyncio.Future = asyncio.Future()
         logger.info('wazo-websocketd starting...')
 
         loop = asyncio.get_event_loop()

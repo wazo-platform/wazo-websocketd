@@ -23,7 +23,7 @@ from .constants import (
     TENANT2_UUID,
 )
 from .websocketd import WebSocketdClient
-from .wait_strategy import WaitUntilValidConnection
+from .wait_strategy import WaitStrategy, WaitUntilValidConnection
 
 
 class ClientCreateException(Exception):
@@ -46,7 +46,7 @@ class IntegrationTest(AssetLaunchingTestCase):
     # FIXME: Until a proper /status route is establish, wait a small amount
     # of time after creating service credentials to allow websocketd to find
     # who is the master tenant
-    wait_strategy = WaitUntilValidConnection()
+    wait_strategy: WaitStrategy = WaitUntilValidConnection()
 
     @classmethod
     def setUpClass(cls):

@@ -20,7 +20,7 @@ class WebSocketdClient:
     def __init__(self, port, *, loop=None):
         self._loop = loop or asyncio.get_event_loop()
         self._port = port
-        self._websocket = None
+        self._websocket: websockets.connect = None  # type: ignore[assignment]
         self._started = False
         self._version = 1
         self.timeout = self._DEFAULT_TIMEOUT

@@ -6,8 +6,8 @@ import asyncio
 import logging
 import websockets
 
+from ctypes import c_wchar
 from multiprocessing import get_context
-from multiprocessing.sharedctypes import Synchronized
 from os import getpid, sched_getaffinity, chdir
 from setproctitle import setproctitle
 from signal import SIGINT, SIGTERM
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class WebsocketServer:
     def __init__(self, config: dict):
         self._config = config
-        self._tombstone = asyncio.Future()
+        self._tombstone: asyncio.Future = asyncio.Future()
 
     def _create_server(self) -> tuple[BusService, Serve]:
         config = self._config
@@ -94,7 +94,7 @@ class ProcessPool:
         self._dir.cleanup()
 
     @staticmethod
-    def _init_worker(config: dict, master_tenant_proxy: Synchronized):
+    def _init_worker(config: dict, master_tenant_proxy: c_wchar):
         setproctitle('wazo-websocketd: worker')
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)

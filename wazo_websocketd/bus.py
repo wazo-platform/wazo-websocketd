@@ -10,12 +10,13 @@ import logging
 from aioamqp import AmqpProtocol
 from aioamqp.channel import Channel
 from aioamqp.envelope import Envelope
-from aioamqp.properties import Properties
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
+from aioamqp.properties import Properties
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
 from typing import NamedTuple
+from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenantProxy
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class _UserHelper:
-    def __init__(self, token: dict):
+    def __init__(self, token: TokenDict):
         self._token = token
 
     @property
@@ -40,7 +41,7 @@ class _UserHelper:
 
     def is_admin(self) -> bool:
         purpose = self._token['metadata'].get('purpose', None)
-        is_tenant_admin = self._token['metadata'].get('admin', False)
+        is_tenant_admin = bool(self._token['metadata'].get('admin', False))
         return (
             self.is_master_tenant()
             or is_tenant_admin
@@ -51,7 +52,7 @@ class _UserHelper:
         return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
 
     @classmethod
-    def from_token(cls, token: dict):
+    def from_token(cls, token: TokenDict):
         if 'metadata' not in token:
             raise InvalidTokenError('Malformed token received, missing token details')
         return cls(token)
@@ -80,21 +81,20 @@ class _UserHelper:
 class _BusConnection:
     _id_counter = Value('i', 1)
 
-    def __init__(self, url: str, *, loop: asyncio.AbstractEventLoop = None):
+    def __init__(self, url: str):
         self._id: int = self._get_unique_id()
         self._url: str = url
-        self._loop = loop or asyncio.get_event_loop()
         self._closing = asyncio.Event()
         self._connected = asyncio.Event()
         self._consumers: list[BusConsumer] = []
-        self._protocol: AmqpProtocol = None
-        self._transport = None
-        self._task: asyncio.Task = None
+        self._protocol: AmqpProtocol = None  # type: ignore[assignment]
+        self._transport: asyncio.Transport = None  # type: ignore[assignment]
+        self._task: asyncio.Task = None  # type: ignore[assignment]
 
     @classmethod
     def _get_unique_id(cls) -> int:
-        id_ = cls._id_counter.value
-        cls._id_counter.value += 1
+        id_ = cls._id_counter.value  # type: ignore[attr-defined]
+        cls._id_counter.value += 1  # type: ignore[attr-defined]
         return id_
 
     @property
@@ -173,7 +173,7 @@ class _BusConnection:
                 f'[connection {self._id}] failed to create a new channel'
             )
 
-    def spawn_consumer(self, config: dict, token: str) -> BusConsumer:
+    def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
         consumer = BusConsumer(self, config, token)
         self._consumers.append(consumer)
         return consumer
@@ -185,7 +185,7 @@ class _BusConnection:
 
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
-        await asyncio.gather(*tasks, loop=self._loop)
+        await asyncio.gather(*tasks)
 
     async def _wait_for_connection(self):
         futs = [self._closing.wait(), self._connected.wait()]
@@ -195,10 +195,10 @@ class _BusConnection:
 
 
 class _BusConnectionPool:
-    def __init__(self, url: str, pool_size: int, *, loop=None):
-        self._loop = loop or asyncio.get_event_loop()
-        self._connections = [_BusConnection(url, loop=loop) for _ in range(pool_size)]
-        self._tasks = set()
+    def __init__(self, url: str, pool_size: int):
+        self._loop = asyncio.get_event_loop()
+        self._connections = [_BusConnection(url) for _ in range(pool_size)]
+        self._tasks: set = set()
         self._iterator = cycle(self._connections)
 
     def __len__(self):
@@ -216,7 +216,8 @@ class _BusConnectionPool:
         )
 
         # wait for connections to close gracefully or force after 5 sec
-        _, pending = await asyncio.wait(self._tasks, loop=self._loop, timeout=5.0)
+        _, pending = await asyncio.wait(self._tasks, timeout=5.0)
+
         if pending:
             logger.info('some connections did not exit gracefully, forcing...')
             for task in pending:
@@ -229,7 +230,7 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    def __init__(self, connection: _BusConnection, config: dict, token: dict):
+    def __init__(self, connection: _BusConnection, config: dict, token: TokenDict):
         self.set_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
@@ -239,7 +240,7 @@ class BusConsumer:
         self._exchange_name: str = config['bus']['exchange_name']
         self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
-        self._queue = asyncio.Queue()
+        self._queue: asyncio.Queue = asyncio.Queue()
 
     async def __aenter__(self):
         await self._start_consuming()
@@ -322,7 +323,8 @@ class BusConsumer:
 
         if not self._has_access(acl):
             raise EventPermissionError(
-                f'user `{self._user.uuid}` doesn\'t have the required ACL for event `{event_name}` (missing: {acl})'
+                f'user `{self._user.uuid}` doesn\'t have '
+                f'the required ACL for event `{event_name}` (missing: {acl})'
             )
 
         return BusMessage(event_name, headers, acl, message, decoded)
@@ -412,7 +414,7 @@ class BusConsumer:
             'utc_expires_at': self._user.token_utc_expires_at,
         }
 
-    def set_token(self, token: dict):
+    def set_token(self, token: TokenDict):
         self._user = user = _UserHelper.from_token(token)
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
@@ -424,21 +426,20 @@ class BusConsumer:
 class BusMessage(NamedTuple):
     name: str
     headers: dict
-    acl: str
+    acl: str | None
     content: dict
     raw: str
 
 
 class BusService:
-    def __init__(self, config: dict, *, loop: asyncio.AbstractEventLoop = None):
+    def __init__(self, config: dict):
         poolsize: int = config.get('worker_connections', 1)
         url: str = 'amqp://{username}:{password}@{host}:{port}//'.format(
             **config['bus']
         )
 
         self._config = config
-        self._loop = loop or asyncio.get_event_loop()
-        self._connection_pool = _BusConnectionPool(url, poolsize, loop=loop)
+        self._connection_pool = _BusConnectionPool(url, poolsize)
 
     async def __aenter__(self):
         await self._connection_pool.start()
@@ -447,7 +448,7 @@ class BusService:
     async def __aexit__(self, *args):
         await self._connection_pool.stop()
 
-    async def create_consumer(self, token: str) -> BusConsumer:
+    async def create_consumer(self, token: TokenDict) -> BusConsumer:
         connection = self._connection_pool.get_connection()
         return connection.spawn_consumer(self._config, token)
 
