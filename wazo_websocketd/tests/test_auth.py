@@ -12,8 +12,8 @@ from hamcrest import assert_that, equal_to, same_instance
 from ..auth import (
     Authenticator,
     AsyncAuthClient,
-    _DynamicIntervalAuthCheck,
-    _StaticIntervalAuthCheck,
+    _DynamicIntervalAuthChecker,
+    _StaticIntervalAuthChecker,
 )
 from ..exception import AuthenticationError, AuthenticationExpiredError
 
@@ -105,10 +105,10 @@ class TestAuthenticator(unittest.TestCase):
         )
 
 
-class TestStaticIntervalAuthCheck(unittest.TestCase):
+class TestStaticIntervalAuthChecker(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
-        self.check = _StaticIntervalAuthCheck(
+        self.check = _StaticIntervalAuthChecker(
             self.websocketd_auth_client, {"auth_check_static_interval": 0.1}
         )
         self.token = {'token': sentinel.token_id}
@@ -126,10 +126,10 @@ class TestStaticIntervalAuthCheck(unittest.TestCase):
         )
 
 
-class TestDynamicIntervalAuthCheck(unittest.TestCase):
+class TestDynamicIntervalAuthChecker(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
-        self.check = _DynamicIntervalAuthCheck(self.websocketd_auth_client, {})
+        self.check = _DynamicIntervalAuthChecker(self.websocketd_auth_client, {})
 
     def test_expiration_in_the_past(self):
         now = datetime.datetime(2016, 1, 1, 0, 0, 0)

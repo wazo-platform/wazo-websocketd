@@ -48,7 +48,7 @@ class AsyncAuthClient:
         )
 
 
-class _AuthCheck(ABC):
+class _AuthChecker(ABC):
     @abstractmethod
     def __init__(self, async_auth_client: AsyncAuthClient, config: dict) -> None:
         ...
@@ -58,7 +58,7 @@ class _AuthCheck(ABC):
         ...
 
 
-class _StaticIntervalAuthCheck(_AuthCheck):
+class _StaticIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
@@ -73,7 +73,7 @@ class _StaticIntervalAuthCheck(_AuthCheck):
                 raise AuthenticationExpiredError()
 
 
-class _DynamicIntervalAuthCheck(_AuthCheck):
+class _DynamicIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
 
@@ -103,13 +103,16 @@ class _DynamicIntervalAuthCheck(_AuthCheck):
         return 43200
 
 
-STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAuthCheck}
+STRATEGIES = {
+    'static': _StaticIntervalAuthChecker,
+    'dynamic': _DynamicIntervalAuthChecker,
+}
 
 
 class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class: Type[_AuthCheck] | None = STRATEGIES.get(
+        auth_check_class: Type[_AuthChecker] | None = STRATEGIES.get(
             config['auth_check_strategy']
         )
         if not auth_check_class:
