@@ -7,12 +7,13 @@ import datetime
 import logging
 import requests
 
+from abc import ABC, abstractmethod
 from ctypes import c_wchar
 from collections import namedtuple
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
-from typing import Callable
+from typing import Callable, Type
 from wazo_auth_client import Client as AuthClient
 
 from .exception import AuthenticationError, AuthenticationExpiredError
@@ -47,7 +48,17 @@ class AsyncAuthClient:
         )
 
 
-class _StaticIntervalAuthCheck:
+class _AuthCheck(ABC):
+    @abstractmethod
+    def __init__(self, async_auth_client: AsyncAuthClient, config: dict) -> None:
+        ...
+
+    @abstractmethod
+    async def run(self, token_getter: Callable[[], dict]) -> None:
+        ...
+
+
+class _StaticIntervalAuthCheck(_AuthCheck):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
@@ -62,7 +73,7 @@ class _StaticIntervalAuthCheck:
                 raise AuthenticationExpiredError()
 
 
-class _DynamicIntervalAuthCheck:
+class _DynamicIntervalAuthCheck(_AuthCheck):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
 
@@ -98,7 +109,7 @@ STRATEGIES = {'static': _StaticIntervalAuthCheck, 'dynamic': _DynamicIntervalAut
 class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class: Callable | None = STRATEGIES.get(
+        auth_check_class: Type[_AuthCheck] | None = STRATEGIES.get(
             config['auth_check_strategy']
         )
         if not auth_check_class:
