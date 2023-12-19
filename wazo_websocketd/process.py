@@ -107,15 +107,11 @@ class ProcessPool:
 
     @staticmethod
     def _run(config: dict):
-        server = WebsocketServer(config)
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(SIGINT, server.stop)
-        loop.add_signal_handler(SIGTERM, server.stop)
+        async def serve(config: dict):
+            loop = asyncio.get_event_loop()
+            server = WebsocketServer(config)
+            loop.add_signal_handler(SIGINT, server.stop)
+            loop.add_signal_handler(SIGTERM, server.stop)
+            await server.serve()
 
-        # Manually manage loop instead of using `asyncio.run` because it is broken on uvloop 0.14.
-        # Can be simplified after upgrading to any version above 0.14 (ex: Bookworm)
-        try:
-            loop.run_until_complete(server.serve())
-        finally:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+        asyncio.run(serve(config))
