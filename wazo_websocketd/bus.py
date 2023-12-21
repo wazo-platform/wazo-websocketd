@@ -2,20 +2,20 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-import aioamqp
 import asyncio
 import json
 import logging
+from itertools import chain, cycle, repeat
+from multiprocessing import Value
+from secrets import token_hex
+from typing import NamedTuple
 
+import aioamqp
 from aioamqp import AmqpProtocol
 from aioamqp.channel import Channel
 from aioamqp.envelope import Envelope
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from aioamqp.properties import Properties
-from itertools import chain, cycle, repeat
-from multiprocessing import Value
-from secrets import token_hex
-from typing import NamedTuple
 from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 

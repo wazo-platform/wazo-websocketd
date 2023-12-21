@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import sys
-
 from asyncio import TimeoutError
-from wazo_websocketd.config import _DEFAULT_CONFIG
+
 from websockets.client import connect
 from xivo.chain_map import ChainMap
 from xivo.config_helper import read_config_file_hierarchy
 
+from wazo_websocketd.config import _DEFAULT_CONFIG
 
 HOST = '127.0.0.1'
 RETRY_INTERVAL = 0.5

@@ -2,14 +2,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-import logging
 import argparse
+import logging
 import ssl
-
 from typing import Any
 
 from xivo.chain_map import ChainMap
-from xivo.config_helper import read_config_file_hierarchy, parse_config_file
+from xivo.config_helper import parse_config_file, read_config_file_hierarchy
 from xivo.xivo_logging import get_log_level_by_name
 
 logger = logging.getLogger(__name__)

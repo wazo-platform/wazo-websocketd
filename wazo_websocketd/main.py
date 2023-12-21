@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
@@ -9,7 +9,6 @@ from xivo.user_rights import change_user
 
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
-
 
 logger = logging.getLogger(__name__)
 
