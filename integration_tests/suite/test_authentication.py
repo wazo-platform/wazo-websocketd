@@ -5,16 +5,16 @@ from textwrap import dedent
 
 import websockets
 
-from .helpers.wait_strategy import TimeWaitStrategy
 from .helpers.base import IntegrationTest, run_with_loop
 from .helpers.constants import (
-    INVALID_TOKEN_ID,
-    UNAUTHORIZED_TOKEN_ID,
-    CLOSE_CODE_AUTH_FAILED,
     CLOSE_CODE_AUTH_EXPIRED,
+    CLOSE_CODE_AUTH_FAILED,
     CLOSE_CODE_NO_TOKEN_ID,
+    INVALID_TOKEN_ID,
     TOKEN_UUID,
+    UNAUTHORIZED_TOKEN_ID,
 )
+from .helpers.wait_strategy import TimeWaitStrategy
 
 
 class TestAuthentication(IntegrationTest):

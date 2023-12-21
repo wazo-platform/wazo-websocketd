@@ -3,15 +3,14 @@
 
 import asyncio
 import logging
-import uvloop
 
+import uvloop
 from xivo import xivo_logging
 from xivo.config_helper import set_xivo_uuid
 from xivo.user_rights import change_user
 
 from wazo_websocketd.config import load_config
 from wazo_websocketd.controller import Controller
-
 
 logger = logging.getLogger(__name__)
 

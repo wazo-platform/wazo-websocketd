@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import unittest
-
 from datetime import datetime
+from unittest.mock import Mock, sentinel
+from uuid import uuid4
 
 import pytest
 from hamcrest import (
@@ -16,14 +17,12 @@ from hamcrest import (
     has_entries,
     raises,
 )
-from uuid import uuid4
-from unittest.mock import Mock, sentinel
 from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
 from ..bus import BusConsumer, BusMessage
 from ..config import _DEFAULT_CONFIG
-from ..exception import BusConnectionLostError, InvalidEvent, EventPermissionError
+from ..exception import BusConnectionLostError, EventPermissionError, InvalidEvent
 
 
 @pytest.fixture

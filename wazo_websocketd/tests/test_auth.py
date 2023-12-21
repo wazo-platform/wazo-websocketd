@@ -4,14 +4,14 @@
 import asyncio
 import datetime
 import unittest
-from unittest.mock import Mock, sentinel, patch
+from unittest.mock import Mock, patch, sentinel
 
 import requests
 from hamcrest import assert_that, equal_to, same_instance
 
 from ..auth import (
-    Authenticator,
     AsyncAuthClient,
+    Authenticator,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
 )

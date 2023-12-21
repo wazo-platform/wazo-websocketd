@@ -5,15 +5,15 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
-import requests
-
 from abc import ABC, abstractmethod
-from ctypes import c_wchar
 from collections import namedtuple
+from ctypes import c_wchar
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
-from typing import Callable, Type
+from typing import Callable
+
+import requests
 from wazo_auth_client import Client as AuthClient
 from wazo_auth_client.types import TokenDict
 
@@ -113,7 +113,7 @@ STRATEGIES = {
 class Authenticator:
     def __init__(self, config):
         self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class: Type[_AuthChecker] | None = STRATEGIES.get(
+        auth_check_class: type[_AuthChecker] | None = STRATEGIES.get(
             config['auth_check_strategy']
         )
         if not auth_check_class:

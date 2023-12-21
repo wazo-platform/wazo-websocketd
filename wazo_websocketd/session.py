@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import websockets
+from urllib.parse import parse_qsl, urlparse
 
-from urllib.parse import urlparse, parse_qsl
+import websockets
 
 from .auth import MasterTenantProxy
 from .bus import BusConsumer, BusService
@@ -16,8 +16,8 @@ from .exception import (
     BusConnectionError,
     BusConnectionLostError,
     NoTokenError,
-    UnsupportedVersionError,
     SessionProtocolError,
+    UnsupportedVersionError,
 )
 
 logger = logging.getLogger(__name__)

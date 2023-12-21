@@ -6,7 +6,6 @@ import collections
 import json
 import logging
 
-
 from .exception import SessionProtocolError
 
 logger = logging.getLogger(__name__)
