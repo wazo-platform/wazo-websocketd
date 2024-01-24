@@ -1,6 +1,6 @@
 Source: wazo-websocketd
 Section: python
-Priority: extra
+Priority: optional
 Maintainer: Wazo Maintainers <dev@wazo.community>
 Build-Depends: debhelper (>= 12), dh-python, python3-all, python3-setuptools
 Standards-Version: 3.9.6
@@ -16,12 +16,8 @@ Depends:
  python3-setproctitle,
  python3-websockets,
  python3-yaml,
- rename,
  wazo-auth-client-python3,
  xivo-lib-python-python3
-Provides: xivo-websocketd
-Replaces: xivo-websocketd
-Conflicts: xivo-websocketd
 Description: Wazo websocket server
  Wazo is a system based on a powerful IPBX, to bring an easy to
  install solution for telephony and related services.
