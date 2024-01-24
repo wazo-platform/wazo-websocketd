@@ -3,7 +3,6 @@
 
 import asyncio
 import logging
-
 from asyncio import FIRST_COMPLETED, Future
 from signal import SIGINT, SIGTERM
 

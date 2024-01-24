@@ -16,14 +16,14 @@ from .auth import AuthClient
 from .bus import BusClient
 from .constants import (
     ASSET_ROOT,
-    TOKEN_UUID,
-    MASTER_USER_UUID,
     MASTER_TENANT_UUID,
+    MASTER_USER_UUID,
     TENANT1_UUID,
     TENANT2_UUID,
+    TOKEN_UUID,
 )
-from .websocketd import WebSocketdClient
 from .wait_strategy import WaitStrategy, WaitUntilValidConnection
+from .websocketd import WebSocketdClient
 
 
 class ClientCreateException(Exception):

@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import websockets
-
 from ctypes import c_wchar
 from multiprocessing import get_context
-from os import getpid, sched_getaffinity, chdir
-from setproctitle import setproctitle
+from os import chdir, getpid, sched_getaffinity
 from signal import SIGINT, SIGTERM
 from tempfile import TemporaryDirectory
+
+import websockets
+from setproctitle import setproctitle
 from websockets.server import Serve
-from xivo.xivo_logging import silence_loggers, setup_logging
+from xivo.xivo_logging import setup_logging, silence_loggers
 
 from .auth import Authenticator, MasterTenantProxy
 from .bus import BusService
-from .protocol import SessionProtocolEncoder, SessionProtocolDecoder
+from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
 from .session import SessionFactory
-
 
 logger = logging.getLogger(__name__)
 

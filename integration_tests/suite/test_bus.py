@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
-
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+from .helpers.base import IntegrationTest, run_with_loop
 from .helpers.constants import (
     MASTER_TENANT_UUID,
     TENANT1_UUID,
@@ -13,7 +13,6 @@ from .helpers.constants import (
     USER1_UUID,
     USER2_UUID,
 )
-from .helpers.base import IntegrationTest, run_with_loop
 
 
 class TestBus(IntegrationTest):

@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
-import json
-import aioamqp
 import asyncio
-
-from aioamqp.exceptions import AmqpClosedConnection
+import json
 from uuid import UUID
+
+import aioamqp
+from aioamqp.exceptions import AmqpClosedConnection
 
 from .constants import START_TIMEOUT, TENANT1_UUID, USER1_UUID, WAZO_ORIGIN_UUID
 

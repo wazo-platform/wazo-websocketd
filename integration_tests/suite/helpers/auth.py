@@ -1,11 +1,12 @@
 # Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 from requests.packages.urllib3 import disable_warnings
-from contextlib import contextmanager
-from wazo_test_helpers.auth import AuthClient as Client, MockUserToken
+from wazo_test_helpers.auth import AuthClient as Client
+from wazo_test_helpers.auth import MockUserToken
 
 from .constants import TENANT1_UUID, USER1_UUID
 
