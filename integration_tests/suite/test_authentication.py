@@ -1,6 +1,8 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import asyncio
+import time
 from textwrap import dedent
 
 import websockets
@@ -72,11 +74,26 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
     @run_with_loop
     async def test_token_expire_use_dynamic_strategy(self):
-        token_expiration = 0
+        token_expiration = 1
         with self.auth_client.token(expiration=token_expiration) as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
         self.websocketd_client.timeout = self._CLIENT_TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+
+    @run_with_loop
+    async def test_token_expire_new_token_is_received_use_dynamic_strategy(self):
+        token_expiration = 2
+        start = time.time()
+        token = self.auth_client.make_token(expiration=token_expiration)
+        await self.websocketd_client.connect_and_wait_for_init(token)
+        await asyncio.sleep(1)
+        self.websocketd_client.timeout = 10
+        new_token = self.auth_client.make_token(expiration=token_expiration)
+        await self.websocketd_client.op_token(new_token)
+        await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
+        end = time.time()
+        elapsed = end - start
+        assert elapsed > token_expiration + 1
 
 
 class TestTokenExpirationCheckStatic(IntegrationTest):
