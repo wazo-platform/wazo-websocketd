@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 from __future__ import annotations
 
@@ -95,10 +95,12 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
     def _calculate_next_check(self, now, expires_at):
         delta = expires_at - now
         delta_seconds = delta.total_seconds()
-        if delta_seconds < 0:
+        if delta_seconds <= 0:
             return 15
+        elif delta_seconds < 15:
+            return min(delta_seconds, 15)
         elif delta_seconds <= 80:
-            return 60
+            return min(delta_seconds, 60)
         elif delta_seconds <= 57600:
             return int(0.75 * delta_seconds)
         return 43200

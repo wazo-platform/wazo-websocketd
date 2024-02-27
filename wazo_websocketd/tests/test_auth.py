@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -139,9 +139,25 @@ class TestDynamicIntervalAuthChecker(unittest.TestCase):
 
         assert_that(result, equal_to(15))
 
-    def test_expiration_less_than_80_seconds(self):
+    def test_expiration_expiring_soon(self):
+        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
+        expires_at = now + datetime.timedelta(seconds=4)
+
+        result = self.check._calculate_next_check(now, expires_at)
+
+        assert_that(result, equal_to(4))
+
+    def test_expiration_less_than_80_seconds_expiring_soon(self):
         now = datetime.datetime(2016, 1, 1, 0, 0, 0)
         expires_at = now + datetime.timedelta(seconds=10)
+
+        result = self.check._calculate_next_check(now, expires_at)
+
+        assert_that(result, equal_to(10))
+
+    def test_expiration_less_than_80_seconds(self):
+        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
+        expires_at = now + datetime.timedelta(seconds=70)
 
         result = self.check._calculate_next_check(now, expires_at)
 
