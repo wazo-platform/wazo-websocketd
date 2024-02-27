@@ -86,6 +86,8 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
             expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
             next_check = self._calculate_next_check(now, expires_at)
             await asyncio.sleep(next_check)
+            token = token_getter()
+            token_id = token['token']
             logger.debug('dynamic auth check: testing token validity')
             try:
                 await self._async_auth_client.get_token(token_id)
