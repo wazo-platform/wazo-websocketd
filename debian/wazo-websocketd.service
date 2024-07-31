@@ -10,6 +10,7 @@ ExecStart=/usr/bin/wazo-websocketd
 ExecStartPost=/usr/bin/wazo-websocketd-wait-online
 Restart=on-failure
 RestartSec=5
+SyslogIdentifier=wazo-websocketd
 
 [Install]
 WantedBy=multi-user.target
