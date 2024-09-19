@@ -5,4 +5,4 @@ WORKDIR /usr/src/wazo-websocketd
 
 ENV PYTHONDONTWRITEBYTECODE='true'
 
-RUN python setup.py develop
+RUN python3 -m pip install -e .
