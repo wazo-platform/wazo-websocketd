@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -8,11 +8,11 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections import namedtuple
+from collections.abc import Callable
 from ctypes import c_wchar
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing import Array
-from typing import Callable
 
 import requests
 from wazo_auth_client import Client as AuthClient
