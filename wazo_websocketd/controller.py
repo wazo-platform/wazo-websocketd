@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -19,7 +19,10 @@ class Controller:
 
     async def _initialize(self, tombstone: Future):
         async with BusService(self._config) as service:
-            results = {service.initialize_exchanges(), tombstone}
+            results = {
+                asyncio.create_task(service.initialize_exchanges()),
+                tombstone,
+            }
             await asyncio.wait(results, return_when=FIRST_COMPLETED)
 
     async def _run(self):

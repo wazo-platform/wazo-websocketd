@@ -189,7 +189,10 @@ class _BusConnection:
         await asyncio.gather(*tasks)
 
     async def _wait_for_connection(self):
-        futs = [self._closing.wait(), self._connected.wait()]
+        futs = [
+            asyncio.create_task(self._closing.wait()),
+            asyncio.create_task(self._connected.wait()),
+        ]
         await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
         if self.is_closing:
             raise BusConnectionError(f'[connection {self._id}] connection is closing')
@@ -213,7 +216,10 @@ class _BusConnectionPool:
 
     async def stop(self):
         await asyncio.gather(
-            *{connection.disconnect() for connection in self._connections}
+            *{
+                asyncio.create_task(connection.disconnect())
+                for connection in self._connections
+            }
         )
 
         # wait for connections to close gracefully or force after 5 sec
