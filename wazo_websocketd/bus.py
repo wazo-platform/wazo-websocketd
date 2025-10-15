@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -143,7 +143,7 @@ class _BusConnection:
                 )
                 try:
                     await asyncio.wait_for(self._closing.wait(), timeout)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
                 logger.info('[connection %d] cancelling connection...', self._id)
                 self._closing.set()
@@ -189,7 +189,10 @@ class _BusConnection:
         await asyncio.gather(*tasks)
 
     async def _wait_for_connection(self):
-        futs = [self._closing.wait(), self._connected.wait()]
+        futs = [
+            asyncio.create_task(self._closing.wait()),
+            asyncio.create_task(self._connected.wait()),
+        ]
         await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
         if self.is_closing:
             raise BusConnectionError(f'[connection {self._id}] connection is closing')
@@ -213,7 +216,10 @@ class _BusConnectionPool:
 
     async def stop(self):
         await asyncio.gather(
-            *{connection.disconnect() for connection in self._connections}
+            *{
+                asyncio.create_task(connection.disconnect())
+                for connection in self._connections
+            }
         )
 
         # wait for connections to close gracefully or force after 5 sec

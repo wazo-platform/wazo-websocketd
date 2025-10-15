@@ -1,4 +1,4 @@
-# Copyright 2023-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2023-2025 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -11,9 +11,9 @@ from os import chdir, getpid, sched_getaffinity
 from signal import SIGINT, SIGTERM
 from tempfile import TemporaryDirectory
 
-import websockets
+import websockets.server
 from setproctitle import setproctitle
-from websockets.server import Serve
+from websockets.server import WebSocketServer as Serve
 from xivo.xivo_logging import setup_logging, silence_loggers
 
 from .auth import Authenticator, MasterTenantProxy
@@ -45,7 +45,7 @@ class WebsocketServer:
         port = config['websocket']['port']
         ssl = config['websocket']['ssl']
 
-        server = websockets.serve(
+        server = websockets.server.serve(
             factory.ws_handler, host=host, port=port, ssl=ssl, reuse_port=True
         )
 
