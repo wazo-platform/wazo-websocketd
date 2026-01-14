@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -9,10 +9,11 @@ import logging
 from abc import ABC, abstractmethod
 from collections import namedtuple
 from collections.abc import Callable
+from ctypes import Array as CArray
 from ctypes import c_wchar
 from functools import partial
 from itertools import chain, repeat
-from multiprocessing import Array
+from multiprocessing.sharedctypes import RawArray
 
 import requests
 from wazo_auth_client import Client as AuthClient
@@ -141,8 +142,11 @@ class Authenticator:
         return self._auth_check.run(token_getter)
 
 
+StringSharedBuffer = CArray[c_wchar]
+
+
 class MasterTenantProxy:
-    proxy: c_wchar = Array(c_wchar, 36, lock=False)
+    proxy: StringSharedBuffer = RawArray(c_wchar, 36)
 
     @classmethod
     def set_master_tenant(cls, token: TokenDict):

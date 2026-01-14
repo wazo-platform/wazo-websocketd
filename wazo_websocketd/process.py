@@ -1,11 +1,10 @@
-# Copyright 2023-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2023-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from ctypes import c_wchar
 from multiprocessing import get_context
 from os import chdir, getpid, sched_getaffinity
 from signal import SIGINT, SIGTERM
@@ -16,7 +15,7 @@ from setproctitle import setproctitle
 from websockets.server import WebSocketServer as Serve
 from xivo.xivo_logging import setup_logging, silence_loggers
 
-from .auth import Authenticator, MasterTenantProxy
+from .auth import Authenticator, MasterTenantProxy, StringSharedBuffer
 from .bus import BusService
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
 from .session import SessionFactory
@@ -94,7 +93,7 @@ class ProcessPool:
         self._dir.cleanup()
 
     @staticmethod
-    def _init_worker(config: dict, master_tenant_proxy: c_wchar):
+    def _init_worker(config: dict, master_tenant_proxy: StringSharedBuffer):
         setproctitle('wazo-websocketd: worker')
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
