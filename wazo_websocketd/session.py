@@ -163,7 +163,11 @@ class Session:
                 self._tenant_uuid,
             )
         except Exception:
-            logger.exception('unexpected exception during websocket session run:')
+            logger.exception(
+                'unexpected exception during websocket session run: (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(1011)
 
     async def _run(self):
