@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -57,7 +57,13 @@ class SessionFactory:
         try:
             await session.run()
         finally:
-            logger.info('websocket session terminated %s', remote_address)
+            user_uuid, tenant_uuid = session.user_identity()
+            logger.info(
+                'websocket session terminated %s (user=%s tenant=%s)',
+                remote_address,
+                user_uuid,
+                tenant_uuid,
+            )
 
 
 class Session:
@@ -86,38 +92,82 @@ class Session:
         self._started = False
         self._bus_service: BusService = bus_service
         self._consumer: BusConsumer = None  # type: ignore[assignment]
+        self._user_uuid: str | None = None
+        self._tenant_uuid: str | None = None
+
+    def user_identity(self) -> tuple[str | None, str | None]:
+        return self._user_uuid, self._tenant_uuid
 
     async def run(self):
         try:
             await self._run()
         except NoTokenError:
-            logger.info('closing websocket connection: no token')
+            logger.info(
+                'closing websocket connection: no token (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(self._CLOSE_CODE_NO_TOKEN_ID, 'no token')
         except AuthenticationExpiredError:
-            logger.info('closing websocket connection: authentication expired')
+            logger.info(
+                'closing websocket connection: authentication expired (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(
                 self._CLOSE_CODE_AUTH_EXPIRED, 'authentication expired'
             )
         except AuthenticationError as e:
-            logger.info('closing websocket connection: authentication failed: %s', e)
+            logger.info(
+                'closing websocket connection: authentication failed: %s (user=%s tenant=%s)',
+                e,
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(self._CLOSE_CODE_AUTH_FAILED, 'authentication failed')
         except SessionProtocolError as e:
-            logger.info('closing websocket connection: session protocol error: %s', e)
+            logger.info(
+                'closing websocket connection: session protocol error: %s (user=%s tenant=%s)',
+                e,
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
         except UnsupportedVersionError:
-            logger.info('closing websocket connection: protocol version unknown')
+            logger.info(
+                'closing websocket connection: protocol version unknown (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
         except BusConnectionLostError:
-            logger.info('closing websocket connection: bus connection lost')
+            logger.info(
+                'closing websocket connection: bus connection lost (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(1011, 'bus connection lost')
         except BusConnectionError:
-            logger.info('closing websocket connection: bus connection error')
+            logger.info(
+                'closing websocket connection: bus connection error (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(1011, 'bus connection error')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
-            logger.info('websocket connection closed with code %s', e.code)
+            logger.info(
+                'websocket connection closed with code %s (user=%s tenant=%s)',
+                e.code,
+                self._user_uuid,
+                self._tenant_uuid,
+            )
         except Exception:
-            logger.exception('unexpected exception during websocket session run:')
+            logger.exception(
+                'unexpected exception during websocket session run: (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
             await self._ws.close(1011)
 
     async def _run(self):
@@ -128,6 +178,8 @@ class Session:
 
         token_id = _extract_token_id(self._ws, self._path)
         token = await self._authenticator.get_token(token_id)
+        self._user_uuid = token['metadata'].get('uuid')
+        self._tenant_uuid = token['metadata'].get('tenant_uuid')
 
         async with await self._bus_service.create_consumer(token) as self._consumer:
             await self._ws.send(

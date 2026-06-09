@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import unittest
@@ -7,7 +7,41 @@ from unittest.mock import Mock
 from hamcrest import assert_that, equal_to
 
 from ..exception import NoTokenError
-from ..session import _extract_token_id
+from ..session import Session, _extract_token_id
+
+_CONFIG = {'websocket': {'ping_interval': 30}}
+
+
+def _make_session():
+    return Session(
+        _CONFIG,
+        Mock(),
+        Mock(),
+        Mock(),
+        Mock(),
+        Mock(),
+        '/',
+    )
+
+
+class TestSessionUserIdentity(unittest.TestCase):
+    def test_no_identity_before_authentication(self):
+        session = _make_session()
+
+        user_uuid, tenant_uuid = session.user_identity()
+
+        assert_that(user_uuid, equal_to(None))
+        assert_that(tenant_uuid, equal_to(None))
+
+    def test_identity_after_authentication(self):
+        session = _make_session()
+        session._user_uuid = 'user-uuid-1234'
+        session._tenant_uuid = 'tenant-uuid-5678'
+
+        user_uuid, tenant_uuid = session.user_identity()
+
+        assert_that(user_uuid, equal_to('user-uuid-1234'))
+        assert_that(tenant_uuid, equal_to('tenant-uuid-5678'))
 
 
 class TestExtractTokenID(unittest.TestCase):
