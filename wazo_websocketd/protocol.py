@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -6,10 +6,19 @@ from __future__ import annotations
 import collections
 import json
 import logging
+from enum import IntEnum
 
 from .exception import SessionProtocolError
 
 logger = logging.getLogger(__name__)
+
+
+class CloseCode(IntEnum):
+    TRY_LATER = 1013
+    NO_TOKEN = 4001
+    AUTH_FAILED = 4002
+    AUTH_EXPIRED = 4003
+    PROTOCOL_ERROR = 4004
 
 
 class SessionProtocolEncoder:
