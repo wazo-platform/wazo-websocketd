@@ -1,4 +1,6 @@
 debug: true
+process_workers: 2
+auth_check_strategy: dynamic
 websocket:
   listen: 0.0.0.0
 
