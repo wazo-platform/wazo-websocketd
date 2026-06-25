@@ -2,25 +2,49 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
 from hamcrest import assert_that, equal_to
 
-from ..exception import NoTokenError
-from ..session import Session, _extract_token_id
+from ..exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+    BusConnectionError,
+)
+from ..session import Session
+from .helpers import run_async
 
 _CONFIG = {'websocket': {'ping_interval': 30}}
+_TOKEN = {
+    'token': 'tok-id',
+    'metadata': {'uuid': 'user-1', 'tenant_uuid': 'tenant-1'},
+}
 
 
-def _make_session():
+def _make_authenticator(**get_token_kwargs):
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(**get_token_kwargs)
+    return authenticator
+
+
+def _make_ws():
+    ws = Mock()
+    ws.close = AsyncMock()
+    ws.send = AsyncMock()
+    return ws
+
+
+def _make_session(authenticator=None, bus_service=None, ws=None, token=_TOKEN):
     return Session(
         _CONFIG,
+        authenticator or Mock(),
+        bus_service or Mock(),
         Mock(),
         Mock(),
-        Mock(),
-        Mock(),
-        Mock(),
+        ws or _make_ws(),
         '/',
+        token=token,
     )
 
 
@@ -44,43 +68,42 @@ class TestSessionUserIdentity(unittest.TestCase):
         assert_that(tenant_uuid, equal_to('tenant-uuid-5678'))
 
 
-class TestExtractTokenID(unittest.TestCase):
-    def setUp(self):
-        self.path = '/'
-        self.websocket = Mock()
+def test_session_uses_injected_token_without_calling_auth():
+    authenticator = _make_authenticator()
+    bus_service = Mock()
+    bus_service.create_consumer = AsyncMock(side_effect=BusConnectionError('stop'))
+    session = _make_session(authenticator=authenticator, bus_service=bus_service)
 
-    def test_token_id_in_path(self):
-        self.path = '/?token=abcdef'
+    run_async(session.run())
 
-        self._assert_token_id_equal('abcdef')
+    assert session.user_identity() == ('user-1', 'tenant-1')
+    authenticator.get_token.assert_not_called()
 
-    def test_token_id_in_header(self):
-        self.websocket.request_headers.raw_items.return_value = [
-            ('X-Auth-Token', 'abcdef')
-        ]
 
-        self._assert_token_id_equal('abcdef')
+def test_revoke_after_token_refresh_targets_refreshed_token():
+    refreshed = {
+        'token': 'tok-refreshed',
+        'metadata': {'uuid': 'user-1', 'tenant_uuid': 'tenant-1'},
+    }
+    authenticator = _make_authenticator(return_value=refreshed)
+    session = _make_session(authenticator=authenticator)
+    session._consumer = Mock()
 
-    def test_token_id_in_header_case_insensitive(self):
-        self.websocket.request_headers.raw_items.return_value = [
-            ('x-auth-token', 'abcdef')
-        ]
+    run_async(session._do_ws_token(Mock(value='tok-refreshed')))
+    with patch.object(
+        session, '_run', AsyncMock(side_effect=AuthenticationExpiredError())
+    ):
+        run_async(session.run())
 
-        self._assert_token_id_equal('abcdef')
+    authenticator.invalidate.assert_called_once_with('tok-refreshed')
 
-    def test_token_id_in_path_and_header_returns_path(self):
-        self.path = '/?token=abc'
-        self.websocket.request_headers.raw_items.return_value = [
-            ('X-Auth-Token', 'def')
-        ]
 
-        self._assert_token_id_equal('abc')
+def test_rejected_token_refresh_revokes_offered_token():
+    authenticator = _make_authenticator(side_effect=AuthenticationError('revoked'))
+    session = _make_session(authenticator=authenticator)
+    session._consumer = Mock()
 
-    def test_no_token_id(self):
-        self.websocket.request_headers.raw_items.return_value = []
-        self.assertRaises(NoTokenError, _extract_token_id, self.websocket, self.path)
+    with pytest.raises(AuthenticationError):
+        run_async(session._do_ws_token(Mock(value='revoked-token')))
 
-    def _assert_token_id_equal(self, expected_token):
-        token_id = _extract_token_id(self.websocket, self.path)
-
-        assert_that(token_id, equal_to(expected_token))
+    authenticator.invalidate.assert_called_once_with('revoked-token')

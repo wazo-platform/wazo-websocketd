@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import logging
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import NamedTuple
+from typing import NamedTuple, NoReturn
 
 import aioamqp
 from aioamqp import AmqpProtocol
@@ -22,14 +22,20 @@ from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenantProxy
 from .exception import (
+    AuthenticationExpiredError,
     BusConnectionError,
     BusConnectionLostError,
     EventPermissionError,
     InvalidEvent,
     InvalidTokenError,
+    SessionTerminated,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _to_str(value: bytes | str | None) -> str | None:
+    return value.decode('utf-8') if isinstance(value, bytes) else value
 
 
 class _UserHelper:
@@ -65,14 +71,6 @@ class _UserHelper:
     @property
     def tenant_uuid(self) -> str:
         return self._token['metadata']['tenant_uuid']
-
-    @property
-    def token_id(self) -> str:
-        return self._token['token']
-
-    @property
-    def token_utc_expires_at(self) -> str:
-        return self._token['utc_expires_at']
 
     @property
     def uuid(self) -> str:
@@ -200,7 +198,6 @@ class _BusConnection:
 
 class _BusConnectionPool:
     def __init__(self, url: str, pool_size: int):
-        self._loop = asyncio.get_event_loop()
         self._connections = [_BusConnection(url) for _ in range(pool_size)]
         self._tasks: set = set()
         self._iterator = cycle(self._connections)
@@ -209,8 +206,9 @@ class _BusConnectionPool:
         return len(self._connections)
 
     async def start(self):
+        loop = asyncio.get_running_loop()
         self._tasks = {
-            self._loop.create_task(connection.run()) for connection in self._connections
+            loop.create_task(connection.run()) for connection in self._connections
         }
         logger.info('bus connection pool initialized with %d connections', len(self))
 
@@ -313,16 +311,16 @@ class BusConsumer:
         if not isinstance(message, dict):
             raise InvalidEvent('invalid message format (not a dict)')
 
-        event_name = headers.get('name') or message.get('name')
+        event_name = _to_str(headers.get('name') or message.get('name'))
         if not event_name:
             raise InvalidEvent('event is missing `name` field')
 
+        if event_name == 'auth_session_deleted':
+            self._on_auth_session_deleted(message)
+
         if 'required_acl' not in headers:
             raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
-        acl = headers.get('required_acl')
-
-        if isinstance(acl, bytes):
-            acl = acl.decode('utf-8')
+        acl = _to_str(headers.get('required_acl'))
         if acl and not isinstance(acl, str):
             raise InvalidEvent(
                 'event ACL is not a string (type: %s)', type(acl).__name__
@@ -335,6 +333,11 @@ class BusConsumer:
             )
 
         return BusMessage(event_name, headers, acl, message, decoded)
+
+    def _on_auth_session_deleted(self, message: dict) -> NoReturn:
+        if message.get('uuid') == self._user.session_uuid:
+            raise SessionTerminated()
+        raise EventPermissionError('ignoring deletion of another session')
 
     def _generate_bindings(self, event_name: str) -> list[dict]:
         binding = {}
@@ -351,7 +354,7 @@ class BusConsumer:
             binding | {'user_uuid:*': True},
         ]
 
-    def _has_access(self, acl: str) -> bool:
+    def _has_access(self, acl: str | None) -> bool:
         return self._access.matches_required_access(acl)
 
     async def _on_message(
@@ -363,6 +366,8 @@ class BusConsumer:
     ) -> None:
         try:
             event = self._decode_content(content, properties)
+        except SessionTerminated:
+            self._queue.put_nowait(AuthenticationExpiredError())
         except InvalidEvent as exc:
             logger.error('error during message decoding (reason: %s)', exc)
         except EventPermissionError as exc:
@@ -385,6 +390,8 @@ class BusConsumer:
 
         # Start consuming on queue
         self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
+
+        await self.bind('auth_session_deleted')
 
         if self._user.is_master_tenant():
             logger.debug('user `%s` connected as global admin', self._user.uuid)
@@ -414,12 +421,6 @@ class BusConsumer:
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
-
-    def get_token(self) -> dict[str, str]:
-        return {
-            'token': self._user.token_id,
-            'utc_expires_at': self._user.token_utc_expires_at,
-        }
 
     def set_token(self, token: TokenDict):
         self._user = user = _UserHelper.from_token(token)

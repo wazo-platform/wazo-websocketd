@@ -1,9 +1,10 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 from datetime import datetime
 from unittest.mock import Mock, sentinel
@@ -23,7 +24,12 @@ from xivo.auth_verifier import AccessCheck
 
 from ..bus import BusConsumer, BusMessage
 from ..config import _DEFAULT_CONFIG
-from ..exception import BusConnectionLostError, EventPermissionError, InvalidEvent
+from ..exception import (
+    BusConnectionLostError,
+    EventPermissionError,
+    InvalidEvent,
+    SessionTerminated,
+)
 
 
 @pytest.fixture
@@ -88,6 +94,24 @@ class TestBusDecoding(unittest.TestCase):
             equal_to(
                 BusMessage('foo', properties.headers, None, {}, message.decode('utf-8'))
             ),
+        )
+
+    def test_bus_msg_own_session_deleted_terminates(self):
+        message = json.dumps({'uuid': self.mock_token['session_uuid']}).encode()
+        properties = Mock(headers={'name': 'auth_session_deleted'})
+
+        assert_that(
+            calling(self.consumer._decode_content).with_args(message, properties),
+            raises(SessionTerminated),
+        )
+
+    def test_bus_msg_other_session_deleted_discarded(self):
+        message = json.dumps({'uuid': 'another-session'}).encode()
+        properties = Mock(headers={'name': 'auth_session_deleted'})
+
+        assert_that(
+            calling(self.consumer._decode_content).with_args(message, properties),
+            raises(EventPermissionError),
         )
 
     def test_bus_msg_missing_required_acl(self):
