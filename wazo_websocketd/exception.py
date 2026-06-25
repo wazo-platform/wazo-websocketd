@@ -1,4 +1,4 @@
-# Copyright 2016-2022 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 
@@ -15,6 +15,10 @@ class AuthenticationError(Exception):
 
 
 class AuthenticationExpiredError(AuthenticationError):
+    pass
+
+
+class AuthServerUnavailableError(Exception):
     pass
 
 
@@ -39,4 +43,16 @@ class InvalidEvent(Exception):
 
 
 class EventPermissionError(Exception):
+    pass
+
+
+class SessionTerminated(Exception):
+    pass
+
+
+class HandoffError(Exception):
+    pass
+
+
+class ControlChannelClosed(Exception):
     pass

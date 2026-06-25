@@ -8,20 +8,37 @@ import datetime
 import logging
 from abc import ABC, abstractmethod
 from collections import namedtuple
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from ctypes import Array as CArray
 from ctypes import c_wchar
 from functools import partial
 from itertools import chain, repeat
 from multiprocessing.sharedctypes import RawArray
+from typing import Protocol
 
 import requests
 from wazo_auth_client import Client as AuthClient
 from wazo_auth_client.types import TokenDict
 
-from .exception import AuthenticationError, AuthenticationExpiredError
+from .exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+    AuthServerUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
+
+_HARD_REJECT_STATUSES = (401, 403, 404)
+
+
+class TokenProvider(Protocol):
+    def get_token(self, token_id: str) -> Awaitable[dict]:
+        ...
+
+
+class TokenAuthenticator(TokenProvider, Protocol):
+    def invalidate(self, token_id: str) -> None:
+        ...
 
 
 class AsyncAuthClient:
@@ -37,18 +54,23 @@ class AsyncAuthClient:
             return await loop.run_in_executor(
                 None, self._auth_client.token.get, token_id, self._ACL
             )
+        except requests.HTTPError as e:
+            status = e.response.status_code if e.response is not None else None
+            if status in _HARD_REJECT_STATUSES:
+                raise AuthenticationError(e)
+            raise AuthServerUnavailableError(e)
         except requests.RequestException as e:
-            # there's currently no clean way with wazo_auth_client to know if the
-            # error was caused because the token is unauthorized, or unknown
-            # or something else
-            raise AuthenticationError(e)
+            raise AuthServerUnavailableError(e)
 
     async def is_valid_token(self, token_id, acl=_ACL):
         logger.debug('checking token validity from wazo-auth')
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._auth_client.token.is_valid, token_id, acl
-        )
+        try:
+            return await loop.run_in_executor(
+                None, self._auth_client.token.is_valid, token_id, acl
+            )
+        except requests.RequestException as e:
+            raise AuthServerUnavailableError(e)
 
 
 class _AuthChecker(ABC):
@@ -71,7 +93,10 @@ class _StaticIntervalAuthChecker(_AuthChecker):
             await asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
             token_id = token_getter()['token']
-            is_valid = await self._async_auth_client.is_valid_token(token_id)
+            try:
+                is_valid = await self._async_auth_client.is_valid_token(token_id)
+            except AuthServerUnavailableError:
+                continue
             if not is_valid:
                 raise AuthenticationExpiredError()
 
@@ -84,7 +109,7 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
         while True:
             token = token_getter()
             token_id = token['token']
-            now = datetime.datetime.utcnow()
+            now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
             expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
             next_check = self._calculate_next_check(now, expires_at)
             await asyncio.sleep(next_check)
@@ -93,6 +118,8 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
             logger.debug('dynamic auth check: testing token validity')
             try:
                 await self._async_auth_client.get_token(token_id)
+            except AuthServerUnavailableError:
+                continue
             except AuthenticationError:
                 raise AuthenticationExpiredError()
 
@@ -164,7 +191,7 @@ class MasterTenantProxy:
 
     @classmethod
     def has_master_tenant(cls) -> bool:
-        return cls.proxy.value is not None
+        return bool(cls.proxy.value)
 
 
 class ServiceTokenRenewer:

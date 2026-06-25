@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -6,8 +6,9 @@ import datetime
 import unittest
 from unittest.mock import Mock, patch, sentinel
 
+import pytest
 import requests
-from hamcrest import assert_that, equal_to, same_instance
+from hamcrest import assert_that, equal_to, greater_than, same_instance
 
 from ..auth import (
     AsyncAuthClient,
@@ -15,7 +16,11 @@ from ..auth import (
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
 )
-from ..exception import AuthenticationError, AuthenticationExpiredError
+from ..exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+    AuthServerUnavailableError,
+)
 
 
 class TestWebSocketdAuthClient(unittest.TestCase):
@@ -41,8 +46,9 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         assert_that(token, same_instance(sentinel.token))
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
-    def test_get_token_invalid(self):
-        self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
+    def test_get_token_hard_rejection(self):
+        response = Mock(status_code=403)
+        self.auth_client.token.get.side_effect = requests.HTTPError(response=response)
 
         self.assertRaises(
             AuthenticationError,
@@ -50,6 +56,15 @@ class TestWebSocketdAuthClient(unittest.TestCase):
             self.websocketd_auth_client.get_token(sentinel.token_id),
         )
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
+
+    def test_get_token_server_unavailable(self):
+        self.auth_client.token.get.side_effect = requests.ConnectionError('down')
+
+        self.assertRaises(
+            AuthServerUnavailableError,
+            asyncio.get_event_loop().run_until_complete,
+            self.websocketd_auth_client.get_token(sentinel.token_id),
+        )
 
     def test_is_valid_token(self):
         self.auth_client.token.is_valid.return_value = True
@@ -62,6 +77,14 @@ class TestWebSocketdAuthClient(unittest.TestCase):
         self.auth_client.token.is_valid.assert_called_once_with(
             sentinel.token_id, self._ACL
         )
+
+    def test_is_valid_token_server_unavailable(self):
+        self.auth_client.token.is_valid.side_effect = requests.ConnectionError('down')
+
+        with pytest.raises(AuthServerUnavailableError):
+            asyncio.get_event_loop().run_until_complete(
+                self.websocketd_auth_client.is_valid_token(sentinel.token_id)
+            )
 
 
 class TestAuthenticator(unittest.TestCase):
@@ -125,6 +148,25 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
             self.check.run(lambda: self.token),
         )
 
+    def test_run_continues_when_auth_server_unavailable(self):
+        check = _StaticIntervalAuthChecker(
+            self.websocketd_auth_client, {"auth_check_static_interval": 0}
+        )
+        calls = []
+
+        async def is_valid_token(token_id):
+            calls.append(token_id)
+            if len(calls) == 1:
+                raise AuthServerUnavailableError()
+            return False
+
+        self.websocketd_auth_client.is_valid_token = is_valid_token
+
+        with pytest.raises(AuthenticationExpiredError):
+            asyncio.get_event_loop().run_until_complete(check.run(lambda: self.token))
+
+        assert len(calls) == 2
+
 
 class TestDynamicIntervalAuthChecker(unittest.TestCase):
     def setUp(self):
@@ -178,3 +220,27 @@ class TestDynamicIntervalAuthChecker(unittest.TestCase):
         result = self.check._calculate_next_check(now, expires_at)
 
         assert_that(result, equal_to(43200))
+
+    def test_run_computes_sleep_from_naive_expiry(self):
+        # wazo-auth returns a naive utc_expires_at; `now` must stay naive too,
+        # otherwise the expires_at - now subtraction raises TypeError.
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+        token = {'token': 'id', 'utc_expires_at': expires_at.isoformat()}
+        recorded: list[float] = []
+
+        class _StopLoop(Exception):
+            pass
+
+        async def fake_sleep(delay):
+            recorded.append(delay)
+            raise _StopLoop()
+
+        with patch('wazo_websocketd.auth.asyncio.sleep', fake_sleep):
+            self.assertRaises(
+                _StopLoop,
+                asyncio.get_event_loop().run_until_complete,
+                self.check.run(lambda: token),
+            )
+
+        assert_that(len(recorded), equal_to(1))
+        assert_that(recorded[0], greater_than(0))
