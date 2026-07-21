@@ -21,7 +21,7 @@ from .ipc import (
     send_connection,
 )
 from .protocol import CloseCode
-from .registry import WorkerRegistry
+from .registry import WorkerEntry, WorkerRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +60,7 @@ def _extract_token_id(request_headers: Headers, path: str) -> str:
 
 class Dispatcher:
     _ACCEPT_RETRY_DELAY = 0.1
+    _REJECT_TIMEOUT = 5.0
 
     def __init__(
         self,
@@ -96,39 +97,43 @@ class Dispatcher:
                 logger.debug('closing connection with no complete HTTP request')
                 sock.close()
                 return
-            path, headers = parse_request(request)
-            try:
-                token = await resolve_token(self._authenticator, path, headers)
-            except NoTokenError:
-                await self._reject(sock, request, CloseCode.NO_TOKEN, 'no token')
-                return
-            except AuthenticationError:
-                await self._reject(
-                    sock, request, CloseCode.AUTH_FAILED, 'authentication failed'
-                )
-                return
-            except AuthServerUnavailableError:
-                await self._reject(
-                    sock,
-                    request,
-                    CloseCode.TRY_LATER,
-                    'authentication temporarily unavailable',
-                )
-                return
 
+            path, headers = parse_request(request)
+            token = await resolve_token(self._authenticator, path, headers)
             entry = self._registry.select()
-            if entry is None:
+            if entry is None or not self._handoff(entry, sock, token, request):
                 await self._reject(
                     sock, request, CloseCode.TRY_LATER, 'no worker available'
                 )
                 return
-
-            send_connection(entry.control_sock, sock, Handoff(token, request).pack())
-            self._registry.note_handoff(entry)
             sock.close()  # close our copy after the fd is transferred
+        except NoTokenError:
+            await self._reject(sock, request, CloseCode.NO_TOKEN, 'no token')
+        except AuthenticationError:
+            await self._reject(
+                sock, request, CloseCode.AUTH_FAILED, 'authentication failed'
+            )
+        except AuthServerUnavailableError:
+            await self._reject(
+                sock,
+                request,
+                CloseCode.TRY_LATER,
+                'authentication temporarily unavailable',
+            )
         except Exception:
             logger.exception('error while handling connection')
             sock.close()
+
+    def _handoff(
+        self, entry: WorkerEntry, sock: socket.socket, token: dict, request: bytes
+    ) -> bool:
+        try:
+            send_connection(entry.control_sock, sock, Handoff(token, request).pack())
+        except OSError:
+            logger.warning('handoff to %s failed, worker gone', entry.worker_id)
+            return False
+        self._registry.note_handoff(entry)
+        return True
 
     async def _reject(
         self, sock: socket.socket, request: bytes, code: int, reason: str
@@ -139,5 +144,10 @@ class Dispatcher:
         protocol = await adopt_connection(
             self._loop, sock, request, reject_handler, self._reject_server
         )
-        await protocol.handler_task
-        await protocol.wait_closed()
+        try:
+            await asyncio.wait_for(protocol.handler_task, self._REJECT_TIMEOUT)
+            await asyncio.wait_for(protocol.wait_closed(), self._REJECT_TIMEOUT)
+        except TimeoutError:
+            logger.debug('timed out closing rejected connection')
+        finally:
+            protocol.transport.abort()  # noop on clean close

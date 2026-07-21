@@ -115,6 +115,19 @@ def test_invalidate_evicts_positive_and_poisons_negative():
     assert authenticator.get_token.await_count == 1
 
 
+def test_tz_aware_expiry_is_cached_without_error():
+    token = {**_TOKEN, 'utc_expires_at': '2999-01-01T00:00:00+00:00'}
+    authenticator = _authenticator(return_value=token)
+    cache = CachingAuthenticator(authenticator)
+
+    async def scenario():
+        return await cache.get_token('T'), len(cache._positive)
+
+    result, count = run_async(scenario())
+    assert result == token
+    assert count == 1
+
+
 def test_positive_entry_expires():
     authenticator = _authenticator(return_value=_TOKEN)
     clock = _Clock(1000.0)

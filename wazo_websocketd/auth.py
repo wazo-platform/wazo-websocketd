@@ -31,6 +31,17 @@ logger = logging.getLogger(__name__)
 _HARD_REJECT_STATUSES = (401, 403, 404)
 
 
+def utcnow_naive() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+
+
+def parse_expiration(value: str) -> datetime.datetime:
+    parsed = datetime.datetime.fromisoformat(value)
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(datetime.UTC).replace(tzinfo=None)
+    return parsed
+
+
 class TokenProvider(Protocol):
     def get_token(self, token_id: str) -> Awaitable[dict]:
         ...
@@ -109,8 +120,8 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
         while True:
             token = token_getter()
             token_id = token['token']
-            now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-            expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
+            now = utcnow_naive()
+            expires_at = parse_expiration(token['utc_expires_at'])
             next_check = self._calculate_next_check(now, expires_at)
             await asyncio.sleep(next_check)
             token = token_getter()

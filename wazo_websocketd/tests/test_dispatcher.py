@@ -155,6 +155,78 @@ def test_no_worker_available_rejected_with_close_1013():
     assert result == 1013
 
 
+def test_handoff_to_dead_worker_rejected_with_close_1013():
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(return_value=_TOKEN)
+
+    assert run_async(_dead_worker_scenario(authenticator)) == 1013
+
+
+async def _dead_worker_scenario(authenticator):
+    loop = asyncio.get_event_loop()
+    listener, port = make_tcp_listener()
+    ctl_dispatcher, ctl_worker = control_pair()
+    registry = WorkerRegistry()
+    registry.add('w1', ctl_dispatcher)
+    ctl_dispatcher.close()  # worker's control channel is gone
+    ctl_worker.close()
+
+    dispatcher = Dispatcher(loop, listener, authenticator, registry)
+    run_task = asyncio.create_task(dispatcher.run())
+
+    url = f'ws://127.0.0.1:{port}/?token=good'
+    try:
+        try:
+            ws = await websockets.connect(url)
+        except websockets.ConnectionClosed as e:
+            return e.code
+        try:
+            await ws.send('hi')
+            return await ws.recv()
+        except websockets.ConnectionClosed as e:
+            return e.code
+        finally:
+            await ws.close()
+    finally:
+        run_task.cancel()
+        await asyncio.gather(run_task, return_exceptions=True)
+        listener.close()
+
+
+def test_reject_aborts_transport_on_timeout():
+    assert run_async(_reject_cleanup_scenario(cancel=False)) is True
+
+
+def test_reject_aborts_transport_on_cancellation():
+    assert run_async(_reject_cleanup_scenario(cancel=True)) is True
+
+
+async def _reject_cleanup_scenario(cancel):
+    loop = asyncio.get_event_loop()
+    protocol = Mock()
+    protocol.handler_task = loop.create_future()  # never completes on its own
+    protocol.wait_closed = AsyncMock()
+    protocol.transport = Mock()
+
+    with patch(
+        'wazo_websocketd.dispatcher.adopt_connection',
+        AsyncMock(return_value=protocol),
+    ):
+        dispatcher = Dispatcher(loop, Mock(), Mock(), Mock())
+        dispatcher._REJECT_TIMEOUT = 0.01
+        task = loop.create_task(
+            dispatcher._reject(Mock(), b'req', 1013, 'no worker available')
+        )
+        if cancel:
+            await asyncio.sleep(0)  # let _reject reach wait_for
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    return protocol.transport.abort.called
+
+
 async def _dispatch_scenario(authenticator, token, start_worker=True):
     loop = asyncio.get_event_loop()
     listener, port = make_tcp_listener()

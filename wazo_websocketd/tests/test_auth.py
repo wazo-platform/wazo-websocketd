@@ -15,12 +15,20 @@ from ..auth import (
     Authenticator,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
+    parse_expiration,
 )
 from ..exception import (
     AuthenticationError,
     AuthenticationExpiredError,
     AuthServerUnavailableError,
 )
+
+
+def test_parse_expiration_normalizes_to_naive_utc():
+    naive = datetime.datetime(2999, 1, 1, 0, 0, 0)
+    assert parse_expiration('2999-01-01T00:00:00') == naive
+    assert parse_expiration('2999-01-01T00:00:00+00:00') == naive
+    assert parse_expiration('2999-01-01T02:00:00+02:00') == naive
 
 
 class TestWebSocketdAuthClient(unittest.TestCase):

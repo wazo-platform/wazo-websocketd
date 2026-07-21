@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import functools
 import json
 import logging
@@ -14,7 +13,7 @@ from uuid import UUID
 
 from cachetools import TLRUCache
 
-from .auth import TokenProvider
+from .auth import TokenProvider, parse_expiration, utcnow_naive
 from .exception import AuthenticationError, AuthServerUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -119,8 +118,7 @@ class CachingAuthenticator:
 
     def _seconds_until_expiry(self, token: dict) -> float:
         try:
-            expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
+            expires_at = parse_expiration(token['utc_expires_at'])
         except (KeyError, ValueError, TypeError):
             return self._positive_ttl
-        now = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
-        return (expires_at - now).total_seconds()
+        return (expires_at - utcnow_naive()).total_seconds()
