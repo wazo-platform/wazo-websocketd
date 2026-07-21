@@ -191,6 +191,31 @@ async def _dispatch_scenario(authenticator, token, start_worker=True):
         ctl_worker.close()
 
 
+def test_run_survives_accept_error():
+    loop = Mock()
+    outcomes = [OSError(24, 'EMFILE'), asyncio.CancelledError()]
+
+    async def sock_accept(_listener):
+        raise outcomes.pop(0)
+
+    loop.sock_accept = sock_accept
+    dispatcher = Dispatcher(loop, Mock(), Mock(), Mock())
+
+    with patch('wazo_websocketd.dispatcher.asyncio.sleep', AsyncMock()):
+        with pytest.raises(asyncio.CancelledError):
+            run_async(dispatcher.run())
+
+
+def test_worker_control_socket_is_non_blocking():
+    worker_sock, other_end = control_pair()
+    try:
+        _make_worker(worker_sock)
+        assert worker_sock.getblocking() is False
+    finally:
+        worker_sock.close()
+        other_end.close()
+
+
 def test_worker_sends_heartbeat_with_current_count():
     worker_sock, reader_end = control_pair()
     worker = _make_worker(worker_sock)

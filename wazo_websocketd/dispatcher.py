@@ -59,6 +59,8 @@ def _extract_token_id(request_headers: Headers, path: str) -> str:
 
 
 class Dispatcher:
+    _ACCEPT_RETRY_DELAY = 0.1
+
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
@@ -77,7 +79,12 @@ class Dispatcher:
 
     async def run(self) -> None:
         while True:
-            sock, _ = await self._loop.sock_accept(self._listener)
+            try:
+                sock, _ = await self._loop.sock_accept(self._listener)
+            except OSError as exc:
+                logger.warning('failed to accept a connection: %s', exc)
+                await asyncio.sleep(self._ACCEPT_RETRY_DELAY)
+                continue
             task = self._loop.create_task(self._handle_connection(sock))
             self._connections.add(task)
             task.add_done_callback(self._connections.discard)

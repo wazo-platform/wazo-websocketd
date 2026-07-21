@@ -7,6 +7,7 @@ import asyncio
 import functools
 import json
 import logging
+import os
 import socket
 from base64 import b64decode, b64encode
 from collections.abc import Awaitable, Callable
@@ -130,10 +131,14 @@ def send_connection(
 async def receive_connection(
     loop: asyncio.AbstractEventLoop,
     control_sock: socket.socket,
-    bufsize: int = 65536,
+    bufsize: int = MAX_REQUEST_SIZE * 2,
 ) -> tuple[socket.socket, bytes]:
     await _wait_readable(loop, control_sock)
-    payload, fds, _flags, _addr = socket.recv_fds(control_sock, bufsize, 1)
+    payload, fds, msg_flags, _addr = socket.recv_fds(control_sock, bufsize, 1)
+    if msg_flags & socket.MSG_TRUNC:
+        for fd in fds:
+            os.close(fd)
+        raise HandoffError('handoff payload exceeded the receive buffer')
     if not payload and not fds:
         raise ControlChannelClosed()
     if not fds:

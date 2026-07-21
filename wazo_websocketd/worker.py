@@ -58,6 +58,7 @@ class Worker:
         heartbeat_interval: float = 1.0,
         drain_timeout: float = 30.0,
     ) -> None:
+        control_sock.setblocking(False)
         self._control_sock = control_sock
         self._handler_factory = handler_factory
         self._ws_server = ws_server

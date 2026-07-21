@@ -15,7 +15,7 @@ from ..ipc import (
     receive_connection,
     send_connection,
 )
-from .helpers import echo_handler, make_tcp_listener, run_async
+from .helpers import control_pair, echo_handler, make_tcp_listener, run_async
 
 
 def test_read_handshake_request_reads_up_to_terminator():
@@ -58,6 +58,39 @@ def test_send_and_receive_passes_fd_and_payload():
     payload, data = run_async(scenario())
     assert payload == b'payload-123'
     assert data == b'ping'
+
+
+def test_receive_connection_handles_payload_larger_than_64k():
+    async def scenario():
+        loop = asyncio.get_event_loop()
+        ctl_send, ctl_recv = control_pair()
+        conn_local, conn_peer = socket.socketpair()
+        try:
+            send_connection(ctl_send, conn_local, b'x' * 90000)
+            received, payload = await receive_connection(loop, ctl_recv)
+            received.close()
+            return len(payload)
+        finally:
+            for s in (ctl_send, ctl_recv, conn_local, conn_peer):
+                s.close()
+
+    assert run_async(scenario()) == 90000
+
+
+def test_receive_connection_raises_on_truncated_payload():
+    async def scenario():
+        loop = asyncio.get_event_loop()
+        ctl_send, ctl_recv = control_pair()
+        conn_local, conn_peer = socket.socketpair()
+        try:
+            send_connection(ctl_send, conn_local, b'x' * 5000)
+            await receive_connection(loop, ctl_recv, bufsize=1024)
+        finally:
+            for s in (ctl_send, ctl_recv, conn_local, conn_peer):
+                s.close()
+
+    with pytest.raises(HandoffError):
+        run_async(scenario())
 
 
 def test_receive_without_fd_raises():
