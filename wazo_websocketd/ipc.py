@@ -47,17 +47,19 @@ class Handoff:
 @dataclass(frozen=True)
 class ControlMessage:
     _op: ClassVar[str]
-    _registry: ClassVar[dict[str, Callable[..., ControlMessage]]] = {}
+    _registry: ClassVar[dict[str, type[ControlMessage]]] = {}
 
     def __init_subclass__(cls, *, op: str, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
         if not op:
             raise ValueError(f'{cls.__name__} must declare a non-empty op')
+
         if op in ControlMessage._registry:
             raise ValueError(
                 f'op {op!r} already registered by '
                 f'{ControlMessage._registry[op].__name__}'
             )
+
         cls._op = op
         ControlMessage._registry[op] = cls
 
@@ -115,6 +117,7 @@ async def _read_until_terminator(
         chunk = await loop.sock_recv(sock, 4096)
         if not chunk:
             break
+
         buffer += chunk
         if len(buffer) > MAX_REQUEST_SIZE:
             raise HandoffError('handshake request exceeds maximum size')
@@ -145,6 +148,29 @@ async def receive_connection(
     if not fds:
         raise HandoffError('handoff message carried no file descriptor')
     return socket.socket(fileno=fds[0]), payload
+
+
+def drain_pending_handoffs(
+    control_sock: socket.socket, bufsize: int = MAX_HANDOFF_SIZE
+) -> list[tuple[socket.socket, bytes]]:
+    pending: list[tuple[socket.socket, bytes]] = []
+
+    while True:
+        try:
+            payload, fds, msg_flags, _addr = socket.recv_fds(control_sock, bufsize, 1)
+        except OSError:
+            return pending
+
+        if not payload and not fds:
+            return pending
+
+        if msg_flags & socket.MSG_TRUNC:
+            for fd in fds:
+                os.close(fd)
+            continue
+
+        if fds:
+            pending.append((socket.socket(fileno=fds[0]), payload))
 
 
 async def _wait_readable(loop: asyncio.AbstractEventLoop, sock: socket.socket) -> None:

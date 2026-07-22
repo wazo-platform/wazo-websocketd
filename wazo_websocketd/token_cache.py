@@ -54,26 +54,26 @@ class CachingAuthenticator:
     async def get_token(self, token_id: str) -> dict:
         masked = mask_uuid(token_id)
         if (token := self._positive.get(token_id)) is not None:
-            logger.debug('token cache: positive hit `%s`', masked)
+            logger.debug('positive hit `%s`', masked)
             return token
 
         if self._negative.get(token_id):
-            logger.debug('token cache: negative hit `%s`', masked)
+            logger.debug('negative hit `%s`', masked)
             raise AuthenticationError('token previously rejected (cached)')
 
         task = self._inflight.get(token_id)
         if task is None:
-            logger.debug('token cache: miss `%s`, querying wazo-auth', masked)
+            logger.debug('miss `%s`, querying wazo-auth', masked)
             task = asyncio.create_task(self._fetch(token_id))
             self._inflight[token_id] = task
             task.add_done_callback(functools.partial(self._discard_inflight, token_id))
         else:
-            logger.debug('token cache: coalescing in-flight lookup `%s`', masked)
+            logger.debug('coalescing in-flight lookup `%s`', masked)
 
         return await task
 
     def invalidate(self, token_id: str) -> None:
-        logger.debug('token cache: invalidating `%s`', mask_uuid(token_id))
+        logger.debug('invalidating `%s`', mask_uuid(token_id))
         self._positive.pop(token_id, None)
         self._negative[token_id] = True
 
@@ -85,24 +85,25 @@ class CachingAuthenticator:
         try:
             token = await self._authenticator.get_token(token_id)
         except AuthenticationError:
-            logger.debug('token cache: caching rejection `%s`', masked)
+            logger.debug('caching rejection `%s`', masked)
             self._negative[token_id] = True  # hard reject: safe to cache
             self._positive.pop(token_id, None)
             raise
         except AuthServerUnavailableError:
-            logger.debug('token cache: auth unavailable `%s`, not cached', masked)
+            logger.debug('auth unavailable `%s`, not cached', masked)
             raise  # soft failure: never cache an outage as a rejection
 
-        if self._seconds_until_expiry(token) > 0:
-            try:
-                self._positive[token_id] = token
-            except ValueError:
-                logger.debug(
-                    'token cache: token `%s` exceeds budget, not cached', masked
-                )
-            else:
-                logger.debug('token cache: storing token `%s`', masked)
-                self._negative.pop(token_id, None)
+        if self._seconds_until_expiry(token) <= 0:
+            logger.debug('token `%s` already expired, not cached', masked)
+            return token
+
+        try:
+            self._positive[token_id] = token
+        except ValueError:
+            logger.debug('token `%s` exceeds budget, not cached', masked)
+        else:
+            logger.debug('storing token `%s`', masked)
+            self._negative.pop(token_id, None)
 
         return token
 

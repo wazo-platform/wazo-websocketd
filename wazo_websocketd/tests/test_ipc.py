@@ -11,6 +11,7 @@ from ..exception import ControlChannelClosed, HandoffError
 from ..ipc import (
     WorkerWebSocketServer,
     adopt_connection,
+    drain_pending_handoffs,
     read_handshake_request,
     receive_connection,
     send_connection,
@@ -139,6 +140,36 @@ async def _roundtrip(message='hello', drain=False):
     finally:
         await server_task
         listener.close()
+
+
+def test_drain_pending_handoffs_returns_queued_connections():
+    ctl_send, ctl_recv = control_pair()
+    ctl_recv.setblocking(False)
+    conn_a, peer_a = socket.socketpair()
+    conn_b, peer_b = socket.socketpair()
+    try:
+        send_connection(ctl_send, conn_a, b'payload-a')
+        send_connection(ctl_send, conn_b, b'payload-b')
+
+        drained = drain_pending_handoffs(ctl_recv)
+
+        payloads = [payload for _sock, payload in drained]
+        assert payloads == [b'payload-a', b'payload-b']
+        for sock, _payload in drained:
+            sock.close()
+    finally:
+        for s in (ctl_send, ctl_recv, conn_a, peer_a, conn_b, peer_b):
+            s.close()
+
+
+def test_drain_pending_handoffs_returns_empty_when_nothing_queued():
+    _ctl_send, ctl_recv = control_pair()
+    ctl_recv.setblocking(False)
+    try:
+        assert drain_pending_handoffs(ctl_recv) == []
+    finally:
+        _ctl_send.close()
+        ctl_recv.close()
 
 
 def test_receive_on_closed_channel_raises_control_channel_closed():

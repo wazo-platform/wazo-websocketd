@@ -49,6 +49,12 @@ async def resolve_token(
     return await authenticator.get_token(token_id)
 
 
+def is_websocket_upgrade(request_headers: Headers) -> bool:
+    upgrade = request_headers.get('Upgrade', '')
+    connection = request_headers.get('Connection', '')
+    return 'websocket' in upgrade.lower() and 'upgrade' in connection.lower()
+
+
 def _extract_token_id(request_headers: Headers, path: str) -> str:
     if (token := query_param(path, 'token')) is not None:
         return token
@@ -98,6 +104,11 @@ class Dispatcher:
                 return
 
             path, headers = parse_request(request)
+            if not is_websocket_upgrade(headers):
+                logger.debug('closing non-websocket request without authentication')
+                sock.close()
+                return
+
             token = await resolve_token(self._authenticator, path, headers)
             payload = Handoff(token, request).pack()
             if len(payload) > MAX_HANDOFF_SIZE:
@@ -109,13 +120,15 @@ class Dispatcher:
                     sock, request, CloseCode.INTERNAL_ERROR, 'request too large'
                 )
                 return
-            entry = self._registry.select()
-            if entry is None or not self._handoff(entry, sock, payload):
-                await self._reject(
-                    sock, request, CloseCode.TRY_LATER, 'no worker available'
-                )
-                return
-            sock.close()  # close our copy after the fd is transferred
+            while (entry := self._registry.select()) is not None:
+                if self._handoff(entry, sock, payload):
+                    sock.close()
+                    return
+                self._registry.start_draining(entry.worker_id)
+            await self._reject(
+                sock, request, CloseCode.TRY_LATER, 'no worker available'
+            )
+            return
         except NoTokenError:
             await self._reject(sock, request, CloseCode.NO_TOKEN, 'no token')
         except AuthenticationError:
@@ -139,6 +152,7 @@ class Dispatcher:
         except OSError:
             logger.warning('handoff to %s failed, worker gone', entry.worker_id)
             return False
+        logger.debug('dispatched connection to %s', entry.worker_id)
         self._registry.note_handoff(entry)
         return True
 

@@ -3,6 +3,7 @@
 
 import asyncio
 import contextlib
+import threading
 from unittest.mock import Mock
 
 import pytest
@@ -194,6 +195,39 @@ def test_reap_removes_terminates_and_closes_a_dead_worker():
     assert gone is True
     assert sock_closed is True
     assert process.terminated is True
+
+
+def test_shutdown_joins_workers_concurrently():
+    barrier = threading.Barrier(2, timeout=2)
+
+    class _BarrierProcess(_FakeProcess):
+        def __init__(self):
+            super().__init__(exits_on_terminate=False)
+
+        def join(self, timeout=None):
+            self.join_calls += 1
+            if self.join_calls == 1:
+                barrier.wait()  # times out unless another join runs concurrently
+                self._alive = False
+
+    processes = {}
+
+    def spawn(worker_sock, worker_id):
+        process = _BarrierProcess()
+        process.hold(worker_sock)
+        processes[worker_id] = process
+        return process
+
+    async def scenario():
+        supervisor, listener = _supervisor(spawn, process_workers=2)
+        async with supervisor:
+            pass
+        listener.close()
+        return processes
+
+    processes = run_async(scenario())
+    assert all(p.join_calls == 1 for p in processes.values())
+    assert not any(p.killed for p in processes.values())
 
 
 def test_read_heartbeats_updates_registry():

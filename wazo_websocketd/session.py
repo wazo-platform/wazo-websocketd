@@ -277,7 +277,10 @@ class Session:
 
 def _extract_version_from_path(path):
     if (value := query_param(path, 'version')) is not None:
-        version = int(value)
+        try:
+            version = int(value)
+        except ValueError:
+            raise UnsupportedVersionError()
         if version not in SUPPORTED_VERSION:
             raise UnsupportedVersionError()
         return version

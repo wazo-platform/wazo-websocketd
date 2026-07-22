@@ -199,7 +199,7 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
 
         self.websocketd_auth_client.is_valid_token = is_valid_token
 
-        with pytest.raises(AuthenticationExpiredError):
+        with pytest.raises(AuthServerUnavailableError):
             asyncio.get_event_loop().run_until_complete(check.run(lambda: self.token))
 
         assert len(calls) == 3
@@ -229,7 +229,7 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
 
         self.websocketd_auth_client.is_valid_token = is_valid_token
 
-        with pytest.raises(AuthenticationExpiredError):
+        with pytest.raises(AuthServerUnavailableError):
             asyncio.get_event_loop().run_until_complete(check.run(lambda: self.token))
 
         assert len(calls) == 6
@@ -253,7 +253,7 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
         self.websocketd_auth_client.is_valid_token = is_valid_token
 
         with self.assertLogs('wazo_websocketd.auth', level='WARNING') as logs:
-            with pytest.raises(AuthenticationExpiredError):
+            with pytest.raises(AuthServerUnavailableError):
                 asyncio.get_event_loop().run_until_complete(
                     check.run(lambda: self.token)
                 )
@@ -339,7 +339,7 @@ class TestDynamicIntervalAuthChecker(unittest.TestCase):
             return None
 
         with patch('wazo_websocketd.auth.asyncio.sleep', no_sleep):
-            with pytest.raises(AuthenticationExpiredError):
+            with pytest.raises(AuthServerUnavailableError):
                 asyncio.get_event_loop().run_until_complete(check.run(lambda: token))
 
         assert len(calls) == 3

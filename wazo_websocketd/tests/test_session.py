@@ -10,9 +10,12 @@ from hamcrest import assert_that, equal_to
 from ..exception import (
     AuthenticationError,
     AuthenticationExpiredError,
+    AuthServerUnavailableError,
     BusConnectionError,
+    UnsupportedVersionError,
 )
-from ..session import Session
+from ..protocol import CloseCode
+from ..session import Session, _extract_version_from_path
 from .helpers import run_async
 
 _CONFIG = {'websocket': {'ping_interval': 30}}
@@ -107,3 +110,35 @@ def test_rejected_token_refresh_revokes_offered_token():
         run_async(session._do_ws_token(Mock(value='revoked-token')))
 
     authenticator.invalidate.assert_called_once_with('revoked-token')
+
+
+def test_extract_version_defaults_to_1_when_absent():
+    assert _extract_version_from_path('/') == 1
+
+
+def test_extract_version_parses_supported_value():
+    assert _extract_version_from_path('/?version=2') == 2
+
+
+def test_extract_version_rejects_unsupported_value():
+    with pytest.raises(UnsupportedVersionError):
+        _extract_version_from_path('/?version=99')
+
+
+def test_extract_version_rejects_non_numeric_value():
+    with pytest.raises(UnsupportedVersionError):
+        _extract_version_from_path('/?version=abc')
+
+
+def test_auth_server_unavailable_does_not_invalidate_token():
+    authenticator = _make_authenticator()
+    ws = _make_ws()
+    session = _make_session(authenticator=authenticator, ws=ws)
+
+    with patch.object(
+        session, '_run', AsyncMock(side_effect=AuthServerUnavailableError())
+    ):
+        run_async(session.run())
+
+    authenticator.invalidate.assert_not_called()
+    ws.close.assert_awaited_once_with(CloseCode.TRY_LATER, 'try again later')

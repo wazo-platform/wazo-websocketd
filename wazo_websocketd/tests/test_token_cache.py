@@ -148,6 +148,22 @@ def test_tz_aware_expiry_is_cached_without_error():
     assert count == 1
 
 
+def test_expired_token_is_returned_but_not_cached():
+    token = {**_TOKEN, 'utc_expires_at': '2000-01-01T00:00:00'}
+    authenticator = _authenticator(return_value=token)
+    cache = _caching(authenticator)
+
+    async def scenario():
+        first = await cache.get_token('T')
+        second = await cache.get_token('T')
+        return first, second, len(cache._positive), authenticator.get_token.await_count
+
+    first, second, cached, calls = run_async(scenario())
+    assert first == second == token
+    assert cached == 0
+    assert calls == 2
+
+
 def test_positive_entry_expires():
     authenticator = _authenticator(return_value=_TOKEN)
     clock = _Clock(1000.0)

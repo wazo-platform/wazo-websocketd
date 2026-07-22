@@ -59,7 +59,9 @@ class AsyncAuthClient:
         self._auth_client = AuthClient(**config['auth'])
 
     async def get_token(self, token_id):
-        logger.debug('getting token from wazo-auth')
+        logger.debug(
+            'retrieving token data from wazo-auth and validating authorization'
+        )
         loop = asyncio.get_event_loop()
         try:
             return await loop.run_in_executor(
@@ -117,7 +119,7 @@ class _StaticIntervalAuthChecker(_AuthChecker):
                     self._max_unavailable,
                 )
                 if consecutive_unavailable >= self._max_unavailable:
-                    raise AuthenticationExpiredError()
+                    raise AuthServerUnavailableError()
                 continue
             consecutive_unavailable = 0
             if not is_valid:
@@ -152,7 +154,7 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
                     self._max_unavailable,
                 )
                 if consecutive_unavailable >= self._max_unavailable:
-                    raise AuthenticationExpiredError()
+                    raise AuthServerUnavailableError()
                 continue
             except AuthenticationError:
                 raise AuthenticationExpiredError()

@@ -193,6 +193,55 @@ async def _dead_worker_scenario(authenticator):
         listener.close()
 
 
+def test_failed_handoff_fails_over_to_a_healthy_worker():
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(return_value=_TOKEN)
+
+    served, dead_draining = run_async(_failover_scenario(authenticator))
+
+    assert served == 'echo:hi'
+    assert dead_draining is True  # the unreachable worker is taken out of rotation
+
+
+async def _failover_scenario(authenticator):
+    loop = asyncio.get_event_loop()
+    listener, port = make_tcp_listener()
+    dead_dispatcher, dead_worker = control_pair()
+    live_dispatcher, live_worker = control_pair()
+    registry = WorkerRegistry()
+
+    # The dead worker has the lowest count, so select() picks it first, but its
+    # control channel is gone; the handoff must fail over to the live worker.
+    registry.add('dead', dead_dispatcher)
+    dead_dispatcher.close()
+    dead_worker.close()
+    registry.add('live', live_dispatcher)
+    registry.heartbeat('live', connection_count=1)
+
+    tasks = [
+        asyncio.create_task(_make_worker(live_worker)._run()),
+        asyncio.create_task(Dispatcher(loop, listener, authenticator, registry).run()),
+    ]
+
+    url = f'ws://127.0.0.1:{port}/?token=good'
+    try:
+        ws = await websockets.connect(url)
+        try:
+            await ws.send('hi')
+            served = await ws.recv()
+        finally:
+            await ws.close()
+        dead = registry.get('dead')
+        return served, dead is not None and dead.draining
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        listener.close()
+        live_dispatcher.close()
+        live_worker.close()
+
+
 def test_oversized_handoff_rejected_with_close_1011():
     huge_token = {
         'token': 'tok',
@@ -355,6 +404,52 @@ async def _termination_scenario():
     return run_task.done(), worker._ws_server.is_serving()
 
 
+def test_drain_closes_live_connections_with_going_away():
+    assert run_async(_drain_live_connection_scenario()) == 1001
+
+
+async def _drain_live_connection_scenario():
+    loop = asyncio.get_event_loop()
+    listener, port = make_tcp_listener()
+    ctl_dispatcher, ctl_worker = control_pair()
+    registry = WorkerRegistry()
+    registry.add('w1', ctl_dispatcher)
+
+    async def idle_handler(ws, path):
+        await ws.wait_closed()
+
+    worker = Worker(
+        ctl_worker,
+        handler_factory=lambda token_dict: idle_handler,
+        ws_server=WorkerWebSocketServer(),
+        heartbeat_interval=10,
+        drain_timeout=5,
+    )
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(return_value=_TOKEN)
+    tasks = [
+        asyncio.create_task(worker._run()),
+        asyncio.create_task(Dispatcher(loop, listener, authenticator, registry).run()),
+    ]
+
+    ws = await websockets.connect(f'ws://127.0.0.1:{port}/?token=good')
+    try:
+        for _ in range(200):
+            if len(worker._connections) == 1:
+                break
+            await asyncio.sleep(0.01)
+        worker.stop()
+        await asyncio.wait_for(ws.wait_closed(), timeout=2)
+        return ws.close_code
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        listener.close()
+        ctl_dispatcher.close()
+        ctl_worker.close()
+
+
 def test_incomplete_request_is_closed_without_auth():
     assert run_async(_incomplete_request_scenario()) is False
 
@@ -373,6 +468,70 @@ async def _incomplete_request_scenario():
         listener.close()
         server.close()
     return authenticator.get_token.called
+
+
+def test_non_upgrade_request_is_closed_without_auth():
+    request = b'GET /?token=good HTTP/1.1\r\nHost: h\r\n\r\n'
+    assert run_async(_non_upgrade_scenario(request)) is False
+
+
+def test_upgrade_request_reaches_authentication():
+    request = (
+        b'GET /?token=good HTTP/1.1\r\n'
+        b'Host: h\r\n'
+        b'Upgrade: websocket\r\n'
+        b'Connection: Upgrade\r\n'
+        b'\r\n'
+    )
+    assert run_async(_non_upgrade_scenario(request)) is True
+
+
+async def _non_upgrade_scenario(request):
+    loop = asyncio.get_event_loop()
+    listener, _ = make_tcp_listener()
+    client, server = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    client.sendall(request)
+    client.close()
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(return_value=_TOKEN)
+    dispatcher = Dispatcher(loop, listener, authenticator, WorkerRegistry())
+    try:
+        await dispatcher._handle_connection(server)
+    finally:
+        listener.close()
+        server.close()
+    return authenticator.get_token.called
+
+
+def test_buffered_handoff_is_not_dropped_when_worker_stops():
+    assert run_async(_stop_with_buffered_handoff()) == 1
+
+
+async def _stop_with_buffered_handoff():
+    loop = asyncio.get_event_loop()
+    dispatcher_sock, worker_sock = control_pair()
+    conn_a, conn_b = socket.socketpair()
+    worker = _make_worker(worker_sock, heartbeat_interval=10)
+
+    adopted = []
+
+    async def fake_adopt(sock, payload):
+        adopted.append(payload)
+        sock.close()
+
+    worker._adopt = fake_adopt
+
+    payload = Handoff(_TOKEN, b'GET / HTTP/1.1\r\n\r\n').pack()
+    socket.send_fds(dispatcher_sock, [payload], [conn_a.fileno()])
+    worker.stop()  # already stopping before the accept loop runs
+
+    run_task = loop.create_task(worker._run())
+    try:
+        await asyncio.wait_for(run_task, timeout=2)
+    finally:
+        for s in (dispatcher_sock, worker_sock, conn_a, conn_b):
+            s.close()
+    return len(adopted)
 
 
 def test_worker_survives_malformed_payload():

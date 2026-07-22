@@ -81,7 +81,7 @@ class Supervisor:
         for entry in self._registry.workers():
             self._terminate(entry)
 
-        await self._loop.run_in_executor(None, self._join_all)
+        await self._join_all()
 
         for entry in self._registry.workers():
             if entry.heartbeat_task is not None:
@@ -186,15 +186,22 @@ class Supervisor:
             )
         return workers
 
-    def _join_all(self) -> None:
-        for worker in self._registry.workers():
-            process = worker.process
-            if process is not None and process.is_alive():
-                process.join(self._JOIN_TIMEOUT)
-                if process.is_alive():
-                    logger.warning('worker did not exit in time, killing...')
-                    process.kill()
-                    process.join()
+    async def _join_all(self) -> None:
+        await asyncio.gather(
+            *(
+                self._loop.run_in_executor(None, self._join_worker, worker.process)
+                for worker in self._registry.workers()
+            )
+        )
+
+    def _join_worker(self, process: SpawnProcess | None) -> None:
+        if process is None or not process.is_alive():
+            return
+        process.join(self._JOIN_TIMEOUT)
+        if process.is_alive():
+            logger.warning('worker did not exit in time, killing...')
+            process.kill()
+            process.join()
 
     async def _prune_loop(self) -> None:
         while True:

@@ -10,7 +10,7 @@ from collections.abc import Callable
 from signal import SIGINT, SIGTERM
 
 from setproctitle import setproctitle
-from websockets.legacy.server import WebSocketServer
+from websockets.legacy.server import WebSocketServer, WebSocketServerProtocol
 from xivo.xivo_logging import setup_logging, silence_loggers
 
 from .auth import Authenticator, MasterTenantProxy, StringSharedBuffer
@@ -23,6 +23,7 @@ from .ipc import (
     WebSocketHandler,
     WorkerWebSocketServer,
     adopt_connection,
+    drain_pending_handoffs,
     receive_connection,
 )
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
@@ -64,7 +65,7 @@ class Worker:
         self._ws_server = ws_server
         self._heartbeat_interval = heartbeat_interval
         self._drain_timeout = drain_timeout
-        self._connections: set[asyncio.Task] = set()
+        self._connections: set[WebSocketServerProtocol] = set()
         self._stopping = asyncio.Event()
 
     @classmethod
@@ -113,8 +114,6 @@ class Worker:
             heartbeat_task.cancel()
 
     def stop(self) -> None:
-        # Reject new handshakes (503) and break the accept loop; in-flight
-        # connections keep running until they close or the drain timeout.
         self._ws_server.start_draining()
         self._stopping.set()
 
@@ -153,18 +152,41 @@ class Worker:
         finally:
             stopping.cancel()
 
+        for sock, payload in drain_pending_handoffs(self._control_sock):
+            try:
+                await self._adopt(sock, payload)
+            except Exception:
+                logger.exception('failed to adopt a buffered handoff during drain')
+                sock.close()
+
     async def _adopt(self, sock: socket.socket, payload: bytes) -> None:
         handoff = Handoff.unpack(payload)
         handler = self._handler_factory(handoff.token)
         protocol = await adopt_connection(
             self._loop, sock, handoff.request, handler, self._ws_server
         )
-        self._connections.add(protocol.handler_task)
-        protocol.handler_task.add_done_callback(self._connections.discard)
+        self._connections.add(protocol)
+        protocol.handler_task.add_done_callback(
+            lambda _task, p=protocol: self._connections.discard(p)
+        )
 
     async def _drain(self) -> None:
-        if self._connections:
-            await asyncio.wait(self._connections, timeout=self._drain_timeout)
+        if not self._connections:
+            return
+
+        protocols = list(self._connections)
+        await asyncio.gather(
+            *(p.close(1001, 'server shutting down') for p in protocols),
+            return_exceptions=True,
+        )
+
+        pending = [p.handler_task for p in protocols if not p.handler_task.done()]
+        if pending:
+            _done, still_running = await asyncio.wait(
+                pending, timeout=self._drain_timeout
+            )
+            for task in still_running:
+                task.cancel()
 
     async def _heartbeat_loop(self) -> None:
         while True:
