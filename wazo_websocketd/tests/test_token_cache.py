@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID
 
@@ -30,9 +31,28 @@ def _authenticator(**get_token_kwargs):
     return authenticator
 
 
+def _caching(
+    authenticator,
+    *,
+    positive_ttl=10.0,
+    negative_ttl=60.0,
+    max_size=16 * 1024 * 1024,
+    max_negative_entries=10000,
+    timer=time.monotonic,
+):
+    return CachingAuthenticator(
+        authenticator,
+        positive_ttl=positive_ttl,
+        negative_ttl=negative_ttl,
+        max_size=max_size,
+        max_negative_entries=max_negative_entries,
+        timer=timer,
+    )
+
+
 def test_positive_result_is_cached():
     authenticator = _authenticator(return_value=_TOKEN)
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         return await cache.get_token('T'), await cache.get_token('T')
@@ -45,7 +65,7 @@ def test_positive_result_is_cached():
 
 def test_hard_rejection_is_cached():
     authenticator = _authenticator(side_effect=AuthenticationError('bad'))
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         for _ in range(2):
@@ -60,7 +80,7 @@ def test_hard_rejection_is_cached():
 
 def test_soft_failure_is_not_cached():
     authenticator = _authenticator(side_effect=AuthServerUnavailableError('down'))
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         for _ in range(2):
@@ -85,7 +105,7 @@ def test_single_flight_coalesces_concurrent_lookups():
 
     authenticator = Mock()
     authenticator.get_token = slow_get_token
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         first = asyncio.create_task(cache.get_token('T'))
@@ -100,7 +120,7 @@ def test_single_flight_coalesces_concurrent_lookups():
 
 def test_invalidate_evicts_positive_and_poisons_negative():
     authenticator = _authenticator(return_value=_TOKEN)
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         await cache.get_token('T')  # positively cached
@@ -118,7 +138,7 @@ def test_invalidate_evicts_positive_and_poisons_negative():
 def test_tz_aware_expiry_is_cached_without_error():
     token = {**_TOKEN, 'utc_expires_at': '2999-01-01T00:00:00+00:00'}
     authenticator = _authenticator(return_value=token)
-    cache = CachingAuthenticator(authenticator)
+    cache = _caching(authenticator)
 
     async def scenario():
         return await cache.get_token('T'), len(cache._positive)
@@ -131,7 +151,7 @@ def test_tz_aware_expiry_is_cached_without_error():
 def test_positive_entry_expires():
     authenticator = _authenticator(return_value=_TOKEN)
     clock = _Clock(1000.0)
-    cache = CachingAuthenticator(authenticator, positive_ttl=30, timer=clock)
+    cache = _caching(authenticator, positive_ttl=30, timer=clock)
 
     async def scenario():
         await cache.get_token('T')
@@ -145,7 +165,7 @@ def test_positive_entry_expires():
 def test_positive_cache_is_bounded_by_size():
     authenticator = _authenticator(return_value=_TOKEN)
     budget = 2 * _token_size(_TOKEN)
-    cache = CachingAuthenticator(authenticator, max_size=budget)
+    cache = _caching(authenticator, max_size=budget)
 
     async def scenario():
         for i in range(5):
@@ -165,7 +185,7 @@ def test_token_size_grows_with_acls():
 
 def test_token_larger_than_budget_is_returned_but_not_cached():
     authenticator = _authenticator(return_value=_TOKEN)
-    cache = CachingAuthenticator(authenticator, max_size=1)
+    cache = _caching(authenticator, max_size=1)
 
     async def scenario():
         return await cache.get_token('T'), len(cache._positive)

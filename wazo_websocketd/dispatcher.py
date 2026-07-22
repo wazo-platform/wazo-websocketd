@@ -6,13 +6,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
-from urllib.parse import parse_qsl, urlparse
 
 from websockets.datastructures import Headers
 
 from .auth import MasterTenantProxy, TokenAuthenticator
 from .exception import AuthenticationError, AuthServerUnavailableError, NoTokenError
 from .ipc import (
+    MAX_HANDOFF_SIZE,
     REQUEST_TERMINATOR,
     Handoff,
     WorkerWebSocketServer,
@@ -20,7 +20,7 @@ from .ipc import (
     read_handshake_request,
     send_connection,
 )
-from .protocol import CloseCode
+from .protocol import CloseCode, query_param
 from .registry import WorkerEntry, WorkerRegistry
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,8 @@ async def resolve_token(
 
 
 def _extract_token_id(request_headers: Headers, path: str) -> str:
-    for name, value in parse_qsl(urlparse(path).query):
-        if name == 'token':
-            return value
+    if (token := query_param(path, 'token')) is not None:
+        return token
     if (token := request_headers.get('x-auth-token')) is not None:
         return token
     raise NoTokenError()
@@ -100,8 +99,18 @@ class Dispatcher:
 
             path, headers = parse_request(request)
             token = await resolve_token(self._authenticator, path, headers)
+            payload = Handoff(token, request).pack()
+            if len(payload) > MAX_HANDOFF_SIZE:
+                logger.warning(
+                    'handoff payload too large (%d bytes), rejecting connection',
+                    len(payload),
+                )
+                await self._reject(
+                    sock, request, CloseCode.INTERNAL_ERROR, 'request too large'
+                )
+                return
             entry = self._registry.select()
-            if entry is None or not self._handoff(entry, sock, token, request):
+            if entry is None or not self._handoff(entry, sock, payload):
                 await self._reject(
                     sock, request, CloseCode.TRY_LATER, 'no worker available'
                 )
@@ -124,11 +133,9 @@ class Dispatcher:
             logger.exception('error while handling connection')
             sock.close()
 
-    def _handoff(
-        self, entry: WorkerEntry, sock: socket.socket, token: dict, request: bytes
-    ) -> bool:
+    def _handoff(self, entry: WorkerEntry, sock: socket.socket, payload: bytes) -> bool:
         try:
-            send_connection(entry.control_sock, sock, Handoff(token, request).pack())
+            send_connection(entry.control_sock, sock, payload)
         except OSError:
             logger.warning('handoff to %s failed, worker gone', entry.worker_id)
             return False
@@ -141,9 +148,15 @@ class Dispatcher:
         async def reject_handler(ws, path):
             await ws.close(code, reason)
 
-        protocol = await adopt_connection(
-            self._loop, sock, request, reject_handler, self._reject_server
-        )
+        try:
+            protocol = await adopt_connection(
+                self._loop, sock, request, reject_handler, self._reject_server
+            )
+        except Exception:
+            logger.debug('failed to set up rejection handshake', exc_info=True)
+            sock.close()
+            return
+
         try:
             await asyncio.wait_for(protocol.handler_task, self._REJECT_TIMEOUT)
             await asyncio.wait_for(protocol.wait_closed(), self._REJECT_TIMEOUT)

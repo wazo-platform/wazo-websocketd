@@ -98,8 +98,10 @@ class _StaticIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
         self._interval = config['auth_check_static_interval']
+        self._max_unavailable = config['auth_check_max_unavailable']
 
     async def run(self, token_getter):
+        consecutive_unavailable = 0
         while True:
             await asyncio.sleep(self._interval)
             logger.debug('static auth check: testing token validity')
@@ -107,7 +109,17 @@ class _StaticIntervalAuthChecker(_AuthChecker):
             try:
                 is_valid = await self._async_auth_client.is_valid_token(token_id)
             except AuthServerUnavailableError:
+                consecutive_unavailable += 1
+                logger.warning(
+                    'static auth check: wazo-auth unavailable '
+                    '(%d/%d consecutive failures)',
+                    consecutive_unavailable,
+                    self._max_unavailable,
+                )
+                if consecutive_unavailable >= self._max_unavailable:
+                    raise AuthenticationExpiredError()
                 continue
+            consecutive_unavailable = 0
             if not is_valid:
                 raise AuthenticationExpiredError()
 
@@ -115,8 +127,10 @@ class _StaticIntervalAuthChecker(_AuthChecker):
 class _DynamicIntervalAuthChecker(_AuthChecker):
     def __init__(self, async_auth_client, config):
         self._async_auth_client = async_auth_client
+        self._max_unavailable = config['auth_check_max_unavailable']
 
     async def run(self, token_getter):
+        consecutive_unavailable = 0
         while True:
             token = token_getter()
             token_id = token['token']
@@ -130,9 +144,19 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
             try:
                 await self._async_auth_client.get_token(token_id)
             except AuthServerUnavailableError:
+                consecutive_unavailable += 1
+                logger.warning(
+                    'dynamic auth check: wazo-auth unavailable '
+                    '(%d/%d consecutive failures)',
+                    consecutive_unavailable,
+                    self._max_unavailable,
+                )
+                if consecutive_unavailable >= self._max_unavailable:
+                    raise AuthenticationExpiredError()
                 continue
             except AuthenticationError:
                 raise AuthenticationExpiredError()
+            consecutive_unavailable = 0
 
     def _calculate_next_check(self, now, expires_at):
         delta = expires_at - now

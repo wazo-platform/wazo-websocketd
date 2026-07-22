@@ -49,6 +49,8 @@ class Supervisor:
         self._counter = itertools.count(1)
         self._desired = 0
         self._tasks: list[asyncio.Task] = []
+        self._spawn_tasks: set[asyncio.Task] = set()
+        self._spawn_lock = asyncio.Lock()
         self._closing = asyncio.Event()
 
     @property
@@ -62,7 +64,7 @@ class Supervisor:
         self._loop.add_signal_handler(SIGTTOU, self.scale_down)
 
         self._desired = self._initial_worker_count()
-        self._reconcile()
+        await self._reconcile()
 
         return self
 
@@ -75,6 +77,7 @@ class Supervisor:
             task.cancel()
 
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        await asyncio.gather(*self._spawn_tasks, return_exceptions=True)
         for entry in self._registry.workers():
             self._terminate(entry)
 
@@ -85,16 +88,25 @@ class Supervisor:
                 entry.heartbeat_task.cancel()
             entry.control_sock.close()
 
-    def add_worker(self) -> str:
+    def add_worker(self) -> None:
         self._desired += 1
-        return self._spawn_worker()
+        task = self._loop.create_task(self._reconcile())
+        self._spawn_tasks.add(task)
+        task.add_done_callback(self._spawn_task_done)
 
-    def _spawn_worker(self) -> str:
+    def _spawn_task_done(self, task: asyncio.Task) -> None:
+        self._spawn_tasks.discard(task)
+        if not task.cancelled() and (exc := task.exception()) is not None:
+            logger.error('worker spawn task failed: %s', exc)
+
+    async def _spawn_worker(self) -> str:
         worker_id = f'worker-{next(self._counter)}'
         dispatcher_sock, worker_sock = socket.socketpair(
             socket.AF_UNIX, socket.SOCK_SEQPACKET
         )
-        process = self._spawn(worker_sock, worker_id)
+        process = await self._loop.run_in_executor(
+            None, self._spawn, worker_sock, worker_id
+        )
         worker_sock.close()  # the child holds its own dup
         dispatcher_sock.setblocking(False)
         entry = self._registry.add(worker_id, dispatcher_sock)
@@ -191,21 +203,22 @@ class Supervisor:
                 self._MAX_HEARTBEAT_SILENCE
             ):
                 self._reap(worker_id)
-            self._reconcile()
+            await self._reconcile()
 
-    def _reconcile(self) -> None:
-        if self._closing.is_set():
-            return
+    async def _reconcile(self) -> None:
+        async with self._spawn_lock:
+            if self._closing.is_set():
+                return
 
-        if (deficit := self._desired - self._active_workers_count()) > 0:
-            logger.info(
-                'spawning %d worker(s) to reach desired count of %d',
-                deficit,
-                self._desired,
-            )
+            if (deficit := self._desired - self._active_workers_count()) > 0:
+                logger.info(
+                    'spawning %d worker(s) to reach desired count of %d',
+                    deficit,
+                    self._desired,
+                )
 
-        for _ in range(deficit):
-            self._spawn_worker()
+            for _ in range(deficit):
+                await self._spawn_worker()
 
     def _active_workers_count(self) -> int:
         return sum(1 for worker in self._registry.workers() if not worker.draining)

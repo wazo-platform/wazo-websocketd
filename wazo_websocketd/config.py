@@ -28,6 +28,7 @@ _DEFAULT_CONFIG = {
     },
     'auth_check_strategy': 'dynamic',
     'auth_check_static_interval': 60,
+    'auth_check_max_unavailable': 5,
     'bus': {
         'host': 'localhost',
         'port': 5672,
@@ -48,7 +49,7 @@ _DEFAULT_CONFIG = {
     'token_cache': {
         'max_size': 16 * 1024 * 1024,  # 16 MB
         'max_negative_entries': 10000,
-        'positive_ttl': 60,
+        'positive_ttl': 10,
         'negative_ttl': 60,
     },
 }

@@ -187,9 +187,11 @@ class TestTokenRevocation(IntegrationTest):
         await self.bus_client.publish(
             {
                 'name': 'auth_session_deleted',
-                'uuid': 'session-1',
-                'user_uuid': str(USER1_UUID),
-                'tenant_uuid': str(TENANT1_UUID),
+                'data': {
+                    'uuid': 'session-1',
+                    'user_uuid': str(USER1_UUID),
+                    'tenant_uuid': str(TENANT1_UUID),
+                },
             },
             TENANT1_UUID,
             USER1_UUID,

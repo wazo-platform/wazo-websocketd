@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 REQUEST_TERMINATOR = b'\r\n\r\n'
 HANDSHAKE_TIMEOUT = 10.0
 MAX_REQUEST_SIZE = 65536
+MAX_HANDOFF_SIZE = MAX_REQUEST_SIZE * 2
 
 WebSocketHandler = Callable[..., Awaitable[None]]
 
@@ -131,7 +132,7 @@ def send_connection(
 async def receive_connection(
     loop: asyncio.AbstractEventLoop,
     control_sock: socket.socket,
-    bufsize: int = MAX_REQUEST_SIZE * 2,
+    bufsize: int = MAX_HANDOFF_SIZE,
 ) -> tuple[socket.socket, bytes]:
     await _wait_readable(loop, control_sock)
     payload, fds, msg_flags, _addr = socket.recv_fds(control_sock, bufsize, 1)

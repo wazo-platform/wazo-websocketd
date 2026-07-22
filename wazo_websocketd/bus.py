@@ -335,7 +335,9 @@ class BusConsumer:
         return BusMessage(event_name, headers, acl, message, decoded)
 
     def _on_auth_session_deleted(self, message: dict) -> NoReturn:
-        if message.get('uuid') == self._user.session_uuid:
+        data = message.get('data')
+        session_uuid = data.get('uuid') if isinstance(data, dict) else None
+        if session_uuid == self._user.session_uuid:
             raise SessionTerminated()
         raise EventPermissionError('ignoring deletion of another session')
 

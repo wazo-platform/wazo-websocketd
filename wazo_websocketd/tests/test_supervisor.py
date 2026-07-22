@@ -21,17 +21,30 @@ class _FakeProcess:
         self.terminated = False
         self.killed = False
         self.join_calls = 0
+        self._held_sock = None
+
+    def hold(self, sock):
+        # emulate the child keeping its own dup so the parent closing its copy
+        # does not EOF the control channel
+        self._held_sock = sock.dup()
+
+    def _release(self):
+        if self._held_sock is not None:
+            self._held_sock.close()
+            self._held_sock = None
 
     def is_alive(self):
         return self._alive
 
     def terminate(self):
         self.terminated = True
+        self._release()
         if self._exits_on_terminate:
             self._alive = False
 
     def kill(self):
         self.killed = True
+        self._release()
         self._alive = False
 
     def join(self, timeout=None):
@@ -43,6 +56,7 @@ def _spawn_factory(**process_kwargs):
 
     def spawn(worker_sock, worker_id):
         process = _FakeProcess(**process_kwargs)
+        process.hold(worker_sock)
         processes[worker_id] = process
         return process
 
@@ -106,14 +120,14 @@ def test_add_worker_registers_and_spawns():
         spawn, processes = _spawn_factory()
         supervisor, listener = _supervisor(spawn, process_workers=1)
         async with supervisor:
-            worker_id = supervisor.add_worker()
-            present = supervisor.registry.get(worker_id) is not None
+            supervisor.add_worker()
+            await _wait_until(lambda: len(supervisor.registry.workers()) == 2)
+            ids = sorted(w.worker_id for w in supervisor.registry.workers())
         listener.close()
-        return worker_id, present, sorted(processes)
+        return ids, sorted(processes)
 
-    worker_id, present, spawned = run_async(scenario())
-    assert worker_id == 'worker-2'
-    assert present is True
+    ids, spawned = run_async(scenario())
+    assert ids == ['worker-1', 'worker-2']
     assert spawned == ['worker-1', 'worker-2']
 
 
@@ -202,7 +216,7 @@ def test_reconcile_respawns_crashed_worker_to_desired_count():
             victim = supervisor.registry.workers()[0].worker_id
             supervisor._reap(victim)
             after_crash = len(supervisor.registry.workers())
-            supervisor._reconcile()
+            await supervisor._reconcile()
             after_reconcile = len(supervisor.registry.workers())
         listener.close()
         return after_crash, after_reconcile
@@ -222,7 +236,7 @@ def test_reconcile_does_not_respawn_intentionally_drained_worker():
                 w.worker_id for w in supervisor.registry.workers() if w.draining
             )
             supervisor._reap(drained)
-            supervisor._reconcile()
+            await supervisor._reconcile()
             count = len(supervisor.registry.workers())
         listener.close()
         return count

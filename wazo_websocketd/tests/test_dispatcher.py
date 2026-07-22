@@ -193,6 +193,36 @@ async def _dead_worker_scenario(authenticator):
         listener.close()
 
 
+def test_oversized_handoff_rejected_with_close_1011():
+    huge_token = {
+        'token': 'tok',
+        'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
+        'acl': ['x' * 1024] * 200,  # ~200 KB payload, exceeds MAX_HANDOFF_SIZE
+    }
+    authenticator = Mock()
+    authenticator.get_token = AsyncMock(return_value=huge_token)
+
+    assert run_async(_dispatch_scenario(authenticator, token='good')) == 1011
+
+
+def test_reject_closes_socket_when_adoption_fails():
+    async def scenario():
+        loop = asyncio.get_event_loop()
+        sock, peer = socket.socketpair()
+        try:
+            with patch(
+                'wazo_websocketd.dispatcher.adopt_connection',
+                AsyncMock(side_effect=OSError('client reset')),
+            ):
+                dispatcher = Dispatcher(loop, Mock(), Mock(), Mock())
+                await dispatcher._reject(sock, b'req', 1013, 'no worker available')
+            return sock.fileno()  # -1 once the fd has been closed
+        finally:
+            peer.close()
+
+    assert run_async(scenario()) == -1
+
+
 def test_reject_aborts_transport_on_timeout():
     assert run_async(_reject_cleanup_scenario(cancel=False)) is True
 

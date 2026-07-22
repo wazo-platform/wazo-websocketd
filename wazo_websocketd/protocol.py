@@ -7,13 +7,22 @@ import collections
 import json
 import logging
 from enum import IntEnum
+from urllib.parse import parse_qsl, urlparse
 
 from .exception import SessionProtocolError
 
 logger = logging.getLogger(__name__)
 
 
+def query_param(path: str, name: str) -> str | None:
+    for key, value in parse_qsl(urlparse(path).query):
+        if key == name:
+            return value
+    return None
+
+
 class CloseCode(IntEnum):
+    INTERNAL_ERROR = 1011
     TRY_LATER = 1013
     NO_TOKEN = 4001
     AUTH_FAILED = 4002

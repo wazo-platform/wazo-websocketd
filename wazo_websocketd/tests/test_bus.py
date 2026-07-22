@@ -97,7 +97,12 @@ class TestBusDecoding(unittest.TestCase):
         )
 
     def test_bus_msg_own_session_deleted_terminates(self):
-        message = json.dumps({'uuid': self.mock_token['session_uuid']}).encode()
+        message = json.dumps(
+            {
+                'name': 'auth_session_deleted',
+                'data': {'uuid': self.mock_token['session_uuid']},
+            }
+        ).encode()
         properties = Mock(headers={'name': 'auth_session_deleted'})
 
         assert_that(
@@ -106,7 +111,18 @@ class TestBusDecoding(unittest.TestCase):
         )
 
     def test_bus_msg_other_session_deleted_discarded(self):
-        message = json.dumps({'uuid': 'another-session'}).encode()
+        message = json.dumps(
+            {'name': 'auth_session_deleted', 'data': {'uuid': 'another-session'}}
+        ).encode()
+        properties = Mock(headers={'name': 'auth_session_deleted'})
+
+        assert_that(
+            calling(self.consumer._decode_content).with_args(message, properties),
+            raises(EventPermissionError),
+        )
+
+    def test_bus_msg_session_deleted_missing_data_discarded(self):
+        message = json.dumps({'name': 'auth_session_deleted'}).encode()
         properties = Mock(headers={'name': 'auth_session_deleted'})
 
         assert_that(

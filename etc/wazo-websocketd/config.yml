@@ -46,3 +46,6 @@
 
 ## Developer options -- do not use them
 #auth_check_strategy: dynamic
+# Consecutive failed re-checks tolerated while wazo-auth is unreachable before
+# the session is terminated (fail-open bound).
+#auth_check_max_unavailable: 5

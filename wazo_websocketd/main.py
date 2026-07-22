@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import logging
@@ -21,6 +21,15 @@ def main():
     )
     xivo_logging.silence_loggers(['urllib3'], logging.WARNING)
     xivo_logging.silence_loggers(['aioamqp'], logging.WARNING)
+
+    websocket_config = config.get('websocket') or {}
+    if websocket_config.get('certificate') or websocket_config.get('private_key'):
+        logger.warning(
+            'service-level TLS (websocket.certificate/private_key) is no longer '
+            'supported and is ignored; wazo-websocketd serves plaintext and TLS '
+            'must be terminated by nginx'
+        )
+
     set_xivo_uuid(config, logger)
 
     if config['user']:

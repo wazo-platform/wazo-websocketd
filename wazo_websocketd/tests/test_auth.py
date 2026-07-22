@@ -114,7 +114,11 @@ class TestAuthenticator(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
         self.authenticator = Authenticator(
-            {"auth_check_static_interval": 1, "auth_check_strategy": "static"}
+            {
+                "auth_check_static_interval": 1,
+                "auth_check_strategy": "static",
+                "auth_check_max_unavailable": 5,
+            }
         )
 
     def test_get_token(self):
@@ -140,7 +144,8 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
         self.check = _StaticIntervalAuthChecker(
-            self.websocketd_auth_client, {"auth_check_static_interval": 0.1}
+            self.websocketd_auth_client,
+            {"auth_check_static_interval": 0.1, "auth_check_max_unavailable": 5},
         )
         self.token = {'token': sentinel.token_id}
 
@@ -158,7 +163,8 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
 
     def test_run_continues_when_auth_server_unavailable(self):
         check = _StaticIntervalAuthChecker(
-            self.websocketd_auth_client, {"auth_check_static_interval": 0}
+            self.websocketd_auth_client,
+            {"auth_check_static_interval": 0, "auth_check_max_unavailable": 5},
         )
         calls = []
 
@@ -175,11 +181,92 @@ class TestStaticIntervalAuthChecker(unittest.TestCase):
 
         assert len(calls) == 2
 
+    def test_run_terminates_after_sustained_outage(self):
+        check = _StaticIntervalAuthChecker(
+            self.websocketd_auth_client,
+            {"auth_check_static_interval": 0, "auth_check_max_unavailable": 3},
+        )
+        calls = []
+
+        class _Bail(Exception):
+            pass
+
+        async def is_valid_token(token_id):
+            calls.append(token_id)
+            if len(calls) <= 3:
+                raise AuthServerUnavailableError()
+            raise _Bail()  # bound must trip before we get here
+
+        self.websocketd_auth_client.is_valid_token = is_valid_token
+
+        with pytest.raises(AuthenticationExpiredError):
+            asyncio.get_event_loop().run_until_complete(check.run(lambda: self.token))
+
+        assert len(calls) == 3
+
+    def test_run_resets_outage_counter_after_success(self):
+        check = _StaticIntervalAuthChecker(
+            self.websocketd_auth_client,
+            {"auth_check_static_interval": 0, "auth_check_max_unavailable": 3},
+        )
+        # two failures, a success (resets), then three fresh failures -> terminate
+        outcomes = [
+            AuthServerUnavailableError(),
+            AuthServerUnavailableError(),
+            True,
+            AuthServerUnavailableError(),
+            AuthServerUnavailableError(),
+            AuthServerUnavailableError(),
+        ]
+        calls: list = []
+
+        async def is_valid_token(token_id):
+            outcome = outcomes[len(calls)]
+            calls.append(token_id)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        self.websocketd_auth_client.is_valid_token = is_valid_token
+
+        with pytest.raises(AuthenticationExpiredError):
+            asyncio.get_event_loop().run_until_complete(check.run(lambda: self.token))
+
+        assert len(calls) == 6
+
+    def test_run_logs_warning_on_outage(self):
+        check = _StaticIntervalAuthChecker(
+            self.websocketd_auth_client,
+            {"auth_check_static_interval": 0, "auth_check_max_unavailable": 3},
+        )
+        calls = []
+
+        class _Bail(Exception):
+            pass
+
+        async def is_valid_token(token_id):
+            calls.append(token_id)
+            if len(calls) <= 3:
+                raise AuthServerUnavailableError()
+            raise _Bail()
+
+        self.websocketd_auth_client.is_valid_token = is_valid_token
+
+        with self.assertLogs('wazo_websocketd.auth', level='WARNING') as logs:
+            with pytest.raises(AuthenticationExpiredError):
+                asyncio.get_event_loop().run_until_complete(
+                    check.run(lambda: self.token)
+                )
+
+        assert any('unavailable' in line.lower() for line in logs.output)
+
 
 class TestDynamicIntervalAuthChecker(unittest.TestCase):
     def setUp(self):
         self.websocketd_auth_client = Mock()
-        self.check = _DynamicIntervalAuthChecker(self.websocketd_auth_client, {})
+        self.check = _DynamicIntervalAuthChecker(
+            self.websocketd_auth_client, {"auth_check_max_unavailable": 5}
+        )
 
     def test_expiration_in_the_past(self):
         now = datetime.datetime(2016, 1, 1, 0, 0, 0)
@@ -228,6 +315,34 @@ class TestDynamicIntervalAuthChecker(unittest.TestCase):
         result = self.check._calculate_next_check(now, expires_at)
 
         assert_that(result, equal_to(43200))
+
+    def test_run_terminates_after_sustained_outage(self):
+        check = _DynamicIntervalAuthChecker(
+            self.websocketd_auth_client, {"auth_check_max_unavailable": 3}
+        )
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=30)
+        token = {'token': 'id', 'utc_expires_at': expires_at.isoformat()}
+        calls = []
+
+        class _Bail(Exception):
+            pass
+
+        async def get_token(token_id):
+            calls.append(token_id)
+            if len(calls) <= 3:
+                raise AuthServerUnavailableError()
+            raise _Bail()  # bound must trip before we get here
+
+        self.websocketd_auth_client.get_token = get_token
+
+        async def no_sleep(delay):
+            return None
+
+        with patch('wazo_websocketd.auth.asyncio.sleep', no_sleep):
+            with pytest.raises(AuthenticationExpiredError):
+                asyncio.get_event_loop().run_until_complete(check.run(lambda: token))
+
+        assert len(calls) == 3
 
     def test_run_computes_sleep_from_naive_expiry(self):
         # wazo-auth returns a naive utc_expires_at; `now` must stay naive too,

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from urllib.parse import parse_qsl, urlparse
 
 import websockets
 
@@ -20,7 +19,7 @@ from .exception import (
     UnsupportedVersionError,
 )
 from .ipc import WebSocketHandler
-from .protocol import CloseCode
+from .protocol import CloseCode, query_param
 
 logger = logging.getLogger(__name__)
 
@@ -277,10 +276,9 @@ class Session:
 
 
 def _extract_version_from_path(path):
-    for name, value in parse_qsl(urlparse(path).query):
-        if name == 'version':
-            version = int(value)
-            if version not in SUPPORTED_VERSION:
-                raise UnsupportedVersionError()
-            return version
+    if (value := query_param(path, 'version')) is not None:
+        version = int(value)
+        if version not in SUPPORTED_VERSION:
+            raise UnsupportedVersionError()
+        return version
     return 1

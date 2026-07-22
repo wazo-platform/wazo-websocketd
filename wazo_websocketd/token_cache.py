@@ -18,10 +18,6 @@ from .exception import AuthenticationError, AuthServerUnavailableError
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_POSITIVE_TTL = 60.0
-_DEFAULT_NEGATIVE_TTL = 60.0
-_DEFAULT_MAX_SIZE = 16 * 1024 * 1024  # 16 MB
-_DEFAULT_MAX_NEGATIVE_ENTRIES = 10000
 _MASKED_UUID = 'XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX'
 
 
@@ -38,10 +34,10 @@ class CachingAuthenticator:
         self,
         authenticator: TokenProvider,
         *,
-        positive_ttl: float = _DEFAULT_POSITIVE_TTL,
-        negative_ttl: float = _DEFAULT_NEGATIVE_TTL,
-        max_size: int = _DEFAULT_MAX_SIZE,
-        max_negative_entries: int = _DEFAULT_MAX_NEGATIVE_ENTRIES,
+        positive_ttl: float,
+        negative_ttl: float,
+        max_size: int,
+        max_negative_entries: int,
         timer: Callable[[], float] = time.monotonic,
     ) -> None:
         self._authenticator = authenticator

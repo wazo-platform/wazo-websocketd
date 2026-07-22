@@ -30,9 +30,12 @@ class Controller:
     def _create_listener(self) -> socket.socket:
         host = self._config['websocket']['listen']
         port = self._config['websocket']['port']
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        family, socktype, proto, _, sockaddr = socket.getaddrinfo(
+            host, port, type=socket.SOCK_STREAM, flags=socket.AI_PASSIVE
+        )[0]
+        listener = socket.socket(family, socktype, proto)
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        listener.bind((host, port))
+        listener.bind(sockaddr)
         listener.listen(socket.SOMAXCONN)
         listener.setblocking(False)
         return listener
