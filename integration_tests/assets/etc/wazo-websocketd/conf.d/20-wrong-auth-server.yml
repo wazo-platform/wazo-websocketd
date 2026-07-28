@@ -1,2 +1,4 @@
 auth:
   host: inexisting-auth.fix-resolvd-systemd-behaviour
+  port: 9497
+  prefix: null
