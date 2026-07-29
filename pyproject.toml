@@ -1,3 +1,26 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wazo-websocketd"
+version = "1.0"
+description = "Wazo WebSocket daemon"
+authors = [{name = "Wazo Authors", email = "dev@wazo.community"}]
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "http://wazo.community"
+
+[project.scripts]
+wazo-websocketd = "wazo_websocketd.main:main"
+wazo-websocketd-wait-online = "wazo_websocketd.wait_online:main"
+
+[tool.setuptools.packages.find]
+include = ["wazo_websocketd*"]
+exclude = ["wazo_websocketd.tests*"]
+
 [tool.black]
 skip-string-normalization = true
 
@@ -24,5 +47,5 @@ ignore_missing_imports = true
 profile = "black"
 py_version = 311
 
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = ["wazo_websocketd"]

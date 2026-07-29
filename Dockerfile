@@ -9,9 +9,9 @@ COPY requirements.txt /usr/src/wazo-websocketd/
 WORKDIR /usr/src/wazo-websocketd
 RUN pip install -r requirements.txt
 
-COPY setup.py /usr/src/wazo-websocketd/
+COPY setup.py pyproject.toml /usr/src/wazo-websocketd/
 COPY wazo_websocketd /usr/src/wazo-websocketd/wazo_websocketd
-RUN python setup.py install
+RUN pip install .
 
 FROM python:3.11-slim-bookworm AS build-image
 COPY --from=compile-image /opt/venv /opt/venv
