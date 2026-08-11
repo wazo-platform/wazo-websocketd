@@ -1,5 +1,9 @@
 # Changelog
 
+## 26.09
+
+* Requests to wazo-auth now default to `localhost:80`, through nginx.
+
 ## 23.10
 
 * Default configuration for `auth_check_strategy` has been changed from `static`
