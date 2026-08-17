@@ -5,7 +5,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from .helpers.base import IntegrationTest, run_with_loop
+from .helpers.base import IntegrationTest
 from .helpers.constants import (
     MASTER_TENANT_UUID,
     TENANT1_UUID,
@@ -18,8 +18,8 @@ from .helpers.constants import (
 class TestBus(IntegrationTest):
     asset = 'base'
 
-    def setUp(self):
-        super().setUp()
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
         self.event = {'name': 'foo', 'required_acl': None}
         self.subscribe_event_name = self.event['name']
         self.tenant_uuid = TENANT1_UUID
@@ -28,11 +28,10 @@ class TestBus(IntegrationTest):
             user_uuid=self.user_uuid, acl=['websocketd', 'event.foo']
         )
 
-    def tearDown(self):
+    async def asyncTearDown(self):
         self.auth_client.revoke_token(self.token)
-        super().tearDown()
+        await super().asyncTearDown()
 
-    @run_with_loop
     async def test_receive_message_with_matching_event_name(self):
         await self._prepare()
 
@@ -40,7 +39,6 @@ class TestBus(IntegrationTest):
 
         self.assertEqual(event, self.event)
 
-    @run_with_loop
     async def test_receive_message_with_matching_acl(self):
         self.event['required_acl'] = 'event.foo'
         await self._prepare()
@@ -49,34 +47,29 @@ class TestBus(IntegrationTest):
 
         self.assertEqual(event, self.event)
 
-    @run_with_loop
     async def test_dont_receive_message_with_non_matching_event_name(self):
         self.subscribe_event_name = 'bar'
         await self._prepare()
 
         await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_dont_receive_message_with_no_acl_defined(self):
         del self.event['required_acl']
         await self._prepare()
 
         await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_dont_receive_message_with_non_matching_acl(self):
         self.event['required_acl'] = 'token.doesnt.have.this.acl'
         await self._prepare()
 
         await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_dont_receive_message_before_start(self):
         await self._prepare(skip_start=True)
 
         await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_receive_message_v2(self):
         self.event = {'name': 'foo', 'required_acl': 'event.foo'}
         await self._prepare(version=2)
@@ -95,7 +88,6 @@ class TestBus(IntegrationTest):
             event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
-    @run_with_loop
     async def test_user_receives_user_events(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -106,7 +98,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, user_uuid='*')
             self.assertEqual(event, await self.websocketd_client.recv_msg())
 
-    @run_with_loop
     async def test_user_dont_receive_event_for_other_users(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -114,7 +105,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, user_uuid=USER2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_user_dont_receive_events_from_other_tenants(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -122,7 +112,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_user_dont_receive_events_from_master_tenant(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -130,7 +119,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=MASTER_TENANT_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_user_receives_all_tenant_events_when_admin(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -144,7 +132,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, user_uuid=USER2_UUID)
             self.assertEqual(event, await self.websocketd_client.recv_msg())
 
-    @run_with_loop
     async def test_user_dont_receive_events_from_other_tenants_when_admin(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -152,7 +139,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_master_tenant_user_receives_all_messages(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -170,7 +156,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=MASTER_TENANT_UUID)
             self.assertEqual(event, await self.websocketd_client.recv_msg())
 
-    @run_with_loop
     async def test_external_api_receives_all_tenant_events(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -184,7 +169,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, user_uuid=USER2_UUID)
             self.assertEqual(event, await self.websocketd_client.recv_msg())
 
-    @run_with_loop
     async def test_external_api_dont_receive_events_from_other_tenants(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -192,7 +176,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_internal_user_receives_all_tenant_events(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -206,7 +189,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, user_uuid=USER2_UUID)
             self.assertEqual(event, await self.websocketd_client.recv_msg())
 
-    @run_with_loop
     async def test_internal_user_dont_receive_events_from_other_tenants(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -214,7 +196,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, tenant_uuid=TENANT2_UUID)
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_user_dont_receive_message_from_other_origin_uuid(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -222,7 +203,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, origin_uuid='some-other-wazo-uuid')
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_admin_dont_receive_message_from_other_origin_uuid(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -230,7 +210,6 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(event, origin_uuid='some-other-wazo-uuid')
             await self.websocketd_client.wait_for_nothing()
 
-    @run_with_loop
     async def test_internal_user_dont_receive_message_from_other_origin_uuid(self):
         event = {'name': 'foo', 'required_acl': 'event.foo'}
 
@@ -285,29 +264,27 @@ class TestBus(IntegrationTest):
 class TestBusConnectionLost(IntegrationTest):
     asset = 'base'
 
-    @run_with_loop
     async def test_ws_connection_is_closed_when_bus_connection_is_lost(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
             await self.websocketd_client.op_subscribe('foo')
-            async with self.service_stopped('rabbitmq'):
+            async with self.asset_cls.service_stopped('rabbitmq'):
                 await self.websocketd_client.wait_for_close(code=1011)
 
 
 class TestRabbitMQRestart(IntegrationTest):
     asset = 'base'
 
-    @run_with_loop
     async def test_can_connect_after_rabbitmq_restart(self):
         event = {'name': 'foo', 'required_acl': None}
 
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
             await self.websocketd_client.op_subscribe('foo')
-            self.restart_service('rabbitmq')
+            self.asset_cls.restart_service('rabbitmq')
             await self.websocketd_client.wait_for_close(code=1011)
             await self.websocketd_client.close()
-            self.bus_client = self.make_bus()
+            self.bus_client = self.asset_cls.make_bus()
             await self.bus_client.connect()
             await self.websocketd_client.retry_connect_and_wait_for_init(token)
             await self.websocketd_client.op_subscribe('foo')
@@ -321,7 +298,6 @@ class TestRabbitMQRestart(IntegrationTest):
 class TestClientPing(IntegrationTest):
     asset = 'base'
 
-    @run_with_loop
     async def test_receive_pong_on_client_ping(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token, version=2)

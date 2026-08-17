@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
-import functools
+import unittest
 from contextlib import asynccontextmanager
 
 from wazo_test_helpers.asset_launching_test_case import (
@@ -41,9 +41,10 @@ class WrongClient:
         raise ClientCreateException(self.client_name)
 
 
-class IntegrationTest(AssetLaunchingTestCase):
+class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
     assets_root = ASSET_ROOT
     service = 'websocketd'
+    asset = 'base'
 
     # FIXME: Until a proper /status route is establish, wait a small amount
     # of time after creating service credentials to allow websocketd to find
@@ -56,17 +57,6 @@ class IntegrationTest(AssetLaunchingTestCase):
         cls.auth_client = cls.make_auth()
         cls.configure_auth()
         cls.wait_strategy.wait(cls)
-
-    def setUp(self):
-        self.loop = asyncio.get_event_loop()
-        self.bus_client = self.make_bus()
-        self.websocketd_client = self.make_websocketd()
-
-    def tearDown(self):
-        self.loop.run_until_complete(self.websocketd_client.close())
-        self.loop.run_until_complete(self.bus_client.close())
-        self.loop.close()
-        asyncio.set_event_loop(asyncio.new_event_loop())
 
     @classmethod
     def configure_auth(cls):
@@ -137,18 +127,33 @@ class IntegrationTest(AssetLaunchingTestCase):
             return WrongClient('rabbitmq')
         return BusClient(port)
 
-    def make_websocketd(self):
+    @classmethod
+    def make_websocketd(cls, loop):
         try:
-            port = self.service_port(9502, 'websocketd')
+            port = cls.service_port(9502, 'websocketd')
         except (NoSuchService, NoSuchPort):
             return WrongClient('websocketd')
-        return WebSocketdClient(port, loop=self.loop)
+        return WebSocketdClient(port, loop=loop)
 
 
-def run_with_loop(f):
-    # decorator to use on test methods of class deriving from IntegrationTest
-    @functools.wraps(f)
-    def wrapper(self, *args, **kwargs):
-        self.loop.run_until_complete(asyncio.ensure_future(f(self, *args, **kwargs)))
+class BaseAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
+    pass
 
-    return wrapper
+
+class StaticAuthCheckAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
+    asset = 'static_auth_check'
+
+
+class IntegrationTest(unittest.IsolatedAsyncioTestCase):
+    asset_cls: type[_BaseAssetLaunchingTestCase] = BaseAssetLaunchingTestCase
+
+    async def asyncSetUp(self):
+        self.auth_client = self.asset_cls.auth_client
+        self.bus_client = self.asset_cls.make_bus()
+        self.websocketd_client = self.asset_cls.make_websocketd(
+            asyncio.get_running_loop()
+        )
+
+    async def asyncTearDown(self):
+        await self.websocketd_client.close()
+        await self.bus_client.close()

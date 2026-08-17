@@ -6,7 +6,7 @@ import time
 
 import websockets
 
-from .helpers.base import IntegrationTest, run_with_loop
+from .helpers.base import IntegrationTest, StaticAuthCheckAssetLaunchingTestCase
 from .helpers.constants import (
     CLOSE_CODE_AUTH_EXPIRED,
     CLOSE_CODE_AUTH_FAILED,
@@ -20,24 +20,20 @@ from .helpers.constants import (
 class TestAuthentication(IntegrationTest):
     asset = 'base'
 
-    @run_with_loop
     async def test_no_token_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             None, CLOSE_CODE_NO_TOKEN_ID
         )
 
-    @run_with_loop
     async def test_valid_auth_gives_result(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
 
-    @run_with_loop
     async def test_invalid_auth_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             INVALID_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
         )
 
-    @run_with_loop
     async def test_unauthorized_auth_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             UNAUTHORIZED_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
@@ -47,9 +43,8 @@ class TestAuthentication(IntegrationTest):
 class TestNoAuth(IntegrationTest):
     asset = 'base'
 
-    @run_with_loop
     async def test_no_auth_server_closes_websocket(self):
-        async with self.service_stopped('auth'):
+        async with self.asset_cls.service_stopped('auth'):
             await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
 
 
@@ -58,7 +53,6 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
     _CLIENT_TIMEOUT = 20
 
-    @run_with_loop
     async def test_token_expire_use_dynamic_strategy(self):
         token_expiration = 1
         with self.auth_client.token(expiration=token_expiration) as token:
@@ -66,7 +60,6 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
         self.websocketd_client.timeout = self._CLIENT_TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
-    @run_with_loop
     async def test_token_expire_new_token_is_received_use_dynamic_strategy(self):
         token_expiration = 2
         start = time.time()
@@ -84,10 +77,10 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
 class TestTokenExpirationCheckStatic(IntegrationTest):
     asset = 'static_auth_check'
+    asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
     _CLIENT_TIMEOUT = 5
 
-    @run_with_loop
     async def test_token_expire_use_static_strategy(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
@@ -97,17 +90,16 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
 
 class TestTokenExpiration(IntegrationTest):
     asset = 'static_auth_check'
+    asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
     _TIMEOUT = 5
 
-    @run_with_loop
     async def test_token_expire_closes_websocket(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
-    @run_with_loop
     async def test_token_renew(self):
         token = self.auth_client.make_token()
         await self.websocketd_client.connect_and_wait_for_init(token, version=2)
@@ -119,7 +111,6 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.wait_for_nothing()
         self.auth_client.revoke_token(new_token)
 
-    @run_with_loop
     async def test_token_renew_and_expire(self):
         token = self.auth_client.make_token()
         await self.websocketd_client.connect_and_wait_for_init(token, version=2)
@@ -133,7 +124,6 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
         self.auth_client.revoke_token(token)
 
-    @run_with_loop
     async def test_token_renew_invalid(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token, version=2)

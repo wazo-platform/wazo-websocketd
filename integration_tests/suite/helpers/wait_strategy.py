@@ -19,10 +19,7 @@ class WaitUntilValidConnection(WaitStrategy):
     timeout = START_TIMEOUT
 
     def wait(self, test):
-        loop = asyncio.get_event_loop()
-        fut = asyncio.ensure_future(self.await_for_connection(test))
-        if not loop.is_running():
-            loop.run_until_complete(fut)
+        asyncio.run(self.await_for_connection(test))
 
     async def await_for_connection(self, test):
         port = test.service_port(9502, 'websocketd')
