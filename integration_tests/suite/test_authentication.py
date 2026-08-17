@@ -3,7 +3,6 @@
 
 import asyncio
 import time
-from textwrap import dedent
 
 import websockets
 
@@ -60,18 +59,6 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
     _CLIENT_TIMEOUT = 20
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-dynamic-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content='auth_check_strategy: dynamic',
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
-
     @run_with_loop
     async def test_token_expire_use_dynamic_strategy(self):
         token_expiration = 1
@@ -97,26 +84,9 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
 
 class TestTokenExpirationCheckStatic(IntegrationTest):
-    asset = 'base'
+    asset = 'static_auth_check'
 
-    _CLIENT_TIMEOUT = 15
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content=dedent(
-                '''
-                auth_check_strategy: static
-                auth_check_static_interval: 10
-                '''
-            ),
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
+    _CLIENT_TIMEOUT = 5
 
     @run_with_loop
     async def test_token_expire_use_static_strategy(self):
@@ -127,26 +97,9 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
 
 
 class TestTokenExpiration(IntegrationTest):
-    asset = 'base'
+    asset = 'static_auth_check'
 
-    _TIMEOUT = 15
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content=dedent(
-                '''
-                auth_check_strategy: static
-                auth_check_static_interval: 10
-                '''
-            ),
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
+    _TIMEOUT = 5
 
     @run_with_loop
     async def test_token_expire_closes_websocket(self):

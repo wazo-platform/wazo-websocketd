@@ -1,0 +1,12 @@
+services:
+  sync:
+    depends_on:
+      - auth
+      - rabbitmq
+      - websocketd
+    environment:
+      TARGETS: "auth:9497 rabbitmq:5672 websocketd:9502"
+
+  websocketd:
+    volumes:
+      - "./etc/wazo-websocketd/conf.d/20-auth-check-static.yml:/etc/wazo-websocketd/conf.d/20-auth-check-static.yml"
