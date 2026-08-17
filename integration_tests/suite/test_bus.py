@@ -5,7 +5,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from .helpers.base import IntegrationTest
+from .helpers.base import IntegrationTest, use_asset
 from .helpers.constants import (
     MASTER_TENANT_UUID,
     TENANT1_UUID,
@@ -15,9 +15,8 @@ from .helpers.constants import (
 )
 
 
+@use_asset('base')
 class TestBus(IntegrationTest):
-    asset = 'base'
-
     async def asyncSetUp(self):
         await super().asyncSetUp()
         self.event = {'name': 'foo', 'required_acl': None}
@@ -261,9 +260,8 @@ class TestBus(IntegrationTest):
             await self.websocketd_client.close()
 
 
+@use_asset('base')
 class TestBusConnectionLost(IntegrationTest):
-    asset = 'base'
-
     async def test_ws_connection_is_closed_when_bus_connection_is_lost(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
@@ -272,9 +270,8 @@ class TestBusConnectionLost(IntegrationTest):
                 await self.websocketd_client.wait_for_close(code=1011)
 
 
+@use_asset('base')
 class TestRabbitMQRestart(IntegrationTest):
-    asset = 'base'
-
     async def test_can_connect_after_rabbitmq_restart(self):
         event = {'name': 'foo', 'required_acl': None}
 
@@ -295,9 +292,8 @@ class TestRabbitMQRestart(IntegrationTest):
         self.assertEqual(event, received_event)
 
 
+@use_asset('base')
 class TestClientPing(IntegrationTest):
-    asset = 'base'
-
     async def test_receive_pong_on_client_ping(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token, version=2)

@@ -5,6 +5,7 @@ import asyncio
 import unittest
 from contextlib import asynccontextmanager
 
+import pytest
 from wazo_test_helpers.asset_launching_test_case import (
     AssetLaunchingTestCase,
     NoSuchPort,
@@ -26,6 +27,8 @@ from .constants import (
 )
 from .wait_strategy import WaitStrategy, WaitUntilValidConnection
 from .websocketd import WebSocketdClient
+
+use_asset = pytest.mark.usefixtures
 
 
 class ClientCreateException(Exception):

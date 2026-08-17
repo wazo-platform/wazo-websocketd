@@ -6,7 +6,11 @@ import time
 
 import websockets
 
-from .helpers.base import IntegrationTest, StaticAuthCheckAssetLaunchingTestCase
+from .helpers.base import (
+    IntegrationTest,
+    StaticAuthCheckAssetLaunchingTestCase,
+    use_asset,
+)
 from .helpers.constants import (
     CLOSE_CODE_AUTH_EXPIRED,
     CLOSE_CODE_AUTH_FAILED,
@@ -17,9 +21,8 @@ from .helpers.constants import (
 )
 
 
+@use_asset('base')
 class TestAuthentication(IntegrationTest):
-    asset = 'base'
-
     async def test_no_token_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             None, CLOSE_CODE_NO_TOKEN_ID
@@ -40,17 +43,15 @@ class TestAuthentication(IntegrationTest):
         )
 
 
+@use_asset('base')
 class TestNoAuth(IntegrationTest):
-    asset = 'base'
-
     async def test_no_auth_server_closes_websocket(self):
         async with self.asset_cls.service_stopped('auth'):
             await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
 
 
+@use_asset('base')
 class TestTokenExpirationCheckDynamic(IntegrationTest):
-    asset = 'base'
-
     _CLIENT_TIMEOUT = 20
 
     async def test_token_expire_use_dynamic_strategy(self):
@@ -75,8 +76,8 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
         assert elapsed > token_expiration + 1
 
 
+@use_asset('static_auth_check')
 class TestTokenExpirationCheckStatic(IntegrationTest):
-    asset = 'static_auth_check'
     asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
     _CLIENT_TIMEOUT = 5
@@ -88,8 +89,8 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
 
+@use_asset('static_auth_check')
 class TestTokenExpiration(IntegrationTest):
-    asset = 'static_auth_check'
     asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
     _TIMEOUT = 5
