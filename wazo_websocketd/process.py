@@ -15,7 +15,12 @@ from setproctitle import setproctitle
 from websockets.server import WebSocketServer as Serve
 from xivo.xivo_logging import setup_logging, silence_loggers
 
-from .auth import Authenticator, MasterTenantProxy, StringSharedBuffer
+from .auth import (
+    Authenticator,
+    MasterTenantProxy,
+    StringSharedBuffer,
+    build_authenticator,
+)
 from .bus import BusService
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
 from .session import SessionFactory
@@ -30,7 +35,7 @@ class WebsocketServer:
 
     def _create_server(self) -> tuple[BusService, Serve]:
         config = self._config
-        authenticator: Authenticator = Authenticator(config)
+        authenticator: Authenticator = build_authenticator(config)
         service: BusService = BusService(config)
         factory: SessionFactory = SessionFactory(
             config,

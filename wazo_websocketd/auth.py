@@ -4,99 +4,220 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
 import logging
 from abc import ABC, abstractmethod
-from collections import namedtuple
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from ctypes import Array as CArray
 from ctypes import c_wchar
-from functools import partial
-from itertools import chain, repeat
+from datetime import datetime
 from multiprocessing.sharedctypes import RawArray
+from ssl import SSLContext, create_default_context
+from typing import Any, ClassVar
 
-import requests
-from wazo_auth_client import Client as AuthClient
+import aiohttp
 from wazo_auth_client.types import TokenDict
 
-from .exception import AuthenticationError, AuthenticationExpiredError
+from .config import is_unix_socket
+from .exception import (
+    AuthenticationError,
+    AuthenticationExpiredError,
+    AuthServerUnavailableError,
+)
+from .helpers.timing import parse_expiration, utcnow_naive
+
+DEFAULT_ACL = 'websocketd'
+_SERVER_ERROR = 500
 
 logger = logging.getLogger(__name__)
+_TokenGetter = Callable[[], dict[str, Any]]
+
+
+def _build_ssl(verify_certificate: bool | str) -> bool | SSLContext | None:
+    if isinstance(verify_certificate, str):
+        return create_default_context(cafile=verify_certificate)
+    return None if verify_certificate else False
 
 
 class AsyncAuthClient:
-    _ACL = 'websocketd'
+    _ACL = DEFAULT_ACL
+    _TIMEOUT = 10.0
+    _CONNECT_TIMEOUT = 2.0
 
-    def __init__(self, config):
-        self._auth_client = AuthClient(**config['auth'])
-
-    async def get_token(self, token_id):
-        logger.debug('getting token from wazo-auth')
-        loop = asyncio.get_event_loop()
-        try:
-            return await loop.run_in_executor(
-                None, self._auth_client.token.get, token_id, self._ACL
-            )
-        except requests.RequestException as e:
-            # there's currently no clean way with wazo_auth_client to know if the
-            # error was caused because the token is unauthorized, or unknown
-            # or something else
-            raise AuthenticationError(e)
-
-    async def is_valid_token(self, token_id, acl=_ACL):
-        logger.debug('checking token validity from wazo-auth')
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._auth_client.token.is_valid, token_id, acl
+    def __init__(self, config: dict[str, Any]) -> None:
+        host = config.get('host', 'localhost')
+        self._socket_path = host if is_unix_socket(host) else None
+        self._base_url = self._build_endpoint(config)
+        self._ssl = (
+            None
+            if self._socket_path
+            else _build_ssl(config.get('verify_certificate', True))
         )
+        self._credentials = None
+        if username := config.get('username'):
+            self._credentials = aiohttp.BasicAuth(
+                username, config.get('password') or ''
+            )
+
+        self._timeout: float = config.get('timeout') or self._TIMEOUT
+        self._session: aiohttp.ClientSession | None = None
+
+    @staticmethod
+    def _build_endpoint(config: dict[str, Any]) -> str:
+        host = config.get('host', 'localhost')
+        prefix = config.get('prefix') or ''
+        if prefix and not prefix.startswith('/'):
+            prefix = f'/{prefix}'
+
+        if is_unix_socket(host):
+            return f'http://localhost{prefix}/0.1'
+
+        scheme = 'https' if config.get('https') else 'http'
+        return f'{scheme}://{host}:{config.get("port", 9497)}{prefix}/0.1'
+
+    async def get_token(self, token_id: str, acl: str | None = None) -> TokenDict:
+        logger.debug('retrieving token data and validating authorization')
+        return await self._send(
+            'GET', f'/token/{token_id}', params={'scope': acl or self._ACL}
+        )
+
+    async def create_token(self, expiration: int) -> TokenDict:
+        logger.debug('creating a service token')
+        return await self._send('POST', '/token', json={'expiration': expiration})
+
+    async def is_valid_token(self, token_id: str, acl: str | None = None) -> bool:
+        logger.debug('checking token validity')
+        try:
+            await self._send(
+                'HEAD', f'/token/{token_id}', params={'scope': acl or self._ACL}
+            )
+        except AuthenticationError:
+            return False
+        return True
+
+    async def close(self) -> None:
+        if self._session is not None and not self._session.closed:
+            await self._session.close()
+        self._session = None
+
+    async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            async with self.session.request(
+                method,
+                f'{self._base_url}{path}',
+                ssl=self._ssl,
+                auth=self._credentials,
+                **kwargs,
+            ) as response:
+                response.raise_for_status()
+                if response.status == 204:
+                    return None
+                return (await response.json())['data']
+        except aiohttp.ClientResponseError as e:
+            if e.status < _SERVER_ERROR:
+                raise AuthenticationError(e, status_code=e.status)
+            raise AuthServerUnavailableError(e)
+        except (TimeoutError, aiohttp.ClientError) as e:
+            raise AuthServerUnavailableError(e)
+
+    @property
+    def session(self) -> aiohttp.ClientSession:
+        if self._session is None or self._session.closed:
+            connector = (
+                aiohttp.UnixConnector(path=self._socket_path)
+                if self._socket_path
+                else aiohttp.TCPConnector()
+            )
+            self._session = aiohttp.ClientSession(
+                connector=connector,
+                timeout=aiohttp.ClientTimeout(
+                    total=self._timeout, connect=self._CONNECT_TIMEOUT
+                ),
+            )
+        return self._session
 
 
 class _AuthChecker(ABC):
+    strategy: ClassVar[str]
+    _strategies: ClassVar[dict[str, type[_AuthChecker]]] = {}
+
+    def __init__(self, client: AsyncAuthClient, config: dict[str, Any]) -> None:
+        self._auth_client = client
+        self._max_unavailable = config['auth_check_max_unavailable']
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if strategy := getattr(cls, 'strategy', None):
+            _AuthChecker._strategies[strategy] = cls
+
+    @classmethod
+    def get_strategy(cls, strategy: str) -> type[_AuthChecker]:
+        if strategy not in cls._strategies:
+            raise ValueError(
+                f'unknown auth_check_strategy `{strategy}`, '
+                f'expected one of {sorted(cls._strategies)}'
+            )
+        return cls._strategies[strategy]
+
     @abstractmethod
-    def __init__(self, async_auth_client: AsyncAuthClient, config: dict) -> None:
+    def _next_delay(self, token: dict[str, Any]) -> float:
         ...
 
     @abstractmethod
-    async def run(self, token_getter: Callable[[], dict]) -> None:
-        ...
+    async def _check(self, token_id: str) -> None:
+        """Raise AuthenticationExpiredError once the token no longer holds."""
+
+    async def run(self, token_getter: _TokenGetter) -> None:
+        # one instance serves every session, so the tally stays local
+        unavailable = 0
+        while True:
+            await asyncio.sleep(self._next_delay(token_getter()))
+            logger.debug('%s auth check: testing token validity', self.strategy)
+            try:
+                await self._check(token_getter()['token'])
+            except AuthServerUnavailableError as e:
+                unavailable += 1
+                logger.warning(
+                    '%s auth check: wazo-auth unavailable '
+                    '(%d/%d consecutive failures)',
+                    self.strategy,
+                    unavailable,
+                    self._max_unavailable,
+                )
+                if unavailable >= self._max_unavailable:
+                    raise AuthServerUnavailableError() from e
+                continue
+            unavailable = 0
 
 
 class _StaticIntervalAuthChecker(_AuthChecker):
-    def __init__(self, async_auth_client, config):
-        self._async_auth_client = async_auth_client
+    strategy = 'static'
+
+    def __init__(self, client: AsyncAuthClient, config: dict[str, Any]) -> None:
+        super().__init__(client, config)
         self._interval = config['auth_check_static_interval']
 
-    async def run(self, token_getter):
-        while True:
-            await asyncio.sleep(self._interval)
-            logger.debug('static auth check: testing token validity')
-            token_id = token_getter()['token']
-            is_valid = await self._async_auth_client.is_valid_token(token_id)
-            if not is_valid:
-                raise AuthenticationExpiredError()
+    def _next_delay(self, _token: dict[str, Any]) -> float:
+        return self._interval
+
+    async def _check(self, token_id: str) -> None:
+        if not await self._auth_client.is_valid_token(token_id):
+            raise AuthenticationExpiredError()
 
 
 class _DynamicIntervalAuthChecker(_AuthChecker):
-    def __init__(self, async_auth_client, config):
-        self._async_auth_client = async_auth_client
+    strategy = 'dynamic'
 
-    async def run(self, token_getter):
-        while True:
-            token = token_getter()
-            token_id = token['token']
-            now = datetime.datetime.utcnow()
-            expires_at = datetime.datetime.fromisoformat(token['utc_expires_at'])
-            next_check = self._calculate_next_check(now, expires_at)
-            await asyncio.sleep(next_check)
-            token = token_getter()
-            token_id = token['token']
-            logger.debug('dynamic auth check: testing token validity')
-            try:
-                await self._async_auth_client.get_token(token_id)
-            except AuthenticationError:
-                raise AuthenticationExpiredError()
+    def _next_delay(self, token: dict[str, Any]) -> float:
+        expires_at = parse_expiration(token['utc_expires_at'])
+        return self._calculate_next_check(utcnow_naive(), expires_at)
 
-    def _calculate_next_check(self, now, expires_at):
+    async def _check(self, token_id: str) -> None:
+        try:
+            await self._auth_client.get_token(token_id)
+        except AuthenticationError:
+            raise AuthenticationExpiredError()
+
+    def _calculate_next_check(self, now: datetime, expires_at: datetime) -> float:
         delta = expires_at - now
         delta_seconds = delta.total_seconds()
         if delta_seconds <= 0:
@@ -110,36 +231,22 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
         return 43200
 
 
-STRATEGIES = {
-    'static': _StaticIntervalAuthChecker,
-    'dynamic': _DynamicIntervalAuthChecker,
-}
-
-
 class Authenticator:
-    def __init__(self, config):
-        self._async_auth_client = AsyncAuthClient(config)
-        auth_check_class: type[_AuthChecker] | None = STRATEGIES.get(
-            config['auth_check_strategy']
-        )
-        if not auth_check_class:
-            raise Exception(
-                'unknown auth_check_strategy {}'.format(config['auth_check_strategy'])
-            )
-        self._auth_check = auth_check_class(self._async_auth_client, config)
+    def __init__(self, client: AsyncAuthClient, auth_check: _AuthChecker) -> None:
+        self._auth_client = client
+        self._auth_check = auth_check
 
-    def get_token(self, token_id):
+    def get_token(self, token_id: str) -> Awaitable[TokenDict]:
         # This function returns a coroutine.
-        return self._async_auth_client.get_token(token_id)
+        return self._auth_client.get_token(token_id)
 
-    def is_valid_token(self, token_id, acl=None):
-        # This function returns a coroutine.
-        return self._async_auth_client.is_valid_token(token_id, acl)
-
-    def run_check(self, token_getter):
+    def run_check(self, token_getter: _TokenGetter) -> Awaitable[None]:
         # This function returns a coroutine that raise an AuthenticationExpiredError exception
         # when the token expires.
         return self._auth_check.run(token_getter)
+
+    async def close(self) -> None:
+        await self._auth_client.close()
 
 
 StringSharedBuffer = CArray[c_wchar]
@@ -167,81 +274,7 @@ class MasterTenantProxy:
         return cls.proxy.value is not None
 
 
-class ServiceTokenRenewer:
-    DEFAULT_EXPIRATION = 21600  # 6h
-    DEFAULT_LEEWAY_FACTOR = 0.85
-
-    Callback = namedtuple('Callback', ['method', 'details', 'oneshot'])
-
-    def __init__(self, config: dict):
-        self._callbacks: list[ServiceTokenRenewer.Callback] = []
-        self._client = AuthClient(**config['auth'])
-        self._expiration: int = self.DEFAULT_EXPIRATION
-        self._lock = asyncio.Lock()
-        self._loop = asyncio.get_event_loop()
-        self._task: asyncio.Task = None  # type: ignore[assignment]
-
-    async def __aenter__(self):
-        logger.info('service token renewer started')
-        self._task = self._loop.create_task(self._run())
-        return self
-
-    async def __aexit__(self, *args):
-        if not self._task.cancelled():
-            self._task.cancel()
-        logger.info('service token renewer stopped')
-
-    def subscribe(
-        self,
-        callback: Callable[[str], None],
-        *,
-        details: bool = False,
-        oneshot: bool = False,
-    ) -> None:
-        callback_ = self.Callback(callback, details, oneshot)
-        self._callbacks.append(callback_)
-
-    def unsubscribe(
-        self,
-        callback: Callable[[str], None],
-        *,
-        details: bool = False,
-        oneshot: bool = False,
-    ) -> None:
-        callback_ = self.Callback(callback, details, oneshot)
-        try:
-            self._callbacks.remove(callback_)
-        except ValueError:
-            pass
-
-    async def _run(self):
-        while True:
-            token = await self._fetch_token()
-            await self._notify(token)
-            await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
-
-    async def _fetch_token(self) -> TokenDict:
-        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
-        fn = partial(self._client.token.new, expiration=self._expiration)
-        while True:
-            try:
-                return await self._loop.run_in_executor(None, fn)
-            except Exception:
-                interval = next(timeouts)
-                await self.on_error(interval)
-            await asyncio.sleep(interval)
-
-    async def _notify(self, token: TokenDict):
-        callbacks = self._callbacks.copy()
-        for callback in callbacks:
-            if callback.oneshot:
-                async with self._lock:
-                    self._callbacks.remove(callback)
-            payload = token if callback.details else token['token']
-            self._loop.call_soon(callback.method, payload)
-
-    async def on_error(self, interval: int):
-        logger.error(
-            'Failed to create an access token, retrying in %d seconds',
-            interval,
-        )
+def build_authenticator(config: dict[str, Any]) -> Authenticator:
+    client = AsyncAuthClient(config['auth'])
+    checker = _AuthChecker.get_strategy(config['auth_check_strategy'])
+    return Authenticator(client, checker(client, config))

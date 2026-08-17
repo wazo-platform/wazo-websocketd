@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -6,9 +6,10 @@ import logging
 from asyncio import FIRST_COMPLETED, Future
 from signal import SIGINT, SIGTERM
 
-from .auth import MasterTenantProxy, ServiceTokenRenewer
+from .auth import MasterTenantProxy
 from .bus import BusService
 from .process import ProcessPool
+from .token_renewer import ServiceTokenRenewer
 
 logger = logging.getLogger(__name__)
 
