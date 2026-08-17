@@ -1,8 +1,9 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import functools
+from contextlib import asynccontextmanager
 
 from wazo_test_helpers.asset_launching_test_case import (
     AssetLaunchingTestCase,
@@ -18,6 +19,7 @@ from .constants import (
     ASSET_ROOT,
     MASTER_TENANT_UUID,
     MASTER_USER_UUID,
+    START_TIMEOUT,
     TENANT1_UUID,
     TENANT2_UUID,
     TOKEN_UUID,
@@ -95,6 +97,25 @@ class IntegrationTest(AssetLaunchingTestCase):
                 'parent_uuid': str(MASTER_TENANT_UUID),
             },
         )
+
+    @classmethod
+    @asynccontextmanager
+    async def service_stopped(cls, service):
+        cls.stop_service(service)
+        try:
+            yield
+        finally:
+            cls.start_service(service)
+            if service == 'auth':
+                # the restarted mock lost its in-memory state and may map a
+                # new host port: remake the client and reconfigure it
+                cls.auth_client = cls.make_auth()
+                for _ in range(START_TIMEOUT):
+                    if cls.auth_client.is_up():
+                        break
+                    await asyncio.sleep(1)
+                cls.configure_auth()
+            await WaitUntilValidConnection().await_for_connection(cls)
 
     @classmethod
     def make_filesystem(cls):

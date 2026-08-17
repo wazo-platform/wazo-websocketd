@@ -290,9 +290,8 @@ class TestBusConnectionLost(IntegrationTest):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
             await self.websocketd_client.op_subscribe('foo')
-            self.stop_service('rabbitmq')
-
-            await self.websocketd_client.wait_for_close(code=1011)
+            async with self.service_stopped('rabbitmq'):
+                await self.websocketd_client.wait_for_close(code=1011)
 
 
 class TestRabbitMQRestart(IntegrationTest):

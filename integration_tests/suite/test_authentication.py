@@ -15,7 +15,6 @@ from .helpers.constants import (
     TOKEN_UUID,
     UNAUTHORIZED_TOKEN_ID,
 )
-from .helpers.wait_strategy import TimeWaitStrategy
 
 
 class TestAuthentication(IntegrationTest):
@@ -46,12 +45,12 @@ class TestAuthentication(IntegrationTest):
 
 
 class TestNoAuth(IntegrationTest):
-    asset = 'no_auth_server'
-    wait_strategy = TimeWaitStrategy()
+    asset = 'base'
 
     @run_with_loop
     async def test_no_auth_server_closes_websocket(self):
-        await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
+        async with self.service_stopped('auth'):
+            await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
 
 
 class TestTokenExpirationCheckDynamic(IntegrationTest):
