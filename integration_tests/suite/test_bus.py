@@ -86,13 +86,17 @@ class TestBus(IntegrationTest):
         event = await self.websocketd_client.recv_msg()
         self.assertEqual({"op": "event", "code": 0, "data": self.event}, event)
 
-        with self.auth_client.token(acl=['websocketd']) as token:
+        with self.auth_client.token(
+            user_uuid=self.user_uuid, acl=['websocketd']
+        ) as token:
             await self.websocketd_client.op_token(token)
             await self.bus_client.publish(self.event, self.tenant_uuid, self.user_uuid)
             await self.websocketd_client.wait_for_nothing()
 
         # Got right again
-        with self.auth_client.token(acl=['websocketd', 'event.foo']) as token:
+        with self.auth_client.token(
+            user_uuid=self.user_uuid, acl=['websocketd', 'event.foo']
+        ) as token:
             await self.websocketd_client.op_token(token)
             await self.bus_client.publish(self.event, self.tenant_uuid, self.user_uuid)
             event = await self.websocketd_client.recv_msg()

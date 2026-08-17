@@ -6,8 +6,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from itertools import chain, cycle, repeat
-from multiprocessing import Value
+from itertools import chain, repeat
 from secrets import token_hex
 from typing import NamedTuple
 
@@ -22,16 +21,20 @@ from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenant
 from .exception import (
+    AuthenticationError,
     BusConnectionError,
     BusConnectionLostError,
     EventPermissionError,
     InvalidEvent,
     InvalidTokenError,
+    SessionRevokedError,
 )
+from .helpers.timing import exponential_backoff
 
 logger = logging.getLogger(__name__)
 
 SESSION_DELETED_EVENT = 'auth_session_deleted'
+_NOT_FOUND = 404
 
 
 def parse_event_session_uuid(body: bytes | str) -> str | None:
@@ -42,10 +45,6 @@ def parse_event_session_uuid(body: bytes | str) -> str | None:
     except (ValueError, KeyError, TypeError, AttributeError):
         logger.warning('discarding malformed `%s` event', SESSION_DELETED_EVENT)
         return None
-
-
-def bus_url(config: dict) -> str:
-    return 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
 
 
 class _UserHelper:
@@ -95,11 +94,12 @@ class _UserHelper:
         return self._token['metadata']['uuid']
 
 
-class BusConnection:
-    _id_counter = Value('i', 1)
+def bus_url(config: dict) -> str:
+    return 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
 
+
+class BusConnection:
     def __init__(self, url: str):
-        self._id: int = self._get_unique_id()
         self._url: str = url
         self._closing = asyncio.Event()
         self._connected = asyncio.Event()
@@ -107,12 +107,6 @@ class BusConnection:
         self._protocol: AmqpProtocol = None  # type: ignore[assignment]
         self._transport: asyncio.Transport = None  # type: ignore[assignment]
         self._task: asyncio.Task = None  # type: ignore[assignment]
-
-    @classmethod
-    def _get_unique_id(cls) -> int:
-        id_ = cls._id_counter.value  # type: ignore[attr-defined]
-        cls._id_counter.value += 1  # type: ignore[attr-defined]
-        return id_
 
     @property
     def is_closing(self):
@@ -137,37 +131,32 @@ class BusConnection:
 
             # if terminated, exit
             if self.is_closing:
-                logger.info('[connection %d] connection to bus closed', self._id)
+                logger.info('bus connection closed')
                 return
 
-            logger.info(
-                '[connection %d] unexpectedly lost connection to bus, attempting to reconnect...',
-                self._id,
-            )
+            logger.info('bus connection lost, attempting to reconnect...')
 
     async def connect(self):
-        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
+        timeouts = chain(exponential_backoff(1, 5), repeat(32))
         while True:
             try:
                 transport, protocol = await aioamqp.from_url(self._url, heartbeat=10)
             except (AmqpClosedConnection, OSError):
                 timeout = next(timeouts)
                 logger.debug(
-                    '[connection %d] unable to connect, retrying in %d seconds',
-                    self._id,
-                    timeout,
+                    'unable to connect to the bus, retrying in %d seconds', timeout
                 )
                 try:
                     await asyncio.wait_for(self._closing.wait(), timeout)
                 except TimeoutError:
                     continue
-                logger.info('[connection %d] cancelling connection...', self._id)
+                logger.info('cancelling bus connection...')
                 self._closing.set()
                 return False
             else:
                 self._transport, self._protocol = transport, protocol
                 self._connected.set()
-                logger.info('[connection %d] connected to bus', self._id)
+                logger.info('connected to bus')
                 return True
 
     async def disconnect(self):
@@ -178,25 +167,19 @@ class BusConnection:
 
     async def get_channel(self, *, wait: bool = True) -> Channel:
         if not self.is_connected and not wait:
-            raise BusConnectionError(
-                f'[connection {self._id}] connection isn\'t established yet'
-            )
+            raise BusConnectionError('bus connection is not established yet')
 
         try:
             await self._wait_for_connection()
             return await self._protocol.channel()
         except (AmqpClosedConnection, BusConnectionError, ChannelClosed):
-            raise BusConnectionError(
-                f'[connection {self._id}] failed to create a new channel'
-            )
+            raise BusConnectionError('failed to create a new bus channel')
+
+    def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
+        return BusConsumer(self, config, token)
 
     def add_consumer(self, consumer) -> None:
         self._consumers.append(consumer)
-
-    def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
-        consumer = BusConsumer(self, config, token)
-        self._consumers.append(consumer)
-        return consumer
 
     def remove_consumer(self, consumer):
         if consumer not in self._consumers:
@@ -214,50 +197,15 @@ class BusConnection:
         ]
         await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
         if self.is_closing:
-            raise BusConnectionError(f'[connection {self._id}] connection is closing')
-
-
-class _BusConnectionPool:
-    def __init__(self, url: str, pool_size: int):
-        self._loop = asyncio.get_event_loop()
-        self._connections = [BusConnection(url) for _ in range(pool_size)]
-        self._tasks: set = set()
-        self._iterator = cycle(self._connections)
-
-    def __len__(self):
-        return len(self._connections)
-
-    async def start(self):
-        self._tasks = {
-            self._loop.create_task(connection.run()) for connection in self._connections
-        }
-        logger.info('bus connection pool initialized with %d connections', len(self))
-
-    async def stop(self):
-        await asyncio.gather(
-            *{
-                asyncio.create_task(connection.disconnect())
-                for connection in self._connections
-            }
-        )
-
-        # wait for connections to close gracefully or force after 5 sec
-        _, pending = await asyncio.wait(self._tasks, timeout=5.0)
-
-        if pending:
-            logger.info('some connections did not exit gracefully, forcing...')
-            for task in pending:
-                task.cancel()
-
-        logger.info('bus connection pool closed (%s connections)', len(self))
-
-    def get_connection(self):
-        return next(self._iterator)
+            raise BusConnectionError('bus connection is closing')
 
 
 class BusConsumer:
+    _SETUP_DELAY = 0.05
+    _SETUP_RETRIES = 4
+
     def __init__(self, connection: BusConnection, config: dict, token: TokenDict):
-        self.set_token(token)
+        user = _UserHelper.from_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
         self._channel: Channel = None
@@ -267,9 +215,12 @@ class BusConsumer:
         self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
         self._queue: asyncio.Queue = asyncio.Queue()
+        self._subscriptions: set[str] = set()
+        self._set_user(user)
 
     async def __aenter__(self):
         await self._start_consuming()
+        self._connection.add_consumer(self)
         return self
 
     async def __aexit__(self, *args):
@@ -297,13 +248,14 @@ class BusConsumer:
         tenant_exchange = self._generate_name(f'tenant-{tenant_uuid}')
 
         await channel.exchange(
-            tenant_exchange, 'headers', durable=False, auto_delete=True
+            tenant_exchange, 'headers', durable=False, auto_delete=True, no_wait=True
         )
 
         await channel.exchange_bind(
             tenant_exchange,
             exchange,
             '',
+            no_wait=True,
             arguments={'origin_uuid': self._origin_uuid, 'tenant_uuid': tenant_uuid},
         )
 
@@ -314,12 +266,14 @@ class BusConsumer:
 
         await channel.basic_qos(prefetch_count=prefetch, connection_global=False)
 
-        response = await channel.queue(
-            queue_name, durable=False, auto_delete=True, exclusive=True
+        await channel.queue(
+            queue_name,
+            durable=False,
+            auto_delete=True,
+            exclusive=True,
+            no_wait=True,
         )
-        if response['queue'] is None:
-            raise BusConnectionError
-        return response['queue']
+        return queue_name
 
     def _decode_content(self, content: bytes, properties: Properties) -> BusMessage:
         headers = properties.headers
@@ -381,28 +335,66 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
+            if self._is_revocation(content, properties):
+                logger.info('session was deleted, closing the connection')
+                self._queue.put_nowait(SessionRevokedError())
+                return
+
             event = self._decode_content(content, properties)
         except InvalidEvent as exc:
             logger.error('error during message decoding (reason: %s)', exc)
         except EventPermissionError as exc:
             logger.debug('discarding event (reason: %s)', exc)
         else:
-            self._queue.put_nowait(event)
+            if self._is_subscribed(event.name):
+                self._queue.put_nowait(event)
         finally:
             await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
 
-    async def _start_consuming(self) -> None:
-        channel = self._channel = await self._connection.get_channel(wait=False)
-        exchange = self._exchange_name
+    def _is_revocation(self, content: bytes, properties: Properties) -> bool:
+        if (properties.headers or {}).get('name') != SESSION_DELETED_EVENT:
+            return False
+        return parse_event_session_uuid(content) == self._user.session_uuid
 
+    def _is_subscribed(self, event_name: str) -> bool:
+        return '*' in self._subscriptions or event_name in self._subscriptions
+
+    async def _start_consuming(self) -> None:
+        for delay in exponential_backoff(self._SETUP_DELAY, self._SETUP_RETRIES):
+            try:
+                await self._declare_topology()
+                return
+            except ChannelClosed as e:
+                if e.code != _NOT_FOUND:
+                    raise
+                logger.info(
+                    'bus topology vanished while connecting (%s), retrying', e.message
+                )
+                await asyncio.sleep(delay)
+
+        await self._declare_topology()
+
+    async def _declare_topology(self) -> None:
+        channel = self._channel = await self._connection.get_channel(wait=False)
+        self._amqp_queue = await self._create_queue(channel, self._prefetch)
+
+        exchange = self._exchange_name
         if not self._user.is_master_tenant():
             exchange = await self._create_tenant_exchange(channel, self._exchange_name)
         self._bound_exchange = exchange
 
-        # Create exclusive queue on exchange
-        self._amqp_queue = await self._create_queue(channel, self._prefetch)
+        # not a client subscription: the session must hear its own revocation
+        await channel.queue_bind(
+            self._amqp_queue,
+            self._bound_exchange,
+            '',
+            no_wait=True,
+            arguments={
+                'name': SESSION_DELETED_EVENT,
+                f'user_uuid:{self._user.uuid}': True,
+            },
+        )
 
-        # Start consuming on queue
         self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
 
         if self._user.is_master_tenant():
@@ -420,6 +412,10 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name: str) -> None:
+        self._subscriptions.add(event_name)
+        await self._bind(event_name)
+
+    async def _bind(self, event_name: str) -> None:
         for binding in self._generate_bindings(event_name):
             await self._channel.queue_bind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
@@ -429,6 +425,7 @@ class BusConsumer:
         self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
+        self._subscriptions.discard(event_name)
         for binding in self._generate_bindings(event_name):
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
@@ -441,7 +438,14 @@ class BusConsumer:
         }
 
     def set_token(self, token: TokenDict):
-        self._user = user = _UserHelper.from_token(token)
+        user = _UserHelper.from_token(token)
+        if user.uuid != self._user.uuid:
+            raise AuthenticationError('token belongs to another user')
+
+        self._set_user(user)
+
+    def _set_user(self, user: _UserHelper) -> None:
+        self._user = user
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
     @staticmethod
@@ -458,48 +462,42 @@ class BusMessage(NamedTuple):
 
 
 class BusService:
+    _STOP_TIMEOUT = 5.0
+
     def __init__(self, config: dict):
-        poolsize: int = config.get('worker_connections', 1)
-        url: str = 'amqp://{username}:{password}@{host}:{port}//'.format(
-            **config['bus']
-        )
+        if config.get('worker_connections') is not None:
+            logger.warning(
+                'configuration key `worker_connections` is deprecated and ignored: '
+                'each worker process owns one bus connection'
+            )
 
         self._config = config
-        self._connection_pool = _BusConnectionPool(url, poolsize)
+        self._connection = BusConnection(bus_url(config))
+        self._task: asyncio.Task = None  # type: ignore[assignment]
 
     async def __aenter__(self):
-        await self._connection_pool.start()
+        self._task = asyncio.get_event_loop().create_task(self._connection.run())
         return self
 
     async def __aexit__(self, *args):
-        await self._connection_pool.stop()
+        await self._connection.disconnect()
+
+        _, pending = await asyncio.wait([self._task], timeout=self._STOP_TIMEOUT)
+        if pending:
+            logger.info('bus connection did not exit gracefully, forcing...')
+            self._task.cancel()
 
     async def create_consumer(self, token: TokenDict) -> BusConsumer:
-        connection = self._connection_pool.get_connection()
-        return connection.spawn_consumer(self._config, token)
+        return self._connection.spawn_consumer(self._config, token)
 
     async def initialize_exchanges(self):
-        async def create_exchange(config: dict, channel: Channel):
-            name: str = config['bus']['exchange_name']
-            type_: str = config['bus']['exchange_type']
-            await channel.exchange(name, type_, durable=True)
-            logger.info('exchange `%s` initialized', name)
-
-        # Migration <22.13
-        # Upgrading from a previous version will keep `wazo-websocketd` exchange
-        # since it is durable, but is no longer needed, so let's delete it if unused
-        async def remove_deprecated(config: dict, channel: Channel):
-            if config['bus']['exchange_name'] != 'wazo-websocketd':
-                await channel.exchange_delete('wazo-websocketd', if_unused=True)
-                logger.info('migration: removed legacy `wazo-websocketd` exchange...')
-
-        logger.info('configuring RabbitMQ for wazo-websocketd...')
-        connection = self._connection_pool.get_connection()
         try:
-            channel = await connection.get_channel(wait=True)
+            channel = await self._connection.get_channel(wait=True)
         except BusConnectionError:
             return
 
-        await create_exchange(self._config, channel)
-        await remove_deprecated(self._config, channel)
+        name: str = self._config['bus']['exchange_name']
+        type_: str = self._config['bus']['exchange_type']
+        await channel.exchange(name, type_, durable=True)
         await channel.close()
+        logger.info('exchange `%s` initialized', name)
