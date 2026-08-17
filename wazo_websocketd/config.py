@@ -31,6 +31,7 @@ _DEFAULT_CONFIG = {
         'port': 80,
         'prefix': '/api/auth',
         'https': False,
+        'timeout': 10.0,
         'key_file': '/var/lib/wazo-auth-keys/wazo-websocketd-key.yml',
     },
     'auth_check_strategy': 'dynamic',
@@ -52,6 +53,21 @@ _DEFAULT_CONFIG = {
         'certificate': None,
         'private_key': None,
         'ping_interval': 60,
+    },
+    'broker': {
+        'listen': None,
+        'connect': None,
+        'port': 9506,
+    },
+    'status': {
+        'listen': '127.0.0.1',
+        'port': 9504,
+    },
+    'token_cache': {
+        'max_size': 16 * 1024 * 1024,  # 16 MB
+        'max_negative_entries': 10000,
+        'positive_ttl': 300,
+        'negative_ttl': 5,
     },
     'process_workers': 'auto',
     'worker_connections': 1,
@@ -76,6 +92,14 @@ def _parse_cli_args():
         '-c', '--config-file', action='store', help="The path where is the config file"
     )
     parser.add_argument(
+        '--supervised-as',
+        action='store',
+        help="Name of this process as one of the supervisor's children, set by "
+        "it at spawn. Its status is then served on a unix socket the supervisor "
+        "polls; without it the process runs standalone and serves its status "
+        "over TCP.",
+    )
+    parser.add_argument(
         '-d',
         '--debug',
         action='store_true',
@@ -93,6 +117,8 @@ def _parse_cli_args():
         result['debug'] = parsed_args.debug
     if parsed_args.user:
         result['user'] = parsed_args.user
+    if parsed_args.supervised_as:
+        result['supervised_as'] = parsed_args.supervised_as
 
     return result
 

@@ -43,5 +43,16 @@
 #  exchange_name: wazo-headers
 #  exchange_type: headers
 
+# Token validation goes through the caching broker, falling back to wazo-auth.
+# `listen` selects the transport:
+#   /path/to.sock -> unix socket, `port` is ignored
+#   an IP address -> TCP on `port`
+#   empty         -> no broker, validate against wazo-auth directly
+# Set `connect` only when workers dial another address than the broker binds.
+#broker:
+#  listen: null
+#  connect: null
+#  port: 9506
+
 ## Developer options -- do not use them
 #auth_check_strategy: dynamic
