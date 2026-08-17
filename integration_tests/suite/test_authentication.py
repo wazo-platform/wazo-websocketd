@@ -1,13 +1,16 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
 import time
-from textwrap import dedent
 
 import websockets
 
-from .helpers.base import IntegrationTest, run_with_loop
+from .helpers.base import (
+    IntegrationTest,
+    StaticAuthCheckAssetLaunchingTestCase,
+    use_asset,
+)
 from .helpers.constants import (
     CLOSE_CODE_AUTH_EXPIRED,
     CLOSE_CODE_AUTH_FAILED,
@@ -16,63 +19,41 @@ from .helpers.constants import (
     TOKEN_UUID,
     UNAUTHORIZED_TOKEN_ID,
 )
-from .helpers.wait_strategy import TimeWaitStrategy
 
 
+@use_asset('base')
 class TestAuthentication(IntegrationTest):
-    asset = 'basic'
-
-    @run_with_loop
     async def test_no_token_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             None, CLOSE_CODE_NO_TOKEN_ID
         )
 
-    @run_with_loop
     async def test_valid_auth_gives_result(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
 
-    @run_with_loop
     async def test_invalid_auth_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             INVALID_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
         )
 
-    @run_with_loop
     async def test_unauthorized_auth_closes_websocket(self):
         await self.websocketd_client.connect_and_wait_for_close(
             UNAUTHORIZED_TOKEN_ID, CLOSE_CODE_AUTH_FAILED
         )
 
 
+@use_asset('base')
 class TestNoAuth(IntegrationTest):
-    asset = 'no_auth_server'
-    wait_strategy = TimeWaitStrategy()
-
-    @run_with_loop
     async def test_no_auth_server_closes_websocket(self):
-        await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
+        async with self.asset_cls.service_stopped('auth'):
+            await self.websocketd_client.connect_and_wait_for_close(TOKEN_UUID)
 
 
+@use_asset('base')
 class TestTokenExpirationCheckDynamic(IntegrationTest):
-    asset = 'basic'
-
     _CLIENT_TIMEOUT = 20
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-dynamic-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content='auth_check_strategy: dynamic',
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
-
-    @run_with_loop
     async def test_token_expire_use_dynamic_strategy(self):
         token_expiration = 1
         with self.auth_client.token(expiration=token_expiration) as token:
@@ -80,7 +61,6 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
         self.websocketd_client.timeout = self._CLIENT_TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
-    @run_with_loop
     async def test_token_expire_new_token_is_received_use_dynamic_strategy(self):
         token_expiration = 2
         start = time.time()
@@ -96,29 +76,12 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
         assert elapsed > token_expiration + 1
 
 
+@use_asset('static_auth_check')
 class TestTokenExpirationCheckStatic(IntegrationTest):
-    asset = 'basic'
+    asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
-    _CLIENT_TIMEOUT = 15
+    _CLIENT_TIMEOUT = 5
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content=dedent(
-                '''
-                auth_check_strategy: static
-                auth_check_static_interval: 10
-                '''
-            ),
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
-
-    @run_with_loop
     async def test_token_expire_use_static_strategy(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
@@ -126,36 +89,18 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
 
+@use_asset('static_auth_check')
 class TestTokenExpiration(IntegrationTest):
-    asset = 'basic'
+    asset_cls = StaticAuthCheckAssetLaunchingTestCase
 
-    _TIMEOUT = 15
+    _TIMEOUT = 5
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.filesystem = cls.make_filesystem()
-        config_file = '/etc/wazo-websocketd/conf.d/20-auth-check-static-interval.yml'
-        cls.filesystem.create_file(
-            config_file,
-            content=dedent(
-                '''
-                auth_check_strategy: static
-                auth_check_static_interval: 10
-                '''
-            ),
-        )
-        cls.restart_service('websocketd')
-        cls.wait_strategy.wait(cls)
-
-    @run_with_loop
     async def test_token_expire_closes_websocket(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
-    @run_with_loop
     async def test_token_renew(self):
         token = self.auth_client.make_token()
         await self.websocketd_client.connect_and_wait_for_init(token, version=2)
@@ -167,7 +112,6 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.wait_for_nothing()
         self.auth_client.revoke_token(new_token)
 
-    @run_with_loop
     async def test_token_renew_and_expire(self):
         token = self.auth_client.make_token()
         await self.websocketd_client.connect_and_wait_for_init(token, version=2)
@@ -181,7 +125,6 @@ class TestTokenExpiration(IntegrationTest):
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
         self.auth_client.revoke_token(token)
 
-    @run_with_loop
     async def test_token_renew_invalid(self):
         with self.auth_client.token() as token:
             await self.websocketd_client.connect_and_wait_for_init(token, version=2)
