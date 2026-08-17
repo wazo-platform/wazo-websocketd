@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -30,6 +30,22 @@ from .exception import (
 )
 
 logger = logging.getLogger(__name__)
+
+SESSION_DELETED_EVENT = 'auth_session_deleted'
+
+
+def parse_event_session_uuid(body: bytes | str) -> str | None:
+    try:
+        message = json.loads(body)
+        data = message.get('data') or message
+        return data['uuid']
+    except (ValueError, KeyError, TypeError, AttributeError):
+        logger.warning('discarding malformed `%s` event', SESSION_DELETED_EVENT)
+        return None
+
+
+def bus_url(config: dict) -> str:
+    return 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
 
 
 class _UserHelper:
@@ -79,7 +95,7 @@ class _UserHelper:
         return self._token['metadata']['uuid']
 
 
-class _BusConnection:
+class BusConnection:
     _id_counter = Value('i', 1)
 
     def __init__(self, url: str):
@@ -174,6 +190,9 @@ class _BusConnection:
                 f'[connection {self._id}] failed to create a new channel'
             )
 
+    def add_consumer(self, consumer) -> None:
+        self._consumers.append(consumer)
+
     def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
         consumer = BusConsumer(self, config, token)
         self._consumers.append(consumer)
@@ -201,7 +220,7 @@ class _BusConnection:
 class _BusConnectionPool:
     def __init__(self, url: str, pool_size: int):
         self._loop = asyncio.get_event_loop()
-        self._connections = [_BusConnection(url) for _ in range(pool_size)]
+        self._connections = [BusConnection(url) for _ in range(pool_size)]
         self._tasks: set = set()
         self._iterator = cycle(self._connections)
 
@@ -237,12 +256,12 @@ class _BusConnectionPool:
 
 
 class BusConsumer:
-    def __init__(self, connection: _BusConnection, config: dict, token: TokenDict):
+    def __init__(self, connection: BusConnection, config: dict, token: TokenDict):
         self.set_token(token)
         self._amqp_queue: str | None = None
         self._bound_exchange: str | None = None
         self._channel: Channel = None
-        self._connection: _BusConnection = connection
+        self._connection: BusConnection = connection
         self._consumer_tag: str | None = None
         self._exchange_name: str = config['bus']['exchange_name']
         self._prefetch: int = config['bus']['consumer_prefetch']
