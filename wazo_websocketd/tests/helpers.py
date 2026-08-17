@@ -13,6 +13,14 @@ from aiohttp import web
 from ..auth import AsyncAuthClient
 
 
+class Clock:
+    def __init__(self, now: float = 1000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+
 class FakeWazoAuth:
     def __init__(self, socket_path: str | None = None) -> None:
         self.tokens: dict[str, dict[str, Any]] = {}

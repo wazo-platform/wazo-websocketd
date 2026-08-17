@@ -14,6 +14,7 @@ Depends:
  adduser,
  python3-aioamqp,
  python3-aiohttp,
+ python3-cachetools,
  python3-setproctitle,
  python3-websockets,
  python3-yaml,
