@@ -20,7 +20,7 @@ from aioamqp.properties import Properties
 from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
-from .auth import MasterTenantProxy
+from .auth import MasterTenant
 from .exception import (
     BusConnectionError,
     BusConnectionLostError,
@@ -66,7 +66,7 @@ class _UserHelper:
         )
 
     def is_master_tenant(self) -> bool:
-        return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
+        return MasterTenant.matches(self.tenant_uuid)
 
     @classmethod
     def from_token(cls, token: TokenDict):

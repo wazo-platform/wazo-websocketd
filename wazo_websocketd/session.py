@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl, urlparse
 
 import websockets
 
-from .auth import MasterTenantProxy
+from .auth import MasterTenant
 from .bus import BusConsumer, BusService
 from .exception import (
     AuthenticationError,
@@ -180,7 +180,7 @@ class Session:
             await self._ws.close(1011)
 
     async def _run(self):
-        if not MasterTenantProxy.has_master_tenant():
+        if not MasterTenant.is_known():
             raise AuthenticationError('unable to determine master tenant')
 
         self._protocol_version = _extract_version_from_path(self._path)
