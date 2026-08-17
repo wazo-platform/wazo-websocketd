@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 import pytest
+from aioamqp.exceptions import ChannelClosed
 from xivo.auth_verifier import AccessCheck
 
+from ..bus import BusConnection, _BusConsumer
 from ..config import _DEFAULT_CONFIG
 from ..consumers import BusEvent, SessionInvalidator, UserBusSubscriber
 from ..exception import (
@@ -20,6 +23,7 @@ from ..exception import (
     BusConnectionLostError,
     EventPermissionError,
     InvalidEvent,
+    SessionRevokedError,
 )
 from .helpers import BUS_CONFIG as _BUS_CONFIG
 from .helpers import caching_authenticator, marshaled, session_token, token_provider
@@ -138,6 +142,8 @@ class TestEventDispatching:
                 pass
 
     async def test_a_delivered_event_is_handed_to_whoever_is_consuming(self):
+        self.consumer._subscriptions.add('foo')
+
         await self._deliver(b'{"id": 7}', name='foo', required_acl='some.acl')
 
         async for event in self.consumer:
@@ -293,9 +299,183 @@ class TestSessionInvalidator:
         await asyncio.wait_for(task, timeout=1)
 
         assert upstream.get_token.await_count == 2
-        channel.queue_bind.assert_awaited_once_with(
-            'q',
-            'wazo-headers',
-            '',
-            arguments={'name': 'auth_session_deleted'},
+        queue, exchange, routing_key = channel.queue_bind.await_args.args
+        assert queue.startswith('wazo-websocketd.broker-')
+        assert (exchange, routing_key) == ('wazo-headers', '')
+        assert channel.queue_bind.await_args.kwargs == {
+            'no_wait': True,
+            'arguments': {'name': 'auth_session_deleted'},
+        }
+
+
+class _FakeChannel:
+    def __init__(self, fail_bind_with=None):
+        self._fail_bind_with = fail_bind_with
+        self.bind_arguments = []
+        self.is_open = True
+
+    async def exchange(self, *args, **kwargs):
+        pass
+
+    async def exchange_bind(self, *args, **kwargs):
+        pass
+
+    async def basic_qos(self, *args, **kwargs):
+        pass
+
+    async def queue(self, name, **kwargs):
+        return {'queue': name}
+
+    async def basic_consume(self, *args, **kwargs):
+        return {'consumer_tag': 'tag'}
+
+    async def close(self):
+        self.is_open = False
+
+    async def queue_bind(
+        self, queue, exchange, routing_key, no_wait=False, arguments=None
+    ):
+        if self._fail_bind_with is not None:
+            raise self._fail_bind_with
+        self.bind_arguments.append(arguments)
+
+
+def _revocable_subscriber(**token_fields):
+    token = _token(uuid='user-1')
+    token['session_uuid'] = 'session-1'
+    token.update(token_fields)
+    return UserBusSubscriber(Mock(), dict(_DEFAULT_CONFIG, uuid='origin-uuid'), token)
+
+
+def _subscriber_over(*channels):
+    subscriber = _revocable_subscriber()
+    opened = list(channels)
+    subscriber._consumer._connection = Mock(
+        get_channel=AsyncMock(side_effect=lambda **_: opened.pop(0))
+    )
+    return subscriber
+
+
+async def _deliver_to(subscriber, name, body, acl='some.acl'):
+    channel = Mock(basic_client_ack=AsyncMock())
+    properties = Mock(headers={'name': name, 'required_acl': acl})
+    await subscriber._consumer._on_message(
+        channel, json.dumps(body).encode(), Mock(delivery_tag='tag'), properties
+    )
+
+
+class TestSessionRevocation:
+    async def test_the_deletion_of_our_own_session_terminates_the_subscriber(self):
+        subscriber = _revocable_subscriber()
+
+        # enforcement must not depend on the client being allowed to see the event
+        await _deliver_to(
+            subscriber,
+            'auth_session_deleted',
+            {'data': {'uuid': 'session-1'}},
+            acl='nope',
         )
+
+        with pytest.raises(SessionRevokedError):
+            await subscriber.__anext__()
+
+    async def test_the_deletion_of_another_session_is_ignored(self):
+        subscriber = _revocable_subscriber()
+
+        await _deliver_to(
+            subscriber, 'auth_session_deleted', {'data': {'uuid': 'other'}}
+        )
+
+        assert subscriber._consumer._queue.empty()
+
+    async def test_renewing_the_token_follows_the_new_session(self):
+        subscriber = _revocable_subscriber()
+        renewed = _token(uuid='user-1')
+        renewed['session_uuid'] = 'session-9'
+
+        subscriber.set_token(renewed)
+        await _deliver_to(
+            subscriber, 'auth_session_deleted', {'data': {'uuid': 'session-9'}}
+        )
+
+        with pytest.raises(SessionRevokedError):
+            await subscriber.__anext__()
+
+    def test_a_token_for_another_user_is_refused(self):
+        subscriber = _revocable_subscriber()
+
+        with pytest.raises(AuthenticationError):
+            subscriber.set_token(_token(uuid='user-2'))
+
+
+class TestEventFiltering:
+    async def test_an_event_nobody_subscribed_to_is_not_forwarded(self):
+        subscriber = _revocable_subscriber()
+
+        await _deliver_to(subscriber, 'some_event', {'data': {}})
+
+        assert subscriber._consumer._queue.empty()
+
+    @pytest.mark.parametrize(
+        'subscription',
+        [pytest.param('some_event', id='by name'), pytest.param('*', id='wildcard')],
+    )
+    async def test_a_subscribed_event_is_forwarded(self, subscription):
+        subscriber = _revocable_subscriber()
+        subscriber._subscriptions.add(subscription)
+
+        await _deliver_to(subscriber, 'some_event', {'data': {}})
+
+        assert (await subscriber.__anext__()).name == 'some_event'
+
+
+class TestSubscriberSetup:
+    async def test_a_tenant_exchange_that_vanished_mid_setup_is_redeclared(self):
+        # the exchange is auto_delete, so the tenant's last session leaving
+        # between our declare and our bind takes it with them
+        gone = ChannelClosed(404, "NOT_FOUND - no exchange 'wazo-websocketd.tenant-x'")
+        first, second = _FakeChannel(fail_bind_with=gone), _FakeChannel()
+        subscriber = _subscriber_over(first, second)
+
+        await subscriber._consumer._start_consuming()
+
+        assert subscriber._consumer._channel is second
+        assert second.bind_arguments == [
+            {'name': 'auth_session_deleted', 'user_uuid:user-1': True}
+        ]
+
+    async def test_setup_gives_up_after_repeated_losses(self):
+        gone = ChannelClosed(404, 'NOT_FOUND')
+        attempts = _BusConsumer._SETUP_RETRIES + 1
+        subscriber = _subscriber_over(
+            *(_FakeChannel(fail_bind_with=gone) for _ in range(attempts))
+        )
+
+        with patch.object(_BusConsumer, '_SETUP_DELAY', 0):
+            with pytest.raises(ChannelClosed):
+                await subscriber._consumer._start_consuming()
+
+    async def test_a_refused_binding_is_not_retried(self):
+        refused = ChannelClosed(403, 'ACCESS_REFUSED')
+        subscriber = _subscriber_over(
+            _FakeChannel(fail_bind_with=refused), _FakeChannel()
+        )
+
+        with pytest.raises(ChannelClosed) as raised:
+            await subscriber._consumer._start_consuming()
+
+        assert raised.value.code == 403
+
+    async def test_a_subscriber_whose_setup_failed_is_off_the_connection(self):
+        connection = BusConnection('amqp://localhost')
+        connection.get_channel = AsyncMock(  # type: ignore[method-assign]
+            return_value=_FakeChannel(fail_bind_with=ChannelClosed(403, 'REFUSED'))
+        )
+        subscriber = UserBusSubscriber(
+            connection, dict(_DEFAULT_CONFIG, uuid='origin-uuid'), _token(uuid='user-1')
+        )
+
+        with pytest.raises(ChannelClosed):
+            await subscriber.__aenter__()
+
+        assert connection._consumers == []

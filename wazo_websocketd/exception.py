@@ -39,6 +39,10 @@ class AuthenticationExpiredError(AuthenticationError):
     pass
 
 
+class SessionRevokedError(AuthenticationExpiredError):
+    pass
+
+
 class AuthServerUnavailableError(_AuthError):
     pass
 

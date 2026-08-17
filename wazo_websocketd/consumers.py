@@ -18,11 +18,13 @@ from xivo.auth_verifier import AccessCheck
 from .auth import MasterTenant
 from .bus import BusConnection, _BusConsumer, generate_name
 from .exception import (
+    AuthenticationError,
     BusConnectionError,
     BusConnectionLostError,
     EventPermissionError,
     InvalidEvent,
     InvalidTokenError,
+    SessionRevokedError,
 )
 from .helpers.timing import capped_backoff
 from .helpers.token import TokenUser
@@ -57,16 +59,24 @@ class UserBusSubscriber:
     """Serves one websocket session the events its user is allowed to see."""
 
     def __init__(self, connection: BusConnection, config: dict, token: TokenDict):
-        self.set_token(token)
+        user = self._read_token(token)
+        self._set_user(user)
         self._origin_uuid: str = config['uuid']
         self._exchange_name: str = config['bus']['exchange_name']
         self._tenant_exchange = self._own_tenant_exchange()
+        self._subscriptions: set[str] = set()
         self._consumer = _BusConsumer(
             connection,
             queue_name=generate_name(f'user-{self._user.uuid}', token_hex(3)),
             exchange=self._tenant_exchange or self._exchange_name,
             handler=self._decode,
             wait=False,  # a session must not wait on a bus that is down
+            bindings=[
+                {
+                    'name': SESSION_DELETED_EVENT,
+                    f'user_uuid:{self._user.uuid}': True,
+                }
+            ],
             prefetch=config['bus']['consumer_prefetch'],
             on_setup=self._declare_tenant_exchange if self._tenant_exchange else None,
         )
@@ -85,10 +95,12 @@ class UserBusSubscriber:
         return await self._consumer.__anext__()
 
     async def subscribe(self, event_name: str) -> None:
+        self._subscriptions.add(event_name)
         for binding in self._generate_bindings(event_name):
             await self._consumer.bind(binding)
 
     async def unsubscribe(self, event_name: str) -> None:
+        self._subscriptions.discard(event_name)
         for binding in self._generate_bindings(event_name):
             await self._consumer.unbind(binding)
 
@@ -99,9 +111,20 @@ class UserBusSubscriber:
         }
 
     def set_token(self, token: TokenDict) -> None:
+        user = self._read_token(token)
+        if user.uuid != self._user.uuid:
+            raise AuthenticationError('token belongs to another user')
+
+        self._set_user(user)
+
+    @staticmethod
+    def _read_token(token: TokenDict) -> TokenUser:
         if 'metadata' not in token:
             raise InvalidTokenError('Malformed token received, missing token details')
-        self._user = user = TokenUser(token, MasterTenant.matches)
+        return TokenUser(token, MasterTenant.matches)
+
+    def _set_user(self, user: TokenUser) -> None:
+        self._user = user
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
     def _own_tenant_exchange(self) -> str | None:
@@ -132,14 +155,35 @@ class UserBusSubscriber:
             },
         )
 
-    def _decode(self, content: bytes, properties: Properties) -> BusEvent | None:
+    def _decode(
+        self, content: bytes, properties: Properties
+    ) -> BusEvent | Exception | None:
+        if self._is_revocation(content, properties):
+            logger.info(
+                'session was deleted, closing the connection (user=%s tenant=%s)',
+                self._user.uuid,
+                self._user.tenant_uuid,
+            )
+            return SessionRevokedError()
+
         try:
-            return self._decode_content(content, properties)
+            event = self._decode_content(content, properties)
         except InvalidEvent as exc:
             logger.error('error during message decoding (reason: %s)', exc)
         except EventPermissionError as exc:
             logger.debug('discarding event (reason: %s)', exc)
+        else:
+            if self._is_subscribed(event.name):
+                return event
         return None
+
+    def _is_revocation(self, content: bytes, properties: Properties) -> bool:
+        if (properties.headers or {}).get('name') != SESSION_DELETED_EVENT:
+            return False
+        return parse_event_session_uuid(content) == self._user.session_uuid
+
+    def _is_subscribed(self, event_name: str) -> bool:
+        return '*' in self._subscriptions or event_name in self._subscriptions
 
     def _decode_content(self, content: bytes, properties: Properties) -> BusEvent:
         headers = properties.headers
