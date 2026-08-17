@@ -1,13 +1,11 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-import asyncio
 import datetime
-import unittest
 from unittest.mock import Mock, patch, sentinel
 
+import pytest
 import requests
-from hamcrest import assert_that, equal_to, same_instance
 
 from ..auth import (
     AsyncAuthClient,
@@ -18,163 +16,95 @@ from ..auth import (
 from ..exception import AuthenticationError, AuthenticationExpiredError
 
 
-class TestWebSocketdAuthClient(unittest.TestCase):
+class TestAsyncAuthClient:
     _ACL = 'websocketd'
 
-    def setUp(self):
-        self.auth_client = Mock()
-        patcher = patch(
-            "wazo_websocketd.auth.AuthClient",
-            return_value=self.auth_client,
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
-        self.websocketd_auth_client = AsyncAuthClient({"auth": {}})
+    @pytest.fixture(autouse=True)
+    def auth_client(self):
+        with patch('wazo_websocketd.auth.AuthClient') as factory:
+            self.auth_client = factory.return_value
+            self.client = AsyncAuthClient({'auth': {}})
+            yield
 
-    def test_get_token(self):
+    async def test_get_token(self):
         self.auth_client.token.get.return_value = sentinel.token
 
-        token = asyncio.get_event_loop().run_until_complete(
-            self.websocketd_auth_client.get_token(sentinel.token_id)
-        )
+        token = await self.client.get_token(sentinel.token_id)
 
-        assert_that(token, same_instance(sentinel.token))
+        assert token is sentinel.token
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
-    def test_get_token_invalid(self):
+    async def test_get_token_invalid(self):
         self.auth_client.token.get.side_effect = requests.HTTPError('403 Unauthorized')
 
-        self.assertRaises(
-            AuthenticationError,
-            asyncio.get_event_loop().run_until_complete,
-            self.websocketd_auth_client.get_token(sentinel.token_id),
-        )
+        with pytest.raises(AuthenticationError):
+            await self.client.get_token(sentinel.token_id)
         self.auth_client.token.get.assert_called_once_with(sentinel.token_id, self._ACL)
 
-    def test_is_valid_token(self):
+    async def test_is_valid_token(self):
         self.auth_client.token.is_valid.return_value = True
 
-        is_valid = asyncio.get_event_loop().run_until_complete(
-            self.websocketd_auth_client.is_valid_token(sentinel.token_id)
-        )
-
-        assert_that(is_valid)
+        assert await self.client.is_valid_token(sentinel.token_id) is True
         self.auth_client.token.is_valid.assert_called_once_with(
             sentinel.token_id, self._ACL
         )
 
 
-class TestAuthenticator(unittest.TestCase):
-    def setUp(self):
-        self.websocketd_auth_client = Mock()
-        patcher = patch(
-            "wazo_websocketd.auth.AsyncAuthClient",
-            return_value=self.websocketd_auth_client,
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-        self.auth_client = Mock()
-        patcher = patch(
-            "wazo_websocketd.auth.AuthClient",
-            return_value=self.auth_client,
-        )
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
-        self.authenticator = Authenticator(
-            {"auth_check_static_interval": 1, "auth_check_strategy": "static"}
-        )
+class TestAuthenticator:
+    @pytest.fixture(autouse=True)
+    def clients(self):
+        with patch('wazo_websocketd.auth.AsyncAuthClient') as async_factory, patch(
+            'wazo_websocketd.auth.AuthClient'
+        ):
+            self.async_auth_client = async_factory.return_value
+            self.authenticator = Authenticator(
+                {'auth_check_static_interval': 1, 'auth_check_strategy': 'static'}
+            )
+            yield
 
     def test_get_token(self):
         coro = self.authenticator.get_token(sentinel.token_id)
 
-        assert_that(
-            coro, same_instance(self.websocketd_auth_client.get_token.return_value)
-        )
-        self.websocketd_auth_client.get_token.assert_called_once_with(sentinel.token_id)
+        assert coro is self.async_auth_client.get_token.return_value
+        self.async_auth_client.get_token.assert_called_once_with(sentinel.token_id)
 
     def test_is_valid_token(self):
         coro = self.authenticator.is_valid_token(sentinel.token_id, sentinel.acl)
 
-        assert_that(
-            coro, same_instance(self.websocketd_auth_client.is_valid_token.return_value)
-        )
-        self.websocketd_auth_client.is_valid_token.assert_called_once_with(
+        assert coro is self.async_auth_client.is_valid_token.return_value
+        self.async_auth_client.is_valid_token.assert_called_once_with(
             sentinel.token_id, sentinel.acl
         )
 
 
-class TestStaticIntervalAuthChecker(unittest.TestCase):
-    def setUp(self):
-        self.websocketd_auth_client = Mock()
-        self.check = _StaticIntervalAuthChecker(
-            self.websocketd_auth_client, {"auth_check_static_interval": 0.1}
-        )
-        self.token = {'token': sentinel.token_id}
+class TestStaticIntervalAuthChecker:
+    async def test_the_session_ends_once_the_token_stops_validating(self):
+        client = Mock()
 
-    def test_run(self):
-        async def is_valid_token(token_id):
+        async def is_valid_token(_token_id):
             return False
 
-        self.websocketd_auth_client.is_valid_token = is_valid_token
+        client.is_valid_token = is_valid_token
+        check = _StaticIntervalAuthChecker(client, {'auth_check_static_interval': 0.1})
 
-        self.assertRaises(
-            AuthenticationExpiredError,
-            asyncio.get_event_loop().run_until_complete,
-            self.check.run(lambda: self.token),
-        )
+        with pytest.raises(AuthenticationExpiredError):
+            await check.run(lambda: {'token': sentinel.token_id})
 
 
-class TestDynamicIntervalAuthChecker(unittest.TestCase):
-    def setUp(self):
-        self.websocketd_auth_client = Mock()
-        self.check = _DynamicIntervalAuthChecker(self.websocketd_auth_client, {})
-
-    def test_expiration_in_the_past(self):
-        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
-        expires_at = now - datetime.timedelta(seconds=10)
-
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(15))
-
-    def test_expiration_expiring_soon(self):
-        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
-        expires_at = now + datetime.timedelta(seconds=4)
-
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(4))
-
-    def test_expiration_less_than_80_seconds_expiring_soon(self):
-        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
-        expires_at = now + datetime.timedelta(seconds=10)
-
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(10))
-
-    def test_expiration_less_than_80_seconds(self):
-        now = datetime.datetime(2016, 1, 1, 0, 0, 0)
-        expires_at = now + datetime.timedelta(seconds=70)
-
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(60))
-
-    def test_expiration_more_than_75_seconds(self):
+class TestDynamicIntervalAuthChecker:
+    @pytest.mark.parametrize(
+        ('expires_in', 'next_check'),
+        [
+            pytest.param(datetime.timedelta(seconds=-10), 15, id='already expired'),
+            pytest.param(datetime.timedelta(seconds=4), 4, id='expiring in seconds'),
+            pytest.param(datetime.timedelta(seconds=10), 10, id='expiring soon'),
+            pytest.param(datetime.timedelta(seconds=70), 60, id='under 80s'),
+            pytest.param(datetime.timedelta(seconds=100), 75, id='over 80s'),
+            pytest.param(datetime.timedelta(days=1), 43200, id='over a day'),
+        ],
+    )
+    def test_the_next_check_is_scheduled_from_the_expiry(self, expires_in, next_check):
+        check = _DynamicIntervalAuthChecker(Mock(), {})
         now = datetime.datetime(2016, 1, 1, 0, 1, 0)
-        expires_at = now + datetime.timedelta(seconds=100)
 
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(75))
-
-    def test_expiration_more_than_1_day(self):
-        now = datetime.datetime(2016, 1, 1, 0, 1, 0)
-        expires_at = now + datetime.timedelta(days=1)
-
-        result = self.check._calculate_next_check(now, expires_at)
-
-        assert_that(result, equal_to(43200))
+        assert check._calculate_next_check(now, now + expires_in) == next_check
