@@ -14,6 +14,11 @@ from xivo.xivo_logging import get_log_level_by_name
 
 logger = logging.getLogger(__name__)
 
+
+def is_unix_socket(listen: str) -> bool:
+    return listen.startswith('/')
+
+
 _DEFAULT_CONFIG = {
     'config_file': '/etc/wazo-websocketd/config.yml',
     'extra_config_files': '/etc/wazo-websocketd/conf.d/',
@@ -28,6 +33,8 @@ _DEFAULT_CONFIG = {
         'key_file': '/var/lib/wazo-auth-keys/wazo-websocketd-key.yml',
     },
     'auth_check_strategy': 'dynamic',
+    'auth_check_static_interval': 60,
+    'auth_check_max_unavailable': 5,
     'bus': {
         'host': 'localhost',
         'port': 5672,

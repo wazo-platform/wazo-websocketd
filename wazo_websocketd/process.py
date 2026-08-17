@@ -15,7 +15,12 @@ from setproctitle import setproctitle
 from websockets.server import WebSocketServer as Serve
 from xivo.xivo_logging import setup_logging, silence_loggers
 
-from .auth import Authenticator, MasterTenantProxy, StringSharedBuffer
+from .auth import (
+    Authenticator,
+    MasterTenantProxy,
+    StringSharedBuffer,
+    build_authenticator,
+)
 from .bus import BusService
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
 from .session import SessionFactory
@@ -28,9 +33,9 @@ class WebsocketServer:
         self._config = config
         self._tombstone: asyncio.Future = asyncio.Future()
 
-    def _create_server(self) -> tuple[BusService, Serve]:
+    def _create_server(self) -> tuple[Authenticator, BusService, Serve]:
         config = self._config
-        authenticator: Authenticator = Authenticator(config)
+        authenticator: Authenticator = build_authenticator(config)
         service: BusService = BusService(config)
         factory: SessionFactory = SessionFactory(
             config,
@@ -48,12 +53,12 @@ class WebsocketServer:
             factory.ws_handler, host=host, port=port, ssl=ssl, reuse_port=True
         )
 
-        return service, server
+        return authenticator, service, server
 
     async def serve(self):
         logger.info('starting websocket server on pid: %s', getpid())
-        service, server = self._create_server()
-        async with service, server:
+        authenticator, service, server = self._create_server()
+        async with authenticator, service, server:
             await self._tombstone
         logger.info('stopping websocket server on pid: %s', getpid())
 

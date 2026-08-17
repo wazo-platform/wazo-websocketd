@@ -14,6 +14,7 @@ from .bus import BusConsumer, BusService
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
+    AuthServerUnavailableError,
     BusConnectionError,
     BusConnectionLostError,
     NoTokenError,
@@ -125,6 +126,14 @@ class Session:
                 self._tenant_uuid,
             )
             await self._ws.close(self._CLOSE_CODE_AUTH_FAILED, 'authentication failed')
+        except AuthServerUnavailableError:
+            logger.info(
+                'closing websocket connection: authentication server unavailable '
+                '(user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
+            await self._ws.close(1011, 'authentication server unavailable')
         except SessionProtocolError as e:
             logger.info(
                 'closing websocket connection: session protocol error: %s (user=%s tenant=%s)',
