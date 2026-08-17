@@ -49,3 +49,5 @@ py_version = 311
 
 [tool.pytest.ini_options]
 testpaths = ["wazo_websocketd"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
