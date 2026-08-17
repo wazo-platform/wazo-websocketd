@@ -14,12 +14,7 @@ import websockets.server
 from setproctitle import setproctitle
 from websockets.server import WebSocketServer as Serve
 
-from .auth import (
-    Authenticator,
-    MasterTenantProxy,
-    StringSharedBuffer,
-    build_authenticator,
-)
+from .auth import Authenticator, MasterTenant, StringSharedBuffer, build_authenticator
 from .bus import BusService
 from .helpers.logs import setup_process_logging
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
@@ -83,7 +78,7 @@ class ProcessPool:
         context = get_context('spawn')
         chdir(self._dir.name)
         self._pool = context.Pool(
-            workers, self._init_worker, (config, MasterTenantProxy.proxy)
+            workers, self._init_worker, (config, MasterTenant.proxy)
         )
 
     async def __aenter__(self):
@@ -102,7 +97,7 @@ class ProcessPool:
         setproctitle('wazo-websocketd: worker')
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        MasterTenantProxy.proxy = master_tenant_proxy
+        MasterTenant.proxy = master_tenant_proxy
 
         setup_process_logging(config, 'worker')
 

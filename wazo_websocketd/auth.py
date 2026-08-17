@@ -335,25 +335,35 @@ class Authenticator:
 StringSharedBuffer = CArray[c_wchar]
 
 
-class MasterTenantProxy:
+class MasterTenant:
+    """The tenant every event may be seen from, resolved once at startup.
+
+    Backed by shared memory: the process pool resolves it in the parent and its
+    forked children read it, while a standalone process just sets its own.
+    """
+
     proxy: StringSharedBuffer = RawArray(c_wchar, 36)
 
     @classmethod
-    def set_master_tenant(cls, token: TokenDict):
+    def set(cls, token: TokenDict) -> None:
         try:
             tenant_uuid = token['metadata']['tenant_uuid']
         except KeyError:
             logger.error('invalid token, contains no tenant_uuid')
         else:
-            logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
-            cls.proxy.value = tenant_uuid
+            cls.set_uuid(tenant_uuid)
+
+    @classmethod
+    def set_uuid(cls, tenant_uuid: str) -> None:
+        logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
+        cls.proxy.value = tenant_uuid
 
     @classmethod
     def matches(cls, tenant_uuid: str) -> bool:
-        return cls.has_master_tenant() and cls.proxy.value == tenant_uuid
+        return cls.is_known() and cls.proxy.value == tenant_uuid
 
     @classmethod
-    def has_master_tenant(cls) -> bool:
+    def is_known(cls) -> bool:
         # an unset shared buffer reads as an empty string, never as None
         return bool(cls.proxy.value)
 

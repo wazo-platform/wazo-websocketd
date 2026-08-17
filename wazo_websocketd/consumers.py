@@ -15,7 +15,7 @@ from aioamqp.properties import Properties
 from wazo_auth_client.types import TokenDict
 from xivo.auth_verifier import AccessCheck
 
-from .auth import MasterTenantProxy
+from .auth import MasterTenant
 from .bus import BusConnection, _BusConsumer, generate_name
 from .exception import (
     BusConnectionError,
@@ -101,7 +101,7 @@ class UserBusSubscriber:
     def set_token(self, token: TokenDict) -> None:
         if 'metadata' not in token:
             raise InvalidTokenError('Malformed token received, missing token details')
-        self._user = user = TokenUser(token, MasterTenantProxy.matches)
+        self._user = user = TokenUser(token, MasterTenant.matches)
         self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
 
     def _own_tenant_exchange(self) -> str | None:
