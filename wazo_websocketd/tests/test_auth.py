@@ -10,9 +10,11 @@ import pytest
 
 from ..auth import (
     Authenticator,
+    FallbackAuthClient,
     _AuthChecker,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
+    build_auth_client,
     build_authenticator,
 )
 from ..exception import (
@@ -20,7 +22,13 @@ from ..exception import (
     AuthenticationExpiredError,
     AuthServerUnavailableError,
 )
-from .helpers import auth_client, fake_wazo_auth, refused_config
+from .helpers import (
+    auth_client,
+    broker_client,
+    fake_wazo_auth,
+    refused_broker_config,
+    refused_config,
+)
 
 _SECRET = 'ac6b1c8e-0000-4000-8000-secrettokenid'
 
@@ -245,3 +253,106 @@ class TestDynamicIntervalAuthChecker:
             await check.run(
                 lambda: {'token': 'T', 'utc_expires_at': '2016-01-01T00:00:00'}
             )
+
+
+class TestFallbackAuthClient:
+    async def test_validation_goes_through_the_broker(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            broker.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    async def test_it_reaches_the_broker_over_a_unix_socket(self, tmp_path):
+        token = _valid_token()
+        socket_path = str(tmp_path / 'broker.sock')
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth(socket_path) as broker:
+            broker.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    async def test_a_socket_nobody_serves_falls_back_to_wazo_auth(self, tmp_path):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct:
+            direct.tokens['T'] = token
+            config = {
+                'auth': direct.config(),
+                'broker': {'listen': str(tmp_path / 'nobody-here.sock')},
+            }
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert direct.requests == [('GET', 'T', 'websocketd')]
+
+    async def test_an_unreachable_broker_falls_back_to_wazo_auth(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct:
+            direct.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': refused_broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert direct.requests == [('GET', 'T', 'websocketd')]
+
+    async def test_minting_a_token_never_goes_through_the_broker(self):
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                await client.create_token(60)
+
+            # the broker only answers GET and HEAD on a token id, it cannot mint one
+            assert len(direct.created) == 1
+            assert broker.created == []
+
+    async def test_connect_overrides_listen_for_reaching_the_broker(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            broker.tokens['T'] = token
+            config = {
+                'auth': direct.config(),
+                'broker': {
+                    'listen': '0.0.0.0',
+                    'connect': '127.0.0.1',
+                    'port': broker.port,
+                },
+            }
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    def test_a_socket_path_selects_a_unix_socket_and_ignores_the_port(self):
+        client = build_auth_client(
+            {
+                'auth': {},
+                'broker': {
+                    'listen': '/run/wazo-websocketd/broker.sock',
+                    'port': 9506,
+                    'https': True,
+                },
+            }
+        )
+
+        assert isinstance(client, FallbackAuthClient)
+        assert client._socket_path == '/run/wazo-websocketd/broker.sock'
+        assert client._base_url == 'http://localhost/0.1'
+        assert client._ssl is None
+
+    def test_without_a_broker_the_client_talks_to_wazo_auth_directly(self):
+        client = build_auth_client({'auth': {'host': '127.0.0.1'}, 'broker': {}})
+
+        assert isinstance(client, FallbackAuthClient) is False

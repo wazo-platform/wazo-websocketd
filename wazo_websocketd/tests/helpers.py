@@ -10,7 +10,7 @@ from typing import Any
 
 from aiohttp import web
 
-from ..auth import AsyncAuthClient
+from ..auth import AsyncAuthClient, build_auth_client
 
 
 class Clock:
@@ -39,6 +39,11 @@ class FakeWazoAuth:
         if self._socket_path:
             return {'host': self._socket_path, 'https': False}
         return {'host': '127.0.0.1', 'port': self.port, 'https': False}
+
+    def broker_config(self) -> dict[str, Any]:
+        listen = self._socket_path or '127.0.0.1'
+        port = None if self._socket_path else self.port
+        return {'listen': listen, 'port': port, 'https': False}
 
     async def start(self) -> None:
         app = web.Application()
@@ -97,6 +102,15 @@ async def auth_client(config: dict[str, Any]) -> AsyncIterator[AsyncAuthClient]:
         await client.close()
 
 
+@asynccontextmanager
+async def broker_client(config: dict[str, Any]) -> AsyncIterator[AsyncAuthClient]:
+    client = build_auth_client(config)
+    try:
+        yield client
+    finally:
+        await client.close()
+
+
 def _closed_port() -> int:
     with socket.socket() as free_port_probe:
         free_port_probe.bind(('127.0.0.1', 0))
@@ -105,3 +119,7 @@ def _closed_port() -> int:
 
 def refused_config() -> dict[str, Any]:
     return {'host': '127.0.0.1', 'port': _closed_port(), 'https': False}
+
+
+def refused_broker_config() -> dict[str, Any]:
+    return {'listen': '127.0.0.1', 'port': _closed_port(), 'https': False}

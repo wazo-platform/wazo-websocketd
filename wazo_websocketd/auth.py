@@ -136,6 +136,30 @@ class AsyncAuthClient:
         return self._session
 
 
+class FallbackAuthClient(AsyncAuthClient):
+    """Reads through this server, falling back to another when unreachable."""
+
+    def __init__(self, config: dict[str, Any], fallback: AsyncAuthClient) -> None:
+        super().__init__(config)
+        self._fallback = fallback
+
+    async def create_token(self, expiration: int) -> TokenDict:
+        return await self._fallback.create_token(expiration)
+
+    async def close(self) -> None:
+        await super().close()
+        await self._fallback.close()
+
+    async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            return await super()._send(method, path, **kwargs)
+        except AuthServerUnavailableError as e:
+            logger.warning(
+                '%s unreachable, falling back to the next one: %s', self._base_url, e
+            )
+            return await self._fallback._send(method, path, **kwargs)
+
+
 class _AuthChecker(ABC):
     strategy: ClassVar[str]
     _strategies: ClassVar[dict[str, type[_AuthChecker]]] = {}
@@ -280,7 +304,15 @@ class MasterTenantProxy:
         return cls.proxy.value is not None
 
 
+def build_auth_client(config: dict[str, Any]) -> AsyncAuthClient:
+    direct = AsyncAuthClient(config['auth'])
+    broker = config.get('broker') or {}
+    if address := broker.get('connect') or broker.get('listen'):
+        return FallbackAuthClient({**broker, 'host': address}, direct)
+    return direct
+
+
 def build_authenticator(config: dict[str, Any]) -> Authenticator:
-    client = AsyncAuthClient(config['auth'])
+    client = build_auth_client(config)
     checker = _AuthChecker.get_strategy(config['auth_check_strategy'])
     return Authenticator(client, checker(client, config))
