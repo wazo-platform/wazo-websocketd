@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -16,7 +16,7 @@ from .helpers.constants import (
 
 
 class TestBus(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     def setUp(self):
         super().setUp()
@@ -283,7 +283,7 @@ class TestBus(IntegrationTest):
 
 
 class TestBusConnectionLost(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     @run_with_loop
     async def test_ws_connection_is_closed_when_bus_connection_is_lost(self):
@@ -296,7 +296,7 @@ class TestBusConnectionLost(IntegrationTest):
 
 
 class TestRabbitMQRestart(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     @run_with_loop
     async def test_can_connect_after_rabbitmq_restart(self):
@@ -320,7 +320,7 @@ class TestRabbitMQRestart(IntegrationTest):
 
 
 class TestClientPing(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     @run_with_loop
     async def test_receive_pong_on_client_ping(self):

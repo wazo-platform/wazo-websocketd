@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
@@ -20,7 +20,7 @@ from .helpers.wait_strategy import TimeWaitStrategy
 
 
 class TestAuthentication(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     @run_with_loop
     async def test_no_token_closes_websocket(self):
@@ -56,7 +56,7 @@ class TestNoAuth(IntegrationTest):
 
 
 class TestTokenExpirationCheckDynamic(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     _CLIENT_TIMEOUT = 20
 
@@ -97,7 +97,7 @@ class TestTokenExpirationCheckDynamic(IntegrationTest):
 
 
 class TestTokenExpirationCheckStatic(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     _CLIENT_TIMEOUT = 15
 
@@ -127,7 +127,7 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
 
 
 class TestTokenExpiration(IntegrationTest):
-    asset = 'basic'
+    asset = 'base'
 
     _TIMEOUT = 15
 
