@@ -15,6 +15,7 @@ Homepage = "http://wazo.community"
 
 [project.scripts]
 wazo-websocketd = "wazo_websocketd.main:main"
+wazo-websocketd-broker = "wazo_websocketd.broker:main"
 wazo-websocketd-wait-online = "wazo_websocketd.wait_online:main"
 
 [tool.setuptools.packages.find]

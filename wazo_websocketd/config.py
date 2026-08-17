@@ -12,6 +12,8 @@ from xivo.chain_map import ChainMap
 from xivo.config_helper import parse_config_file, read_config_file_hierarchy
 from xivo.xivo_logging import get_log_level_by_name
 
+from wazo_websocketd.status import STATUS_LISTEN, STATUS_PORT
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +54,23 @@ _DEFAULT_CONFIG = {
         'private_key': None,
         'ping_interval': 60,
     },
+    'broker': {
+        'listen': None,
+        'connect': None,
+        'port': 9506,
+        'prefix': None,
+        'https': False,
+    },
+    'status': {
+        'listen': STATUS_LISTEN,
+        'port': STATUS_PORT,
+    },
+    'token_cache': {
+        'max_size': 16 * 1024 * 1024,  # 16 MB
+        'max_negative_entries': 10000,
+        'positive_ttl': 300,
+        'negative_ttl': 5,
+    },
     'process_workers': 'auto',
     'worker_connections': 1,
 }
@@ -75,6 +94,14 @@ def _parse_cli_args():
         '-c', '--config-file', action='store', help="The path where is the config file"
     )
     parser.add_argument(
+        '--supervised-as',
+        action='store',
+        help="Name of this process as one of the supervisor's children, set by "
+        "it at spawn. Its status is then served on a unix socket the supervisor "
+        "polls; without it the process runs standalone and serves its status "
+        "over TCP.",
+    )
+    parser.add_argument(
         '-d',
         '--debug',
         action='store_true',
@@ -92,6 +119,8 @@ def _parse_cli_args():
         result['debug'] = parsed_args.debug
     if parsed_args.user:
         result['user'] = parsed_args.user
+    if parsed_args.supervised_as:
+        result['supervised_as'] = parsed_args.supervised_as
 
     return result
 
