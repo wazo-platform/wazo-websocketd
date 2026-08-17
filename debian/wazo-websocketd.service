@@ -6,6 +6,8 @@ StartLimitBurst=15
 StartLimitIntervalSec=150
 
 [Service]
+RuntimeDirectory=wazo-websocketd
+RuntimeDirectoryMode=0750
 ExecStart=/usr/bin/wazo-websocketd
 ExecStartPost=/usr/bin/wazo-websocketd-wait-online
 Restart=on-failure

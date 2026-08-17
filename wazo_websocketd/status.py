@@ -14,9 +14,10 @@ from enum import StrEnum
 
 from aiohttp import web
 
+from .helpers.process import RUN_DIR
+
 logger = logging.getLogger(__name__)
 
-RUN_DIR = '/run/wazo-websocketd'
 BROKER_ID = 'broker'
 FETCH_TIMEOUT = 2.0
 UNKNOWN_PID = 0
