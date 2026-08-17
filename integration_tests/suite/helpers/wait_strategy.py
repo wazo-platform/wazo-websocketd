@@ -16,6 +16,8 @@ class WaitStrategy:
 
 
 class WaitUntilValidConnection(WaitStrategy):
+    _POLL_INTERVAL = 0.25
+
     timeout = START_TIMEOUT
 
     def wait(self, test):
@@ -26,11 +28,11 @@ class WaitUntilValidConnection(WaitStrategy):
         client = WebSocketdClient(port)
 
         with test.auth_client.token() as token:
-            for _ in range(self.timeout):
+            for _ in range(int(self.timeout / self._POLL_INTERVAL)):
                 try:
                     await client.connect_and_wait_for_init(token)
                 except (ConnectionClosed, AssertionError, InvalidMessage, OSError):
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(self._POLL_INTERVAL)
                 else:
                     return
                 finally:
