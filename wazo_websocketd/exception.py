@@ -43,6 +43,10 @@ class AuthServerUnavailableError(_AuthError):
     pass
 
 
+class AuthServerUnreachableError(AuthServerUnavailableError):
+    pass
+
+
 class SessionProtocolError(Exception):
     pass
 

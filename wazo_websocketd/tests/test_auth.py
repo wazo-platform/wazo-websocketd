@@ -12,9 +12,11 @@ import pytest
 from ..auth import (
     AsyncAuthClient,
     Authenticator,
+    FallbackAuthClient,
     _AuthChecker,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
+    build_auth_client,
     build_authenticator,
 )
 from ..config import _DEFAULT_CONFIG
@@ -23,7 +25,14 @@ from ..exception import (
     AuthenticationExpiredError,
     AuthServerUnavailableError,
 )
-from .helpers import auth_client, fake_wazo_auth, refused_config
+from .helpers import (
+    auth_client,
+    broker_client,
+    fake_wazo_auth,
+    proxy_answering,
+    refused_broker_config,
+    refused_config,
+)
 
 _SECRET = 'ac6b1c8e-0000-4000-8000-secrettokenid'
 
@@ -89,6 +98,14 @@ class TestAsyncAuthClient:
             with pytest.raises(AuthServerUnavailableError):
                 await client.is_valid_token('T')
 
+    async def test_an_ipv6_host_is_reachable(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth(host='::1') as fake:
+            fake.tokens['T'] = token
+            async with auth_client({'auth': fake.config()}) as client:
+                assert await client.get_token('T') == token
+
     async def test_create_token_posts_to_wazo_auth_with_its_credentials(self):
         async with fake_wazo_auth() as fake:
             config = {
@@ -148,7 +165,7 @@ class TestAuthCheckStrategy:
     )
     def test_the_configured_strategy_is_the_one_built(self, strategy, expected):
         config = {
-            'auth': {'host': '127.0.0.1', 'port': 80, 'https': False},
+            'auth': {'host': '127.0.0.1', 'port': 80, 'https': False, 'timeout': 5.0},
             'auth_check_strategy': strategy,
             'auth_check_static_interval': 60,
             'auth_check_max_unavailable': 5,
@@ -250,6 +267,177 @@ class TestDynamicIntervalAuthChecker:
             )
 
 
+class TestFallbackAuthClient:
+    async def test_validation_goes_through_the_broker(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            broker.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    async def test_it_reaches_the_broker_over_a_unix_socket(self, tmp_path):
+        token = _valid_token()
+        socket_path = str(tmp_path / 'broker.sock')
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth(socket_path) as broker:
+            broker.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    async def test_a_socket_nobody_serves_falls_back_to_wazo_auth(self, tmp_path):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct:
+            direct.tokens['T'] = token
+            config = {
+                'auth': direct.config(),
+                'broker': {'listen': str(tmp_path / 'nobody-here.sock')},
+            }
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert direct.requests == [('GET', 'T', 'websocketd')]
+
+    async def test_an_ipv6_broker_is_used_rather_than_silently_skipped(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth(host='::1') as broker:
+            broker.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            # an unusable broker url looks exactly like an unreachable broker
+            assert direct.requests == []
+
+    async def test_a_rejection_from_anything_but_the_broker_falls_back(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, proxy_answering(404) as proxy:
+            direct.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': proxy}
+            async with broker_client(config) as client:
+                # a proxy or a version skew must not read as a bad token
+                assert await client.get_token('T') == token
+
+            assert direct.requests == [('GET', 'T', 'websocketd')]
+
+    async def test_a_broker_reporting_an_outage_does_not_stampede_wazo_auth(self):
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            direct.tokens['T'] = _valid_token()
+            broker.statuses['T'] = 503
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                with pytest.raises(AuthServerUnavailableError):
+                    await client.get_token('T')
+
+            # the broker answered, so it already tried wazo-auth on our behalf;
+            # asking again ourselves is the stampede the broker exists to absorb
+            assert direct.requests == []
+
+    async def test_an_unreachable_broker_falls_back_to_wazo_auth(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct:
+            direct.tokens['T'] = token
+            config = {'auth': direct.config(), 'broker': refused_broker_config()}
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert direct.requests == [('GET', 'T', 'websocketd')]
+
+    async def test_minting_a_token_never_goes_through_the_broker(self):
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            config = {'auth': direct.config(), 'broker': broker.broker_config()}
+            async with broker_client(config) as client:
+                await client.create_token(60)
+
+            # the broker only answers GET and HEAD on a token id, it cannot mint one
+            assert len(direct.created) == 1
+            assert broker.created == []
+
+    async def test_connect_overrides_listen_for_reaching_the_broker(self):
+        token = _valid_token()
+
+        async with fake_wazo_auth() as direct, fake_wazo_auth() as broker:
+            broker.tokens['T'] = token
+            config = {
+                'auth': direct.config(),
+                'broker': {
+                    'listen': '0.0.0.0',
+                    'connect': '127.0.0.1',
+                    'port': broker.port,
+                },
+            }
+            async with broker_client(config) as client:
+                assert await client.get_token('T') == token
+
+            assert broker.requests == [('GET', 'T', 'websocketd')]
+            assert direct.requests == []
+
+    def test_a_socket_path_selects_a_unix_socket_and_ignores_the_port(self):
+        client = build_auth_client(
+            {
+                'auth': {'host': 'localhost', 'port': 80, 'timeout': 5.0},
+                'broker': {
+                    'listen': '/run/wazo-websocketd/broker.sock',
+                    'port': 9506,
+                    'https': True,
+                },
+            }
+        )
+
+        assert isinstance(client, FallbackAuthClient)
+        assert client._socket_path == '/run/wazo-websocketd/broker.sock'
+        assert client._base_url == 'http://localhost/0.1'
+        assert client._ssl is None
+
+    @pytest.mark.parametrize(
+        'listen, expected',
+        [('0.0.0.0', 'http://127.0.0.1:9506/0.1'), ('::', 'http://[::1]:9506/0.1')],
+    )
+    def test_a_broker_listening_everywhere_is_dialled_on_loopback(
+        self, listen, expected
+    ):
+        client = build_auth_client(
+            {
+                'auth': {'host': 'wazo-auth', 'port': 80, 'timeout': 5.0},
+                'broker': {'listen': listen, 'port': 9506},
+            }
+        )
+
+        assert client._base_url == expected
+
+    def test_without_a_broker_the_client_talks_to_wazo_auth_directly(self):
+        client = build_auth_client(
+            {'auth': {'host': '127.0.0.1', 'port': 80, 'timeout': 5.0}, 'broker': {}}
+        )
+
+        assert isinstance(client, FallbackAuthClient) is False
+
+
+class TestDefaultEndpoint:
+    def test_the_shipped_config_reaches_wazo_auth_behind_nginx(self):
+        client = AsyncAuthClient(cast(dict, _DEFAULT_CONFIG['auth']))
+
+        # port 80 is nginx, which routes this prefix to wazo-auth
+        assert client._base_url == 'http://localhost:80/api/auth/0.1'
+
+    def test_a_prefix_set_to_null_reaches_wazo_auth_directly(self):
+        client = AsyncAuthClient({'host': 'auth', 'port': 9497, 'prefix': None})
+
+        assert client._base_url == 'http://auth:9497/0.1'
+
+
 class TestEndpointAuthority:
     @pytest.mark.parametrize(
         'host, expected',
@@ -267,16 +455,3 @@ class TestEndpointAuthority:
         )
 
         assert client._base_url == expected
-
-
-class TestDefaultEndpoint:
-    def test_the_shipped_config_reaches_wazo_auth_behind_nginx(self):
-        client = AsyncAuthClient(cast(dict, _DEFAULT_CONFIG['auth']))
-
-        # port 80 is nginx, which routes this prefix to wazo-auth
-        assert client._base_url == 'http://localhost:80/api/auth/0.1'
-
-    def test_a_prefix_set_to_null_reaches_wazo_auth_directly(self):
-        client = AsyncAuthClient({'host': 'auth', 'port': 9497, 'prefix': None})
-
-        assert client._base_url == 'http://auth:9497/0.1'

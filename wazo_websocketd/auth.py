@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -12,7 +13,7 @@ from ctypes import c_wchar
 from datetime import datetime
 from multiprocessing.sharedctypes import RawArray
 from ssl import SSLContext, TLSVersion, create_default_context
-from typing import Any, ClassVar
+from typing import Any, ClassVar, NoReturn
 
 import aiohttp
 from wazo_auth_client.types import TokenDict
@@ -22,11 +23,14 @@ from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
     AuthServerUnavailableError,
+    AuthServerUnreachableError,
 )
 from .helpers.timing import parse_expiration, utcnow_naive
 
 DEFAULT_ACL = 'websocketd'
-_SERVER_ERROR = 500
+BROKER_RESPONSE_HEADER = 'X-Wazo-Websocketd-Broker'
+_WAIT_FACTOR = 1.5  # must be > 1
+_LOOPBACK_ADDRESS_TABLE = {'0.0.0.0': '127.0.0.1', '::': '::1', '*': '127.0.0.1'}
 
 logger = logging.getLogger(__name__)
 _TokenGetter = Callable[[], dict[str, Any]]
@@ -111,6 +115,11 @@ class AsyncAuthClient:
             await self._session.close()
         self._session = None
 
+    def _classify_error(self, error: aiohttp.ClientResponseError) -> NoReturn:
+        if 400 <= error.status < 500:
+            raise AuthenticationError(error, status_code=error.status)
+        raise AuthServerUnavailableError(error)
+
     async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
         try:
             async with self.session.request(
@@ -125,11 +134,11 @@ class AsyncAuthClient:
                     return None
                 return (await response.json())['data']
         except aiohttp.ClientResponseError as e:
-            if e.status < _SERVER_ERROR:
-                raise AuthenticationError(e, status_code=e.status)
-            raise AuthServerUnavailableError(e)
+            self._classify_error(e)
         except (TimeoutError, aiohttp.ClientError) as e:
-            raise AuthServerUnavailableError(e)
+            raise AuthServerUnreachableError(e)
+        except (json.JSONDecodeError, KeyError) as e:
+            raise AuthServerUnavailableError(f'malformed response: {e}')
 
     @property
     def session(self) -> aiohttp.ClientSession:
@@ -146,6 +155,35 @@ class AsyncAuthClient:
                 ),
             )
         return self._session
+
+
+class FallbackAuthClient(AsyncAuthClient):
+    """Reads through this server, falling back to another when unreachable."""
+
+    def __init__(self, config: dict[str, Any], fallback: AsyncAuthClient) -> None:
+        super().__init__(config)
+        self._fallback = fallback
+
+    async def create_token(self, expiration: int) -> TokenDict:
+        return await self._fallback.create_token(expiration)
+
+    async def close(self) -> None:
+        await super().close()
+        await self._fallback.close()
+
+    def _classify_error(self, error: aiohttp.ClientResponseError) -> NoReturn:
+        if BROKER_RESPONSE_HEADER not in (error.headers or {}):
+            raise AuthServerUnreachableError(error)
+        super()._classify_error(error)
+
+    async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            return await super()._send(method, path, **kwargs)
+        except AuthServerUnreachableError as e:
+            logger.warning(
+                '%s unreachable, falling back to the next one: %s', self._base_url, e
+            )
+            return await self._fallback._send(method, path, **kwargs)
 
 
 class _AuthChecker(ABC):
@@ -292,7 +330,28 @@ class MasterTenantProxy:
         return cls.proxy.value is not None
 
 
+def _broker_address(broker: dict[str, Any]) -> str | None:
+    if connect := broker.get('connect'):
+        return connect
+
+    listen: str | None = broker.get('listen')
+    if not listen:
+        return None
+    return _LOOPBACK_ADDRESS_TABLE.get(listen, listen)
+
+
+def build_auth_client(config: dict[str, Any]) -> AsyncAuthClient:
+    direct = AsyncAuthClient(config['auth'])
+    broker = config.get('broker') or {}
+    if address := _broker_address(broker):
+        timeout = config['auth']['timeout'] * _WAIT_FACTOR
+        return FallbackAuthClient(
+            {**broker, 'host': address, 'timeout': timeout}, direct
+        )
+    return direct
+
+
 def build_authenticator(config: dict[str, Any]) -> Authenticator:
-    client = AsyncAuthClient(config['auth'])
+    client = build_auth_client(config)
     checker = _AuthChecker.get_strategy(config['auth_check_strategy'])
     return Authenticator(client, checker(client, config))
