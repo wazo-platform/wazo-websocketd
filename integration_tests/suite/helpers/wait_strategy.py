@@ -47,27 +47,31 @@ class AsyncWaitStrategy(WaitStrategy):
         raise WebSocketdTimeoutError(f'{type(check).__name__} timed out')
 
 
-class BrokerReady:
+class StatusReady:
     poll_interval = 1.0
+
+    def __init__(self, service: str | None = None, port: int | None = None) -> None:
+        self._service = service
+        self._port = port
 
     async def is_ready(self, test: Asset) -> bool:
         try:
-            test.service_port(9504, 'broker')
+            status, body = await test.service_status(
+                self._service, self._port, timeout=self.poll_interval
+            )
         except (NoSuchService, NoSuchPort):
-            return True  # this asset runs without a broker
-
-        try:
-            status, _ = await test.broker_status(timeout=self.poll_interval)
+            return True  # this asset runs without that service
         except (aiohttp.ClientError, OSError):
             return False
-        return status == 200
+        return status == 200 and body['state'] == 'ready'
 
 
 class WebsocketdReady:
     poll_interval = 0.25
 
     async def is_ready(self, test: Asset) -> bool:
-        client = WebSocketdClient(test.service_port(9502, 'websocketd'))
+        port = test.service_port(test.websocket_port, test.service)
+        client = WebSocketdClient(port)
         with test.auth_client.token() as token:
             try:
                 await client.connect_and_wait_for_init(token)

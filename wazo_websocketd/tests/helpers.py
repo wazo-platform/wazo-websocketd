@@ -17,6 +17,11 @@ from ..auth import BROKER_RESPONSE_HEADER, AsyncAuthClient, build_auth_client
 from ..token_cache import CachingAuthenticator
 
 
+async def echo_handler(ws, path: str) -> None:
+    async for message in ws:
+        await ws.send(message)
+
+
 class Clock:
     def __init__(self, now: float = 1000.0) -> None:
         self.now = now

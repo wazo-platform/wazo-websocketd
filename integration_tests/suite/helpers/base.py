@@ -26,7 +26,7 @@ from .constants import (
     TENANT2_UUID,
     TOKEN_UUID,
 )
-from .wait_strategy import AsyncWaitStrategy, BrokerReady, WebsocketdReady
+from .wait_strategy import AsyncWaitStrategy, StatusReady, WebsocketdReady
 from .websocketd import WebSocketdClient
 
 use_asset = pytest.mark.usefixtures
@@ -49,11 +49,13 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
     assets_root = ASSET_ROOT
     service = 'websocketd'
     asset = 'base'
+    websocket_port = 9502
+    status_port = 9504
 
     # FIXME: Until a proper /status route is establish, wait a small amount
     # of time after creating service credentials to allow websocketd to find
     # who is the master tenant
-    wait_strategy = AsyncWaitStrategy(BrokerReady(), WebsocketdReady())
+    wait_strategy = AsyncWaitStrategy(StatusReady('broker'), WebsocketdReady())
 
     @classmethod
     def setUpClass(cls):
@@ -132,17 +134,21 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
         return BusClient(port)
 
     @classmethod
-    async def broker_status(cls, timeout=5.0):
-        port = cls.service_port(9504, 'broker')
+    async def service_status(cls, service=None, port=None, timeout=5.0):
+        published = cls.service_port(port or cls.status_port, service or cls.service)
         client_timeout = aiohttp.ClientTimeout(total=timeout)
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
-            async with session.get(f'http://127.0.0.1:{port}/status') as response:
+            async with session.get(f'http://127.0.0.1:{published}/status') as response:
                 return response.status, await response.json()
+
+    @classmethod
+    async def broker_status(cls, timeout=5.0):
+        return await cls.service_status('broker', 9504, timeout=timeout)
 
     @classmethod
     def make_websocketd(cls, loop):
         try:
-            port = cls.service_port(9502, 'websocketd')
+            port = cls.service_port(cls.websocket_port, cls.service)
         except (NoSuchService, NoSuchPort):
             return WrongClient('websocketd')
         return WebSocketdClient(port, loop=loop)
@@ -154,6 +160,11 @@ class BaseAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
 
 class StaticAuthCheckAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
     asset = 'static_auth_check'
+
+
+class StandaloneAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
+    asset = 'standalone'
+    wait_strategy = AsyncWaitStrategy(StatusReady())
 
 
 class IntegrationTest(unittest.IsolatedAsyncioTestCase):

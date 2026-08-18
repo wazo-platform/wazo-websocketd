@@ -1,0 +1,11 @@
+services:
+  sync:
+    depends_on:
+      - auth
+      - rabbitmq
+      - websocketd
+    environment:
+      TARGETS: "auth:9497 rabbitmq:5672 websocketd:9502"
+
+  websocketd:
+    command: ["wazo-websocketd-worker", "--status-listen", "0.0.0.0"]

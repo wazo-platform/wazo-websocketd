@@ -16,5 +16,6 @@ def pytest_configure(config):
 
 base = asset_fixture(asset.BaseAssetLaunchingTestCase)
 static_auth_check = asset_fixture(asset.StaticAuthCheckAssetLaunchingTestCase)
+standalone = asset_fixture(asset.StandaloneAssetLaunchingTestCase)
 
 mark_logs = enable_mark_logs_fixture()
