@@ -3,9 +3,25 @@ services:
     depends_on:
       - auth
       - rabbitmq
+      - broker
       - websocketd
     environment:
-      TARGETS: "auth:9497 rabbitmq:5672 websocketd:9502"
+      TARGETS: "auth:9497 rabbitmq:5672 broker:9506 websocketd:9502"
+
+  broker:
+    image: wazo-websocketd-test
+    command: ["wazo-websocketd-broker", "--status-listen", "0.0.0.0"]
+    volumes:
+      - "../..:/usr/src/wazo-websocketd"
+      - "./etc/wazo-websocketd/conf.d/50-base.yml:/etc/wazo-websocketd/conf.d/50-base.yml"
+      - "./etc/wazo-websocketd/conf.d/30-broker.yml:/etc/wazo-websocketd/conf.d/30-broker.yml"
+    ports:
+      - "9504"
+    environment:
+      HOME: "/usr/src/wazo-websocketd"
+      XIVO_UUID: "the-predefined-wazo-uuid"
 
   websocketd:
     command: ["wazo-websocketd-worker", "--status-listen", "0.0.0.0"]
+    volumes:
+      - "./etc/wazo-websocketd/conf.d/30-broker.yml:/etc/wazo-websocketd/conf.d/30-broker.yml"

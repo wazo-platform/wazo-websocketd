@@ -12,7 +12,11 @@ from xivo.chain_map import ChainMap
 from xivo.config_helper import parse_config_file, read_config_file_hierarchy
 from xivo.xivo_logging import get_log_level_by_name
 
+from wazo_websocketd.status import BROKER_ID, RUN_DIR
+
 logger = logging.getLogger(__name__)
+
+BROKER_SOCKET = f'{RUN_DIR}/{BROKER_ID}.sock'
 
 
 def is_unix_socket(listen: str) -> bool:
@@ -55,7 +59,7 @@ _DEFAULT_CONFIG = {
         'ping_interval': 60,
     },
     'broker': {
-        'listen': None,
+        'listen': BROKER_SOCKET,
         'connect': None,
         'port': 9506,
     },
@@ -69,8 +73,8 @@ _DEFAULT_CONFIG = {
         'positive_ttl': 300,
         'negative_ttl': 5,
     },
-    'process_workers': 'auto',
-    'worker_connections': 1,
+    'min_workers': 'auto',
+    'max_workers': 'auto',
 }
 
 

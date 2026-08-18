@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
+from uuid import uuid4
 
 import requests
 from wazo_test_helpers import until
@@ -24,7 +25,13 @@ class TestStandaloneWorker(IntegrationTest):
             return False
         return status if status['state'] == 'draining' else False
 
+    def _restore_worker(self):
+        self.asset_cls.restart_service('websocketd')
+        self.asset_cls.wait_strategy.wait(self.asset_cls)
+
     async def test_standalone_serves_reports_status_and_drains(self):
+        self.addCleanup(self._restore_worker)
+
         status_port = self.asset_cls.service_port(9504, 'websocketd')
         status = self._status(status_port)
         assert status['state'] == 'ready'
@@ -52,3 +59,36 @@ class TestStandaloneWorker(IntegrationTest):
         await client.wait_for_close(code=1001)
         await client.close()
         self.auth_client.revoke_token(token)
+
+
+@use_asset('standalone')
+class TestStandaloneBroker(IntegrationTest):
+    asset_cls = StandaloneAssetLaunchingTestCase
+
+    async def test_the_broker_reports_itself_ready(self):
+        status, body = await self.asset_cls.broker_status()
+
+        assert status == 200
+        assert body['state'] == 'ready'
+        assert body['name'] == 'broker'
+
+    async def test_a_second_connection_is_served_from_the_cache(self):
+        token = self.auth_client.make_token(user_uuid=uuid4())
+
+        await self.websocketd_client.connect_and_wait_for_init(token)
+        await self.websocketd_client.close()
+        after_first = self._upstream_lookups(token)
+        await self.websocketd_client.connect_and_wait_for_init(token)
+
+        assert after_first > 0  # the first one did reach wazo-auth
+        assert self._upstream_lookups(token) == after_first
+
+    async def test_clients_authenticate_while_the_broker_is_down(self):
+        token = self.auth_client.make_token(user_uuid=uuid4())
+
+        async with self.asset_cls.service_stopped('broker'):
+            await self.websocketd_client.connect_and_wait_for_init(token)
+
+    def _upstream_lookups(self, token):
+        requests = self.auth_client.list_requests()['requests']
+        return len([r for r in requests if token in r['path']])

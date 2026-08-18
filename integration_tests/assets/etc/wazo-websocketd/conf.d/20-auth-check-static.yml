@@ -1,2 +1,4 @@
 auth_check_strategy: static
 auth_check_static_interval: 2
+token_cache:
+  positive_ttl: 2

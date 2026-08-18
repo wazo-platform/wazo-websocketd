@@ -10,12 +10,7 @@ import aiohttp
 import pytest
 
 from .. import status as status_module
-from ..status import (
-    StatusClient,
-    StatusServer,
-    remove_stale_socket,
-    socket_peer_pid,
-)
+from ..status import StatusClient, StatusServer, remove_stale_socket, socket_peer_pid
 
 
 def _server(

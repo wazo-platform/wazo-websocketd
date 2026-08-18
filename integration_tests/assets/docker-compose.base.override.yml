@@ -3,7 +3,6 @@ services:
     depends_on:
       - auth
       - rabbitmq
-      - broker
       - websocketd
     environment:
-      TARGETS: "auth:9497 rabbitmq:5672 broker:9506 websocketd:9502"
+      TARGETS: "auth:9497 rabbitmq:5672 websocketd:9502"

@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from contextlib import contextmanager
@@ -84,3 +84,9 @@ class AuthClient:
             yield token
         finally:
             self.revoke_token(token)
+
+    def recorded_requests(self):
+        return self._client.list_requests()['requests']
+
+    def clear_recorded_requests(self):
+        self._client.clear_requests()

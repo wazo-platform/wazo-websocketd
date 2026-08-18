@@ -26,6 +26,7 @@ from .constants import (
     TENANT2_UUID,
     TOKEN_UUID,
 )
+from .status import READ_STATUSES, parse_statuses
 from .wait_strategy import AsyncWaitStrategy, StatusReady, WebsocketdReady
 from .websocketd import WebSocketdClient
 
@@ -55,7 +56,7 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
     # FIXME: Until a proper /status route is establish, wait a small amount
     # of time after creating service credentials to allow websocketd to find
     # who is the master tenant
-    wait_strategy = AsyncWaitStrategy(StatusReady('broker'), WebsocketdReady())
+    wait_strategy = AsyncWaitStrategy(WebsocketdReady())
 
     @classmethod
     def setUpClass(cls):
@@ -114,6 +115,10 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
             await cls.wait_strategy.await_ready(cls)
 
     @classmethod
+    def read_children_statuses(cls) -> dict[str, dict]:
+        return parse_statuses(cls.docker_exec(['python3', '-c', READ_STATUSES]))
+
+    @classmethod
     def make_filesystem(cls):
         return FileSystemClient(execute=cls.docker_exec)
 
@@ -164,7 +169,7 @@ class StaticAuthCheckAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
 
 class StandaloneAssetLaunchingTestCase(_BaseAssetLaunchingTestCase):
     asset = 'standalone'
-    wait_strategy = AsyncWaitStrategy(StatusReady())
+    wait_strategy = AsyncWaitStrategy(StatusReady(), StatusReady('broker'))
 
 
 class IntegrationTest(unittest.IsolatedAsyncioTestCase):

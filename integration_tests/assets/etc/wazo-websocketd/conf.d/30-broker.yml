@@ -1,0 +1,4 @@
+broker:
+  listen: 0.0.0.0
+  connect: broker
+  port: 9506

@@ -8,10 +8,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from ctypes import Array as CArray
-from ctypes import c_wchar
 from datetime import datetime
-from multiprocessing.sharedctypes import RawArray
 from ssl import SSLContext, TLSVersion, create_default_context
 from typing import Any, ClassVar, NoReturn
 
@@ -332,17 +329,8 @@ class Authenticator:
         await self.close()
 
 
-StringSharedBuffer = CArray[c_wchar]
-
-
 class MasterTenant:
-    """The tenant every event may be seen from, resolved once at startup.
-
-    Backed by shared memory: the process pool resolves it in the parent and its
-    forked children read it, while a standalone process just sets its own.
-    """
-
-    proxy: StringSharedBuffer = RawArray(c_wchar, 36)
+    _value: str | None = None
 
     @classmethod
     def set(cls, token: TokenDict) -> None:
@@ -351,21 +339,21 @@ class MasterTenant:
         except KeyError:
             logger.error('invalid token, contains no tenant_uuid')
         else:
-            cls.set_uuid(tenant_uuid)
+            logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
+            cls._value = tenant_uuid
 
     @classmethod
     def set_uuid(cls, tenant_uuid: str) -> None:
-        logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
-        cls.proxy.value = tenant_uuid
+        logger.info('master_tenant_uuid supplied as \'%s\'', tenant_uuid)
+        cls._value = tenant_uuid
 
     @classmethod
     def matches(cls, tenant_uuid: str) -> bool:
-        return cls.is_known() and cls.proxy.value == tenant_uuid
+        return cls.is_known() and cls._value == tenant_uuid
 
     @classmethod
     def is_known(cls) -> bool:
-        # an unset shared buffer reads as an empty string, never as None
-        return bool(cls.proxy.value)
+        return cls._value is not None
 
 
 def _broker_address(broker: dict[str, Any]) -> str | None:

@@ -439,13 +439,12 @@ class TestFallbackAuthClient:
 class TestMasterTenant:
     @pytest.fixture(autouse=True)
     def forgotten_afterwards(self):
-        MasterTenant.proxy.value = ''
+        MasterTenant._value = None
         yield
-        MasterTenant.proxy.value = ''
+        MasterTenant._value = None
 
     def test_it_is_unknown_until_a_token_supplies_it(self):
-        # sessions are refused until the master tenant is known, so a buffer
-        # that never reads as unset would let them through
+        # sessions are refused until the master tenant is known
         assert MasterTenant.is_known() is False
 
         MasterTenant.set(
