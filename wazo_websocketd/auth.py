@@ -72,7 +72,7 @@ class AsyncAuthClient:
             return f'http://localhost{prefix}/0.1'
 
         scheme = 'https' if config.get('https') else 'http'
-        return f'{scheme}://{host}:{config.get("port", 9497)}{prefix}/0.1'
+        return f'{scheme}://{host}:{config["port"]}{prefix}/0.1'
 
     async def get_token(self, token_id: str, acl: str | None = None) -> TokenDict:
         logger.debug('retrieving token data and validating authorization')
@@ -214,8 +214,8 @@ class _DynamicIntervalAuthChecker(_AuthChecker):
     async def _check(self, token_id: str) -> None:
         try:
             await self._auth_client.get_token(token_id)
-        except AuthenticationError:
-            raise AuthenticationExpiredError()
+        except AuthenticationError as e:
+            raise AuthenticationExpiredError() from e
 
     def _calculate_next_check(self, now: datetime, expires_at: datetime) -> float:
         delta = expires_at - now
