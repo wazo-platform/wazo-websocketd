@@ -51,6 +51,10 @@ class AuthServerUnreachableError(AuthServerUnavailableError):
     pass
 
 
+class UnknownMasterTenantError(Exception):
+    pass
+
+
 class SessionProtocolError(Exception):
     pass
 
