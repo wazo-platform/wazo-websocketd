@@ -25,6 +25,7 @@ from .constants import (
     TENANT2_UUID,
     TOKEN_UUID,
 )
+from .status import READ_STATUSES, parse_statuses
 from .wait_strategy import WaitStrategy, WaitUntilValidConnection
 from .websocketd import WebSocketdClient
 
@@ -109,6 +110,10 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
                     await asyncio.sleep(1)
                 cls.configure_auth()
             await WaitUntilValidConnection().await_for_connection(cls)
+
+    @classmethod
+    def read_children_statuses(cls) -> dict[str, dict]:
+        return parse_statuses(cls.docker_exec(['python3', '-c', READ_STATUSES]))
 
     @classmethod
     def make_filesystem(cls):

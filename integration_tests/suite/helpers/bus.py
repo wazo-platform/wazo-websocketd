@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -71,3 +71,9 @@ class BusClient:
             properties['headers'].update(required_acl=event['required_acl'])
 
         await self._channel.publish(payload, exchange, '', properties=properties)
+
+    async def publish_session_deleted(self, session_uuid: str | UUID) -> None:
+        await self.connect()
+        await self.publish(
+            {'name': 'auth_session_deleted', 'uuid': str(session_uuid)},
+        )

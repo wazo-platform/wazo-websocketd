@@ -8,9 +8,11 @@ StartLimitIntervalSec=150
 [Service]
 ExecStart=/usr/bin/wazo-websocketd
 ExecStartPost=/usr/bin/wazo-websocketd-wait-online
+ExecReload=/bin/kill -USR2 $MAINPID
 Restart=on-failure
 RestartSec=5
 SyslogIdentifier=wazo-websocketd
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target

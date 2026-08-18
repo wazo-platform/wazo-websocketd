@@ -1,5 +1,6 @@
 debug: true
-process_workers: 2
+min_workers: 2
+max_workers: 4
 auth_check_strategy: dynamic  # default strategy
 websocket:
   listen: 0.0.0.0

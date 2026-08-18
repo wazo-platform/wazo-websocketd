@@ -43,6 +43,13 @@
 #  exchange_name: wazo-headers
 #  exchange_type: headers
 
+# Worker pool bounds. The defaults resolve to a fixed pool of one worker per
+# cpu, like before. Setting `min_workers` below `max_workers` enables
+# autoscaling between the two. `process_workers` is deprecated: it pins the
+# pool (min = max = process_workers) and will be removed.
+#min_workers: auto
+#max_workers: auto
+
 # Token validation goes through the caching broker, falling back to wazo-auth.
 # `listen` selects the transport:
 #   /path/to.sock -> unix socket, `port` is ignored
@@ -50,7 +57,7 @@
 #   empty         -> no broker, validate against wazo-auth directly
 # Set `connect` only when workers dial another address than the broker binds.
 #broker:
-#  listen: null
+#  listen: /run/wazo-websocketd/broker.sock
 #  connect: null
 #  port: 9506
 
