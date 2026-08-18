@@ -248,6 +248,12 @@ class Authenticator:
     async def close(self) -> None:
         await self._auth_client.close()
 
+    async def __aenter__(self) -> Authenticator:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.close()
+
 
 StringSharedBuffer = CArray[c_wchar]
 
