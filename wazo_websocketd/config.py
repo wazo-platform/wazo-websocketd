@@ -102,6 +102,12 @@ def _parse_cli_args():
         "over TCP.",
     )
     parser.add_argument(
+        '--master-tenant',
+        action='store',
+        help='Master tenant uuid. Without it the process resolves its own with a '
+        'service token, which is what a standalone process does.',
+    )
+    parser.add_argument(
         '-d',
         '--debug',
         action='store_true',
@@ -121,6 +127,8 @@ def _parse_cli_args():
         result['user'] = parsed_args.user
     if parsed_args.supervised_as:
         result['supervised_as'] = parsed_args.supervised_as
+    if parsed_args.master_tenant:
+        result['master_tenant'] = parsed_args.master_tenant
 
     return result
 

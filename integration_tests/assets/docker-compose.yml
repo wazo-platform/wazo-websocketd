@@ -22,6 +22,8 @@ services:
       # - "${LOCAL_GIT_REPOS}/xivo-lib-python/xivo:/opt/venv/lib/python3.11/site-packages/xivo"
     ports:
       - "9502"
+      - "9504"
+      - "9505"
     environment:
       HOME: "/usr/src/wazo-websocketd"
       XIVO_UUID: "the-predefined-wazo-uuid"
