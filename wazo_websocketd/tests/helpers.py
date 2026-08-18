@@ -3,14 +3,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
-from collections.abc import AsyncIterator
+import sys
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from typing import Any
 
 from aiohttp import web
 
 from ..auth import AsyncAuthClient, build_auth_client
+
+
+def spawn_sleeper() -> Awaitable[asyncio.subprocess.Process]:
+    return asyncio.create_subprocess_exec(
+        sys.executable, '-c', 'import time; time.sleep(30)'
+    )
 
 
 async def echo_handler(ws, path: str) -> None:
