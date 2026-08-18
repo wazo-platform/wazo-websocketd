@@ -87,14 +87,18 @@ class ServiceTokenRenewer:
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
     async def _fetch_token(self) -> TokenDict:
-        timeouts = chain(exponential_backoff(1, 5), repeat(32))
+        delays = chain(exponential_backoff(1, 5), repeat(32))
         while True:
             try:
                 return await self._client.create_token(self._expiration)
-            except Exception:
-                interval = next(timeouts)
-                await self.on_error(interval)
-            await asyncio.sleep(interval)
+            except Exception as error:
+                delay = next(delays)
+                logger.error(
+                    'could not create a service token, retrying in %ds (reason: %s)',
+                    delay,
+                    error,
+                )
+            await asyncio.sleep(delay)
 
     async def _notify(self, token: TokenDict) -> None:
         callbacks = self._callbacks.copy()
@@ -107,9 +111,3 @@ class ServiceTokenRenewer:
                 await callback.method(payload)
             else:
                 self._loop.call_soon(callback.method, payload)
-
-    async def on_error(self, interval: float) -> None:
-        logger.error(
-            'Failed to create an access token, retrying in %d seconds',
-            interval,
-        )

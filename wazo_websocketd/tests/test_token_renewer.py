@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -46,6 +47,18 @@ class TestServiceTokenRenewer:
             await asyncio.sleep(0.05)
 
         served.assert_called_once_with(_TOKEN)
+
+    async def test_a_failure_to_mint_a_token_says_why(self, caplog):
+        self.client.create_token = AsyncMock(
+            side_effect=RuntimeError('wazo-auth refused the service credentials')
+        )
+
+        with caplog.at_level(logging.ERROR):
+            async with self.renewer:
+                await asyncio.sleep(0)  # let the first attempt fail
+
+        # without the cause, a bad service account is indistinguishable from an outage
+        assert 'wazo-auth refused the service credentials' in caplog.text
 
     async def test_starting_twice_is_refused(self):
         async with self.renewer:
