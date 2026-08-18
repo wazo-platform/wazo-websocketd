@@ -4,8 +4,18 @@
 import datetime
 from itertools import chain, islice, repeat
 
-from ...tests.helpers import Clock
-from ..timing import Cooldown, exponential_backoff, parse_expiration, utcnow_naive
+import pytest
+
+from wazo_websocketd.tests.helpers import Clock
+
+from ...exception import CrashBudgetExhausted
+from ..timing import (
+    Cooldown,
+    CrashBucket,
+    exponential_backoff,
+    parse_expiration,
+    utcnow_naive,
+)
 
 
 class TestExponentialBackoff:
@@ -81,3 +91,48 @@ class TestCooldown:
 
         cooldown.restart()
         assert cooldown.elapsed == 0.0
+
+
+class TestCrashBucket:
+    def _bucket(self, clock, burst=2, window=10.0):
+        return CrashBucket(burst=burst, window=window, timer=clock)
+
+    def test_crashes_within_the_burst_are_tolerated(self):
+        bucket = self._bucket(Clock())
+
+        for _ in range(2):
+            bucket.record()
+
+    def test_one_crash_too_many_exhausts_the_budget(self):
+        bucket = self._bucket(Clock())
+
+        bucket.record()
+        bucket.record()
+        with pytest.raises(CrashBudgetExhausted) as raised:
+            bucket.record()
+
+        assert '3' in str(raised.value)
+
+    def test_crashes_older_than_the_window_are_forgotten(self):
+        clock = Clock()
+        bucket = self._bucket(clock)
+
+        bucket.record()
+        bucket.record()
+        clock.now += 11
+
+        for _ in range(2):
+            bucket.record()
+
+    def test_the_window_slides_rather_than_resetting(self):
+        clock = Clock()
+        bucket = self._bucket(clock)
+
+        bucket.record()
+        clock.now += 6
+        bucket.record()
+        clock.now += 6  # only the first crash has aged out
+        bucket.record()
+
+        with pytest.raises(CrashBudgetExhausted):
+            bucket.record()

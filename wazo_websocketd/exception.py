@@ -55,6 +55,10 @@ class UnknownMasterTenantError(Exception):
     pass
 
 
+class CrashBudgetExhausted(Exception):
+    pass
+
+
 class SessionProtocolError(Exception):
     pass
 

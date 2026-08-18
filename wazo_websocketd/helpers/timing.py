@@ -9,6 +9,8 @@ import time
 from collections.abc import Callable, Iterator
 from itertools import chain, repeat
 
+from wazo_websocketd.exception import CrashBudgetExhausted
+
 
 def utcnow_naive() -> datetime.datetime:
     return datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
@@ -49,3 +51,26 @@ class Cooldown:
 
     def restart(self) -> None:
         self._since = self._timer()
+
+
+class CrashBucket:
+    def __init__(
+        self,
+        *,
+        burst: int,
+        window: float,
+        timer: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._burst = burst
+        self._window = window
+        self._timer = timer
+        self._crashes: list[float] = []
+
+    def record(self) -> None:
+        now = self._timer()
+        self._crashes = [at for at in self._crashes if at > now - self._window]
+        self._crashes.append(now)
+        if len(self._crashes) > self._burst:
+            raise CrashBudgetExhausted(
+                f'{len(self._crashes)} crashes in {self._window:.0f}s'
+            )
