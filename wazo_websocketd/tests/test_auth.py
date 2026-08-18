@@ -338,7 +338,7 @@ class TestFallbackAuthClient:
     def test_a_socket_path_selects_a_unix_socket_and_ignores_the_port(self):
         client = build_auth_client(
             {
-                'auth': {},
+                'auth': {'host': 'localhost', 'port': 80},
                 'broker': {
                     'listen': '/run/wazo-websocketd/broker.sock',
                     'port': 9506,
@@ -353,6 +353,8 @@ class TestFallbackAuthClient:
         assert client._ssl is None
 
     def test_without_a_broker_the_client_talks_to_wazo_auth_directly(self):
-        client = build_auth_client({'auth': {'host': '127.0.0.1'}, 'broker': {}})
+        client = build_auth_client(
+            {'auth': {'host': '127.0.0.1', 'port': 80}, 'broker': {}}
+        )
 
         assert isinstance(client, FallbackAuthClient) is False
