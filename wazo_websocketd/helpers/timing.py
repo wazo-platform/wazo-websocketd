@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import datetime
 import functools
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
+
+from wazo_websocketd.exception import CrashBudgetExhausted
 
 
 def utcnow_naive() -> datetime.datetime:
@@ -23,3 +26,46 @@ def parse_expiration(value: str) -> datetime.datetime:
 def exponential_backoff(delay: float, retries: int) -> Iterator[float]:
     for attempt in range(retries):
         yield delay * 2**attempt
+
+
+class Cooldown:
+    def __init__(
+        self, duration: float, timer: Callable[[], float] = time.monotonic
+    ) -> None:
+        self._duration = duration
+        self._timer = timer
+        self._since = timer()
+
+    @property
+    def elapsed(self) -> float:
+        return self._timer() - self._since
+
+    @property
+    def expired(self) -> bool:
+        return self.elapsed >= self._duration
+
+    def restart(self) -> None:
+        self._since = self._timer()
+
+
+class CrashBucket:
+    def __init__(
+        self,
+        *,
+        burst: int,
+        window: float,
+        timer: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._burst = burst
+        self._window = window
+        self._timer = timer
+        self._crashes: list[float] = []
+
+    def record(self) -> None:
+        now = self._timer()
+        self._crashes = [at for at in self._crashes if at > now - self._window]
+        self._crashes.append(now)
+        if len(self._crashes) > self._burst:
+            raise CrashBudgetExhausted(
+                f'{len(self._crashes)} crashes in {self._window:.0f}s'
+            )
