@@ -10,9 +10,13 @@ import os
 import socket
 import struct
 from collections.abc import Callable
+from dataclasses import dataclass
 from enum import StrEnum
 
+import aiohttp
 from aiohttp import web
+
+from .helpers.timing import Cooldown
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,64 @@ async def serve_unix(runner: web.AppRunner, socket_path: str) -> None:
     await remove_stale_socket(socket_path)
     await web.UnixSite(runner, socket_path).start()
     os.chmod(socket_path, 0o600)
+
+
+async def _read_status(session: aiohttp.ClientSession) -> dict | None:
+    try:
+        async with session.get('http://localhost/status') as response:
+            return await response.json()
+    except (TimeoutError, OSError, aiohttp.ClientError, ValueError):
+        return None
+
+
+@dataclass
+class _PolledSocket:
+    session: aiohttp.ClientSession
+    idle: Cooldown
+
+
+class StatusClient:
+    def __init__(self, *, idle_timeout: float, timeout: float = FETCH_TIMEOUT) -> None:
+        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._idle_timeout = idle_timeout
+        self._sockets: dict[str, _PolledSocket] = {}
+
+    async def fetch(self, socket_path: str) -> dict | None:
+        await self._close_idle(except_for=socket_path)
+        status = await _read_status(self._session_for(socket_path))
+        if status is None:
+            await self.forget(socket_path)  # the socket may be gone for good
+        return status
+
+    async def forget(self, socket_path: str) -> None:
+        polled = self._sockets.pop(socket_path, None)
+        if polled is not None and not polled.session.closed:
+            await polled.session.close()
+
+    async def close(self) -> None:
+        for socket_path in list(self._sockets):
+            await self.forget(socket_path)
+
+    def _session_for(self, socket_path: str) -> aiohttp.ClientSession:
+        polled = self._sockets.get(socket_path)
+        if polled is None or polled.session.closed:
+            polled = _PolledSocket(
+                session=aiohttp.ClientSession(
+                    connector=aiohttp.UnixConnector(path=socket_path),
+                    timeout=self._timeout,
+                ),
+                idle=Cooldown(self._idle_timeout),
+            )
+            self._sockets[socket_path] = polled
+        else:
+            polled.idle.restart()
+        return polled.session
+
+    async def _close_idle(self, *, except_for: str) -> None:
+        for socket_path, polled in list(self._sockets.items()):
+            if socket_path != except_for and polled.idle.expired:
+                logger.debug('%s went unpolled, closing its session', socket_path)
+                await self.forget(socket_path)
 
 
 async def remove_stale_socket(socket_path: str) -> None:

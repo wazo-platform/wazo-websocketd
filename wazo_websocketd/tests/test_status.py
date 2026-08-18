@@ -1,6 +1,7 @@
 # Copyright 2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import asyncio
 import os
 from unittest.mock import patch
 
@@ -8,7 +9,7 @@ import aiohttp
 import pytest
 
 from .. import status as status_module
-from ..status import StatusServer, socket_peer_pid
+from ..status import StatusClient, StatusServer, socket_peer_pid
 
 
 def _server(
@@ -123,6 +124,75 @@ class TestStatusOverUnixSocket:
         await server.stop()
 
         assert os.path.exists(socket_path) is False
+
+
+class TestStatusClient:
+    @pytest.fixture(autouse=True)
+    async def run_dir(self, tmp_path):
+        self.servers: list[StatusServer] = []
+        self.client = StatusClient(idle_timeout=60.0)
+        with patch.object(status_module, 'RUN_DIR', str(tmp_path)):
+            yield
+        await self.client.close()
+        for server in self.servers:
+            await server.stop()
+
+    async def _serving(self, name, connections=0):
+        server = _server(True, name=name, connections=connections)
+        self.servers.append(server)
+        await server.start()
+        return server.socket_path
+
+    async def test_it_reads_the_status_a_worker_serves(self):
+        socket_path = await self._serving('worker-3', connections=5)
+
+        status = await self.client.fetch(socket_path)
+
+        assert status == {
+            'name': 'worker-3',
+            'connections': 5,
+            'state': 'ready',
+            'pid': os.getpid(),
+        }
+
+    async def test_it_reads_a_draining_worker_too(self):
+        socket_path = await self._serving('worker-3')
+        self.servers[0].set_draining()
+
+        status = await self.client.fetch(socket_path)
+
+        assert status is not None and status['state'] == 'draining'
+
+    async def test_a_socket_nobody_serves_reads_as_nothing(self, tmp_path):
+        assert await self.client.fetch(str(tmp_path / 'nobody-home.sock')) is None
+
+    async def test_it_closes_the_session_of_a_socket_it_is_told_to_forget(self):
+        socket_path = await self._serving('worker-3')
+        await self.client.fetch(socket_path)
+        session = self.client._sockets[socket_path].session
+
+        await self.client.forget(socket_path)
+
+        assert set(self.client._sockets) == set()
+        assert session.closed is True
+
+    async def test_it_closes_the_session_of_a_socket_left_unpolled(self):
+        gone = await self._serving('worker-3')
+        kept = await self._serving('worker-4')
+        client = StatusClient(idle_timeout=0.05)
+        try:
+            await client.fetch(gone)
+            await client.fetch(kept)
+            session = client._sockets[gone].session
+
+            # nobody told us worker-3 left, so going unpolled has to be enough
+            await asyncio.sleep(0.06)
+            await client.fetch(kept)
+
+            assert set(client._sockets) == {kept}
+            assert session.closed is True
+        finally:
+            await client.close()
 
 
 class TestSocketPeerPid:
