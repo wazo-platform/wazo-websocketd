@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterable
+from enum import IntEnum
 from urllib.parse import parse_qsl, urlparse
 
 import websockets
@@ -19,6 +21,8 @@ from .exception import (
     BusConnectionLostError,
     NoTokenError,
     SessionProtocolError,
+    SessionRevokedError,
+    UnknownMasterTenantError,
     UnsupportedVersionError,
 )
 
@@ -26,6 +30,15 @@ logger = logging.getLogger(__name__)
 
 
 SUPPORTED_VERSION = (1, 2)
+
+
+class CloseCode(IntEnum):
+    GOING_AWAY = 1001
+    INTERNAL_ERROR = 1011  # RFC 6455
+    NO_TOKEN = 4001
+    AUTH_FAILED = 4002
+    AUTH_EXPIRED = 4003
+    PROTOCOL_ERROR = 4004
 
 
 class SessionFactory:
@@ -68,11 +81,6 @@ class SessionFactory:
 
 
 class Session:
-    _CLOSE_CODE_NO_TOKEN_ID = 4001
-    _CLOSE_CODE_AUTH_FAILED = 4002
-    _CLOSE_CODE_AUTH_EXPIRED = 4003
-    _CLOSE_CODE_PROTOCOL_ERROR = 4004
-
     def __init__(
         self,
         config,
@@ -108,16 +116,21 @@ class Session:
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(self._CLOSE_CODE_NO_TOKEN_ID, 'no token')
+            await self._ws.close(CloseCode.NO_TOKEN, 'no token')
+        except SessionRevokedError:
+            logger.info(
+                'closing websocket connection: session revoked (user=%s tenant=%s)',
+                self._user_uuid,
+                self._tenant_uuid,
+            )
+            await self._ws.close(CloseCode.AUTH_EXPIRED, 'session revoked')
         except AuthenticationExpiredError:
             logger.info(
                 'closing websocket connection: authentication expired (user=%s tenant=%s)',
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(
-                self._CLOSE_CODE_AUTH_EXPIRED, 'authentication expired'
-            )
+            await self._ws.close(CloseCode.AUTH_EXPIRED, 'authentication expired')
         except AuthenticationError as e:
             logger.info(
                 'closing websocket connection: authentication failed: %s (user=%s tenant=%s)',
@@ -125,7 +138,7 @@ class Session:
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(self._CLOSE_CODE_AUTH_FAILED, 'authentication failed')
+            await self._ws.close(CloseCode.AUTH_FAILED, 'authentication failed')
         except AuthServerUnavailableError:
             logger.info(
                 'closing websocket connection: authentication server unavailable '
@@ -133,7 +146,15 @@ class Session:
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(1011, 'authentication server unavailable')
+            await self._ws.close(
+                CloseCode.INTERNAL_ERROR, 'authentication server unavailable'
+            )
+        except UnknownMasterTenantError:
+            logger.info(
+                'closing websocket connection: worker is not ready, '
+                'the master tenant is still unknown'
+            )
+            await self._ws.close(CloseCode.INTERNAL_ERROR, 'not ready')
         except SessionProtocolError as e:
             logger.info(
                 'closing websocket connection: session protocol error: %s (user=%s tenant=%s)',
@@ -141,28 +162,28 @@ class Session:
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
+            await self._ws.close(CloseCode.PROTOCOL_ERROR)
         except UnsupportedVersionError:
             logger.info(
                 'closing websocket connection: protocol version unknown (user=%s tenant=%s)',
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(self._CLOSE_CODE_PROTOCOL_ERROR)
+            await self._ws.close(CloseCode.PROTOCOL_ERROR)
         except BusConnectionLostError:
             logger.info(
                 'closing websocket connection: bus connection lost (user=%s tenant=%s)',
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(1011, 'bus connection lost')
+            await self._ws.close(CloseCode.INTERNAL_ERROR, 'bus connection lost')
         except BusConnectionError:
             logger.info(
                 'closing websocket connection: bus connection error (user=%s tenant=%s)',
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(1011, 'bus connection error')
+            await self._ws.close(CloseCode.INTERNAL_ERROR, 'bus connection error')
         except websockets.ConnectionClosed as e:
             # also raised when the ws_server is closed
             logger.info(
@@ -177,11 +198,11 @@ class Session:
                 self._user_uuid,
                 self._tenant_uuid,
             )
-            await self._ws.close(1011)
+            await self._ws.close(CloseCode.INTERNAL_ERROR)
 
     async def _run(self):
         if not MasterTenant.is_known():
-            raise AuthenticationError('unable to determine master tenant')
+            raise UnknownMasterTenantError()
 
         self._protocol_version = _extract_version_from_path(self._path)
 
@@ -215,8 +236,8 @@ class Session:
             await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
 
             # raise the first exception we got
-            for task in done:
-                task.result()
+            if error := _first_exception((*done, *pending)):
+                raise error
 
     async def _task_send_ping(self):
         while True:
@@ -276,6 +297,21 @@ class Session:
             await self._ws.send(self._protocol_encoder.encode_pong(msg.value))
         else:
             logger.debug('received client ping, only supported in version 2')
+
+
+def _first_exception(tasks: Iterable[asyncio.Task]) -> BaseException | None:
+    """Read every task's outcome, returning the first exception raised.
+
+    Siblings that failed in the same loop iteration must be read too, or
+    asyncio reports them as never retrieved once they are collected.
+    """
+    first = None
+    for task in tasks:
+        if task.cancelled():
+            continue
+        if (error := task.exception()) is not None and first is None:
+            first = error
+    return first
 
 
 def _extract_token_id(ws, path):
