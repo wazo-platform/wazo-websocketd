@@ -18,7 +18,7 @@ _TOKEN = {
 
 class TestServiceTokenRenewer:
     @pytest.fixture(autouse=True)
-    async def auth_client(self):
+    def auth_client(self):
         with patch('wazo_websocketd.token_renewer.AsyncAuthClient') as factory:
             self.client = factory.return_value
             self.client.create_token = AsyncMock(return_value=_TOKEN)
