@@ -32,7 +32,6 @@ class ServiceTokenRenewer:
         self._client = AsyncAuthClient(config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
         self._lock = asyncio.Lock()
-        self._loop = asyncio.get_event_loop()
         self._task: asyncio.Task[None] = None  # type: ignore[assignment]
 
     async def start(self) -> ServiceTokenRenewer:
@@ -40,7 +39,7 @@ class ServiceTokenRenewer:
             raise RuntimeError('service token renewer is already running')
 
         logger.info('service token renewer started')
-        self._task = self._loop.create_task(self._run())
+        self._task = asyncio.create_task(self._run())
         return self
 
     async def stop(self, *_args: Any) -> None:
@@ -110,4 +109,4 @@ class ServiceTokenRenewer:
             if asyncio.iscoroutinefunction(callback.method):
                 await callback.method(payload)
             else:
-                self._loop.call_soon(callback.method, payload)
+                asyncio.get_running_loop().call_soon(callback.method, payload)
