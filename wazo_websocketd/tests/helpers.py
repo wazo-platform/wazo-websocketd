@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
+import sys
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, Mock
@@ -15,6 +17,12 @@ from aiohttp import web
 
 from ..auth import BROKER_RESPONSE_HEADER, AsyncAuthClient, build_auth_client
 from ..token_cache import CachingAuthenticator
+
+
+def spawn_sleeper() -> Awaitable[asyncio.subprocess.Process]:
+    return asyncio.create_subprocess_exec(
+        sys.executable, '-c', 'import time; time.sleep(30)'
+    )
 
 
 async def echo_handler(ws, path: str) -> None:
