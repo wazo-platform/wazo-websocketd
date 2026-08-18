@@ -64,3 +64,17 @@ class TestServiceTokenRenewer:
         async with self.renewer:
             with pytest.raises(RuntimeError):
                 await self.renewer.start()
+
+    async def test_a_subscriber_can_retire_another_mid_dispatch(self):
+        second = AsyncMock()
+
+        async def first(_token):
+            self.renewer.unsubscribe(second, oneshot=True)
+
+        async with self.renewer:
+            self.renewer.subscribe(first, oneshot=True)
+            self.renewer.subscribe(second, oneshot=True)
+            await asyncio.sleep(0.05)
+
+            # a dead renewer stops minting tokens without saying so
+            assert self.renewer._task.done() is False

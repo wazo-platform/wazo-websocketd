@@ -31,7 +31,6 @@ class ServiceTokenRenewer:
         self._callbacks: list[ServiceTokenRenewer.Callback] = []
         self._client = AsyncAuthClient(config['auth'])
         self._expiration: int = self.DEFAULT_EXPIRATION
-        self._lock = asyncio.Lock()
         self._task: asyncio.Task[None] = None  # type: ignore[assignment]
 
     async def start(self) -> ServiceTokenRenewer:
@@ -101,10 +100,8 @@ class ServiceTokenRenewer:
 
     async def _notify(self, token: TokenDict) -> None:
         callbacks = self._callbacks.copy()
+        self._callbacks = [callback for callback in callbacks if not callback.oneshot]
         for callback in callbacks:
-            if callback.oneshot:
-                async with self._lock:
-                    self._callbacks.remove(callback)
             payload = token if callback.details else token['token']
             if asyncio.iscoroutinefunction(callback.method):
                 await callback.method(payload)
