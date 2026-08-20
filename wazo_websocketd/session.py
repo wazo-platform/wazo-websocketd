@@ -181,7 +181,7 @@ class Session:
 
     async def _run(self):
         if not MasterTenantProxy.has_master_tenant():
-            raise AuthenticationError('unable to determine master tenant')
+            raise AuthServerUnavailableError('master tenant is not known yet')
 
         self._protocol_version = _extract_version_from_path(self._path)
 

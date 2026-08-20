@@ -13,6 +13,7 @@ from ..auth import (
     AsyncAuthClient,
     Authenticator,
     FallbackAuthClient,
+    MasterTenantProxy,
     _AuthChecker,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
@@ -423,6 +424,37 @@ class TestFallbackAuthClient:
         )
 
         assert isinstance(client, FallbackAuthClient) is False
+
+
+class TestMasterTenant:
+    @pytest.fixture(autouse=True)
+    def forgotten_afterwards(self):
+        MasterTenantProxy.proxy.value = ''
+        yield
+        MasterTenantProxy.proxy.value = ''
+
+    def test_it_is_unknown_until_a_token_supplies_it(self):
+        # sessions are refused until the master tenant is known, so a buffer
+        # that never reads as unset would let them through
+        assert MasterTenantProxy.has_master_tenant() is False
+
+        MasterTenantProxy.set_master_tenant(
+            {'metadata': {'tenant_uuid': 'tenant-1'}}  # type: ignore[typeddict-item]
+        )
+
+        assert MasterTenantProxy.has_master_tenant() is True
+
+    def test_it_matches_only_the_tenant_it_was_given(self):
+        MasterTenantProxy.set_master_tenant(
+            {'metadata': {'tenant_uuid': 'tenant-1'}}  # type: ignore[typeddict-item]
+        )
+
+        assert MasterTenantProxy.matches('tenant-1') is True
+        assert MasterTenantProxy.matches('tenant-2') is False
+
+    def test_nothing_matches_while_it_is_unknown(self):
+        assert MasterTenantProxy.matches('') is False
+        assert MasterTenantProxy.matches('tenant-1') is False
 
 
 class TestDefaultEndpoint:

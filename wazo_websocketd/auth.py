@@ -326,8 +326,13 @@ class MasterTenantProxy:
         return cls.proxy.value
 
     @classmethod
+    def matches(cls, tenant_uuid: str) -> bool:
+        return cls.has_master_tenant() and cls.proxy.value == tenant_uuid
+
+    @classmethod
     def has_master_tenant(cls) -> bool:
-        return cls.proxy.value is not None
+        # an unset shared buffer reads as an empty string, never as None
+        return bool(cls.proxy.value)
 
 
 def _broker_address(broker: dict[str, Any]) -> str | None:
