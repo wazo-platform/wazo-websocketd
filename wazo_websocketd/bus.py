@@ -4,12 +4,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
+import contextlib
 import logging
+from collections.abc import Awaitable, Callable
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
-from secrets import token_hex
-from typing import NamedTuple
+from typing import Any
 
 import aioamqp
 from aioamqp import AmqpProtocol
@@ -17,82 +17,21 @@ from aioamqp.channel import Channel
 from aioamqp.envelope import Envelope
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from aioamqp.properties import Properties
-from wazo_auth_client.types import TokenDict
-from xivo.auth_verifier import AccessCheck
 
-from .auth import MasterTenantProxy
-from .exception import (
-    BusConnectionError,
-    BusConnectionLostError,
-    EventPermissionError,
-    InvalidEvent,
-    InvalidTokenError,
-)
+from .exception import BusConnectionError, BusConnectionLostError
 
 logger = logging.getLogger(__name__)
 
-SESSION_DELETED_EVENT = 'auth_session_deleted'
+SetupHook = Callable[[Channel], Awaitable[None]]
+DeliveryHandler = Callable[[bytes, Properties], Any]
 
 
-def parse_event_session_uuid(body: bytes | str) -> str | None:
-    try:
-        message = json.loads(body)
-        data = message.get('data') or message
-        return data['uuid']
-    except (ValueError, KeyError, TypeError, AttributeError):
-        logger.warning('discarding malformed `%s` event', SESSION_DELETED_EVENT)
-        return None
+def generate_name(*parts: str) -> str:
+    return '.'.join(['wazo-websocketd', *parts])
 
 
 def bus_url(config: dict) -> str:
-    return 'amqp://{username}:{password}@{host}:{port}//'.format(**config['bus'])
-
-
-class _UserHelper:
-    def __init__(self, token: TokenDict):
-        self._token = token
-
-    @property
-    def acl(self) -> list[str]:
-        return self._token['acl']
-
-    def is_admin(self) -> bool:
-        purpose = self._token['metadata'].get('purpose', None)
-        is_tenant_admin = bool(self._token['metadata'].get('admin', False))
-        return (
-            self.is_master_tenant()
-            or is_tenant_admin
-            or purpose in ('external_api', 'internal')
-        )
-
-    def is_master_tenant(self) -> bool:
-        return self.tenant_uuid == MasterTenantProxy.get_master_tenant()
-
-    @classmethod
-    def from_token(cls, token: TokenDict):
-        if 'metadata' not in token:
-            raise InvalidTokenError('Malformed token received, missing token details')
-        return cls(token)
-
-    @property
-    def session_uuid(self) -> str:
-        return self._token['session_uuid']
-
-    @property
-    def tenant_uuid(self) -> str:
-        return self._token['metadata']['tenant_uuid']
-
-    @property
-    def token_id(self) -> str:
-        return self._token['token']
-
-    @property
-    def token_utc_expires_at(self) -> str:
-        return self._token['utc_expires_at']
-
-    @property
-    def uuid(self) -> str:
-        return self._token['metadata']['uuid']
+    return 'amqp://{username}:{password}@{host}:{port}/{vhost}'.format(**config['bus'])
 
 
 class BusConnection:
@@ -103,7 +42,7 @@ class BusConnection:
         self._url: str = url
         self._closing = asyncio.Event()
         self._connected = asyncio.Event()
-        self._consumers: list[BusConsumer] = []
+        self._consumers: list[_BusConsumer] = []
         self._protocol: AmqpProtocol = None  # type: ignore[assignment]
         self._transport: asyncio.Transport = None  # type: ignore[assignment]
         self._task: asyncio.Task = None  # type: ignore[assignment]
@@ -190,15 +129,10 @@ class BusConnection:
                 f'[connection {self._id}] failed to create a new channel'
             )
 
-    def add_consumer(self, consumer) -> None:
+    def _add_consumer(self, consumer: _BusConsumer) -> None:
         self._consumers.append(consumer)
 
-    def spawn_consumer(self, config: dict, token: TokenDict) -> BusConsumer:
-        consumer = BusConsumer(self, config, token)
-        self._consumers.append(consumer)
-        return consumer
-
-    def remove_consumer(self, consumer):
+    def _remove_consumer(self, consumer: _BusConsumer) -> None:
         if consumer not in self._consumers:
             raise ValueError('consumer does not belong to this connection')
         self._consumers.remove(consumer)
@@ -219,7 +153,6 @@ class BusConnection:
 
 class _BusConnectionPool:
     def __init__(self, url: str, pool_size: int):
-        self._loop = asyncio.get_event_loop()
         self._connections = [BusConnection(url) for _ in range(pool_size)]
         self._tasks: set = set()
         self._iterator = cycle(self._connections)
@@ -229,7 +162,7 @@ class _BusConnectionPool:
 
     async def start(self):
         self._tasks = {
-            self._loop.create_task(connection.run()) for connection in self._connections
+            asyncio.create_task(connection.run()) for connection in self._connections
         }
         logger.info('bus connection pool initialized with %d connections', len(self))
 
@@ -240,6 +173,9 @@ class _BusConnectionPool:
                 for connection in self._connections
             }
         )
+
+        if not self._tasks:  # never started, so nothing to wind down
+            return
 
         # wait for connections to close gracefully or force after 5 sec
         _, pending = await asyncio.wait(self._tasks, timeout=5.0)
@@ -255,34 +191,102 @@ class _BusConnectionPool:
         return next(self._iterator)
 
 
-class BusConsumer:
-    def __init__(self, connection: BusConnection, config: dict, token: TokenDict):
-        self.set_token(token)
+class _BusConsumer:
+    """Consumes an exclusive queue on the bus, whatever it is bound for."""
+
+    _PREFETCH = 1
+
+    def __init__(
+        self,
+        connection: BusConnection,
+        *,
+        queue_name: str,
+        exchange: str,
+        handler: DeliveryHandler,
+        wait: bool,
+        prefetch: int = _PREFETCH,
+        on_setup: SetupHook | None = None,
+    ):
         self._amqp_queue: str | None = None
-        self._bound_exchange: str | None = None
         self._channel: Channel = None
         self._connection: BusConnection = connection
         self._consumer_tag: str | None = None
-        self._exchange_name: str = config['bus']['exchange_name']
-        self._prefetch: int = config['bus']['consumer_prefetch']
-        self._origin_uuid: str = config['uuid']
+        self._bound_exchange = exchange
+        self._prefetch = prefetch
         self._queue: asyncio.Queue = asyncio.Queue()
+        self._queue_name = queue_name
+        self._handler = handler
+        self._wait = wait
+        self._on_setup = on_setup
 
     async def __aenter__(self):
-        await self._start_consuming()
+        # a sentinel from a previous connection would abort this one at once
+        self._queue = asyncio.Queue()
+        self._connection._add_consumer(self)
+        try:
+            await self._start_consuming()
+        except Exception:
+            await self._discard_channel()
+            self._connection._remove_consumer(self)
+            raise
         return self
 
     async def __aexit__(self, *args):
-        await self._stop_consuming()
+        try:
+            await self._stop_consuming()
+        finally:
+            self._connection._remove_consumer(self)
+
+    async def _discard_channel(self) -> None:
+        if self._channel is not None and self._channel.is_open:
+            with contextlib.suppress(AmqpClosedConnection, ChannelClosed, OSError):
+                await self._channel.close()
+        self._channel = None
 
     def __aiter__(self):
         return self
 
-    async def __anext__(self) -> BusMessage:
+    async def __anext__(self) -> Any:
         payload = await self._queue.get()
         if isinstance(payload, Exception):
             raise payload
         return payload
+
+    async def connection_lost(self) -> None:
+        self._queue.put_nowait(BusConnectionLostError())
+
+    async def bind(self, arguments: dict) -> None:
+        await self._channel.queue_bind(
+            self._amqp_queue, self._bound_exchange, '', arguments=arguments
+        )
+
+    async def unbind(self, arguments: dict) -> None:
+        await self._channel.queue_unbind(
+            self._amqp_queue, self._bound_exchange, '', arguments=arguments
+        )
+
+    async def _start_consuming(self) -> None:
+        channel = self._channel = await self._connection.get_channel(wait=self._wait)
+        if self._on_setup is not None:
+            await self._on_setup(channel)
+        self._amqp_queue = await self._create_queue(channel, self._prefetch)
+        self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
+
+    async def _stop_consuming(self) -> None:
+        if self._channel.is_open:
+            if self._consumer_tag is not None:
+                await self._channel.basic_cancel(self._consumer_tag)
+            await self._channel.close()
+
+    async def _create_queue(self, channel: Channel, prefetch: int) -> str:
+        await channel.basic_qos(prefetch_count=prefetch, connection_global=False)
+
+        response = await channel.queue(
+            self._queue_name, durable=False, auto_delete=True, exclusive=True
+        )
+        if response['queue'] is None:
+            raise BusConnectionError
+        return response['queue']
 
     async def _consume_queue(self, channel: Channel, queue_name: str) -> str:
         response = await channel.basic_consume(
@@ -292,87 +296,6 @@ class BusConsumer:
             raise BusConnectionError
         return response['consumer_tag']
 
-    async def _create_tenant_exchange(self, channel: Channel, exchange: str) -> str:
-        tenant_uuid = self._user.tenant_uuid
-        tenant_exchange = self._generate_name(f'tenant-{tenant_uuid}')
-
-        await channel.exchange(
-            tenant_exchange, 'headers', durable=False, auto_delete=True
-        )
-
-        await channel.exchange_bind(
-            tenant_exchange,
-            exchange,
-            '',
-            arguments={'origin_uuid': self._origin_uuid, 'tenant_uuid': tenant_uuid},
-        )
-
-        return tenant_exchange
-
-    async def _create_queue(self, channel: Channel, prefetch: int = 1) -> str:
-        queue_name = self._generate_name(f'user-{self._user.uuid}', token_hex(3))
-
-        await channel.basic_qos(prefetch_count=prefetch, connection_global=False)
-
-        response = await channel.queue(
-            queue_name, durable=False, auto_delete=True, exclusive=True
-        )
-        if response['queue'] is None:
-            raise BusConnectionError
-        return response['queue']
-
-    def _decode_content(self, content: bytes, properties: Properties) -> BusMessage:
-        headers = properties.headers
-        try:
-            decoded = content.decode('utf-8')
-            message = json.loads(decoded)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            raise InvalidEvent('unable to decode message')
-
-        if not isinstance(message, dict):
-            raise InvalidEvent('invalid message format (not a dict)')
-
-        event_name = headers.get('name') or message.get('name')
-        if not event_name:
-            raise InvalidEvent('event is missing `name` field')
-
-        if 'required_acl' not in headers:
-            raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
-        acl = headers.get('required_acl')
-
-        if isinstance(acl, bytes):
-            acl = acl.decode('utf-8')
-        if acl and not isinstance(acl, str):
-            raise InvalidEvent(
-                'event ACL is not a string (type: %s)', type(acl).__name__
-            )
-
-        if not self._has_access(acl):
-            raise EventPermissionError(
-                f'user `{self._user.uuid}` doesn\'t have '
-                f'the required ACL for event `{event_name}` (missing: {acl})'
-            )
-
-        return BusMessage(event_name, headers, acl, message, decoded)
-
-    def _generate_bindings(self, event_name: str) -> list[dict]:
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
-        if self._user.is_admin():
-            binding['origin_uuid'] = self._origin_uuid
-            return [binding]
-
-        # note: users don't need origin_uuid because the tenant exchange takes care of it
-        return [
-            binding | {f'user_uuid:{self._user.uuid}': True},
-            binding | {'user_uuid:*': True},
-        ]
-
-    def _has_access(self, acl: str) -> bool:
-        return self._access.matches_required_access(acl)
-
     async def _on_message(
         self,
         channel: Channel,
@@ -381,102 +304,34 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
-            event = self._decode_content(content, properties)
-        except InvalidEvent as exc:
-            logger.error('error during message decoding (reason: %s)', exc)
-        except EventPermissionError as exc:
-            logger.debug('discarding event (reason: %s)', exc)
-        else:
-            self._queue.put_nowait(event)
+            if (payload := self._handler(content, properties)) is not None:
+                self._queue.put_nowait(payload)
         finally:
             await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
-
-    async def _start_consuming(self) -> None:
-        channel = self._channel = await self._connection.get_channel(wait=False)
-        exchange = self._exchange_name
-
-        if not self._user.is_master_tenant():
-            exchange = await self._create_tenant_exchange(channel, self._exchange_name)
-        self._bound_exchange = exchange
-
-        # Create exclusive queue on exchange
-        self._amqp_queue = await self._create_queue(channel, self._prefetch)
-
-        # Start consuming on queue
-        self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
-
-        if self._user.is_master_tenant():
-            logger.debug('user `%s` connected as global admin', self._user.uuid)
-        elif self._user.is_admin():
-            logger.debug('user `%s` connected as tenant\'s admin', self._user.uuid)
-        else:
-            logger.debug('user `%s` connected as user', self._user.uuid)
-
-    async def _stop_consuming(self) -> None:
-        if self._channel.is_open:
-            if self._consumer_tag is not None:
-                await self._channel.basic_cancel(self._consumer_tag)
-            await self._channel.close()
-        self._connection.remove_consumer(self)
-
-    async def bind(self, event_name: str) -> None:
-        for binding in self._generate_bindings(event_name):
-            await self._channel.queue_bind(
-                self._amqp_queue, self._bound_exchange, '', arguments=binding
-            )
-
-    async def connection_lost(self) -> None:
-        self._queue.put_nowait(BusConnectionLostError())
-
-    async def unbind(self, event_name: str) -> None:
-        for binding in self._generate_bindings(event_name):
-            await self._channel.queue_unbind(
-                self._amqp_queue, self._bound_exchange, '', arguments=binding
-            )
-
-    def get_token(self) -> dict[str, str]:
-        return {
-            'token': self._user.token_id,
-            'utc_expires_at': self._user.token_utc_expires_at,
-        }
-
-    def set_token(self, token: TokenDict):
-        self._user = user = _UserHelper.from_token(token)
-        self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
-
-    @staticmethod
-    def _generate_name(*parts: str) -> str:
-        return '.'.join(['wazo-websocketd', *parts])
-
-
-class BusMessage(NamedTuple):
-    name: str
-    headers: dict
-    acl: str | None
-    content: dict
-    raw: str
 
 
 class BusService:
     def __init__(self, config: dict):
         poolsize: int = config.get('worker_connections', 1)
-        url: str = 'amqp://{username}:{password}@{host}:{port}//'.format(
-            **config['bus']
-        )
 
         self._config = config
-        self._connection_pool = _BusConnectionPool(url, poolsize)
+        self._connection_pool = _BusConnectionPool(bus_url(config), poolsize)
+
+    async def start(self) -> None:
+        await self._connection_pool.start()
+
+    async def stop(self) -> None:
+        await self._connection_pool.stop()
 
     async def __aenter__(self):
-        await self._connection_pool.start()
+        await self.start()
         return self
 
     async def __aexit__(self, *args):
-        await self._connection_pool.stop()
+        await self.stop()
 
-    async def create_consumer(self, token: TokenDict) -> BusConsumer:
-        connection = self._connection_pool.get_connection()
-        return connection.spawn_consumer(self._config, token)
+    def connection(self) -> BusConnection:
+        return self._connection_pool.get_connection()
 
     async def initialize_exchanges(self):
         async def create_exchange(config: dict, channel: Channel):

@@ -3,16 +3,26 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from contextlib import asynccontextmanager
 from datetime import datetime
-from unittest.mock import Mock, sentinel
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
 from xivo.auth_verifier import AccessCheck
 
-from ..bus import BusConsumer, BusMessage
 from ..config import _DEFAULT_CONFIG
-from ..exception import BusConnectionLostError, EventPermissionError, InvalidEvent
+from ..consumers import BusEvent, SessionInvalidator, UserBusSubscriber
+from ..exception import (
+    AuthenticationError,
+    BusConnectionError,
+    BusConnectionLostError,
+    EventPermissionError,
+    InvalidEvent,
+)
+from ..token_cache import CachingAuthenticator
 
 
 def _token(**metadata):
@@ -42,14 +52,14 @@ def _token(**metadata):
 
 def _consumer(origin_uuid=None, **metadata):
     config = dict(_DEFAULT_CONFIG, uuid=origin_uuid or Mock())
-    return BusConsumer(Mock(), config, _token(**metadata))
+    return UserBusSubscriber(Mock(), config, _token(**metadata))
 
 
 def _properties(**headers):
     return Mock(headers=headers)
 
 
-class TestBusDecoding:
+class TestEventDecoding:
     def setup_method(self):
         self.consumer = _consumer()
 
@@ -68,7 +78,7 @@ class TestBusDecoding:
 
         event = self.consumer._decode_content(b'{}', properties)
 
-        assert event == BusMessage('foo', properties.headers, None, {}, '{}')
+        assert event == BusEvent('foo', properties.headers, None, {}, '{}')
 
     def test_an_event_missing_its_required_acl_header_is_refused(self):
         with pytest.raises(EventPermissionError):
@@ -108,31 +118,49 @@ class TestBusDecoding:
             self.consumer._decode_content(content, _properties(**headers))
 
 
-class TestBusDispatching:
+class TestEventDispatching:
     def setup_method(self):
         self.consumer = _consumer()
         self.consumer._access = Mock(AccessCheck)
 
+    async def _deliver(self, content, **headers):
+        channel = Mock(basic_client_ack=AsyncMock())
+        await self.consumer._consumer._on_message(
+            channel, content, Mock(delivery_tag=1), _properties(**headers)
+        )
+        channel.basic_client_ack.assert_awaited_once()
+
     async def test_a_lost_connection_is_raised_to_whoever_is_consuming(self):
-        await self.consumer.connection_lost()
+        await self.consumer._consumer.connection_lost()
 
         with pytest.raises(BusConnectionLostError):
             async for _ in self.consumer:
                 pass
 
-    async def test_a_queued_event_is_handed_to_the_consumer(self):
-        event = BusMessage(
-            'foo', sentinel.headers, 'some.acl', sentinel.payload, sentinel.content
-        )
+    async def test_a_delivered_event_is_handed_to_whoever_is_consuming(self):
+        await self._deliver(b'{"id": 7}', name='foo', required_acl='some.acl')
 
-        await self.consumer._queue.put(event)
-
-        async for message in self.consumer:
-            assert message == event
+        async for event in self.consumer:
+            assert event == BusEvent(
+                'foo',
+                {'name': 'foo', 'required_acl': 'some.acl'},
+                'some.acl',
+                {'id': 7},
+                '{"id": 7}',
+            )
             break
 
+    async def test_an_event_the_user_may_not_see_is_never_handed_over(self):
+        self.consumer._access = Mock(**{'matches_required_access.return_value': False})
 
-class TestBusBindings:
+        await self._deliver(b'{"id": 7}', name='foo', required_acl='other.acl')
+
+        # nothing was queued, so consuming would block rather than yield it
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(self.consumer.__anext__(), timeout=0.05)
+
+
+class TestEventBindings:
     def test_a_user_binds_to_its_own_events_and_to_the_broadcasts(self):
         user_uuid = str(uuid4())
         consumer = _consumer(purpose='user', admin=False, uuid=user_uuid)
@@ -162,3 +190,144 @@ class TestBusBindings:
             {'name': 'some_event', 'origin_uuid': origin_uuid},
         ]
         assert consumer._generate_bindings('*') == [{'origin_uuid': origin_uuid}]
+
+
+_BUS_CONFIG = {'bus': {'exchange_name': 'wazo-headers', 'exchange_type': 'headers'}}
+_TOKEN = {
+    'token': 'tok',
+    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
+    'utc_expires_at': '2999-01-01T00:00:00',
+}
+
+
+def _upstream(**get_token_kwargs):
+    upstream = Mock()
+    upstream.get_token = AsyncMock(**get_token_kwargs)
+    return upstream
+
+
+def _cache(upstream):
+    return CachingAuthenticator(
+        upstream,
+        positive_ttl=10.0,
+        negative_ttl=5.0,
+        max_size=16 * 1024 * 1024,
+        max_negative_entries=10000,
+    )
+
+
+def _session_token(session_uuid):
+    return {**_TOKEN, 'session_uuid': session_uuid}
+
+
+def _marshaled(event):
+    return json.dumps(event).encode()
+
+
+def _bus_connection():
+    channel = AsyncMock()
+    channel.queue.return_value = {'queue': 'q'}
+    connection = Mock(is_closing=False, get_channel=AsyncMock(return_value=channel))
+    return connection, channel
+
+
+@asynccontextmanager
+async def _running_invalidator(cache):
+    """Runs an invalidator, yielding a callable that delivers one bus event."""
+    connection, channel = _bus_connection()
+    invalidator = SessionInvalidator(connection, _BUS_CONFIG, cache)
+    consumer = invalidator._consumer
+    task = asyncio.create_task(invalidator.run())
+    await asyncio.sleep(0)  # let it subscribe
+
+    async def deliver(content):
+        await consumer._on_message(channel, content, Mock(delivery_tag=1), Mock())
+        await asyncio.sleep(0)  # let the run loop act on it
+
+    try:
+        yield deliver
+    finally:
+        connection.is_closing = True
+        await consumer.connection_lost()
+        await asyncio.wait_for(task, timeout=1)
+
+
+class TestSessionInvalidator:
+    async def test_session_deleted_event_refuses_the_session_tokens(self):
+        upstream = _upstream(return_value=_session_token('session-1'))
+        cache = _cache(upstream)
+        event = {'name': 'auth_session_deleted', 'data': {'uuid': 'session-1'}}
+
+        async with _running_invalidator(cache) as deliver:
+            await cache.get_token('T')
+            await deliver(_marshaled(event))
+
+        with pytest.raises(AuthenticationError):
+            await cache.get_token('T')  # revoked: refused without asking upstream
+        assert upstream.get_token.await_count == 1
+
+    async def test_unwrapped_session_deleted_payload_is_understood(self):
+        upstream = _upstream(return_value=_session_token('session-2'))
+        cache = _cache(upstream)
+        event = {'name': 'auth_session_deleted', 'uuid': 'session-2'}
+
+        async with _running_invalidator(cache) as deliver:
+            await cache.get_token('T')
+            await deliver(_marshaled(event))
+
+        with pytest.raises(AuthenticationError):
+            await cache.get_token('T')
+        assert upstream.get_token.await_count == 1
+
+    async def test_malformed_session_deleted_event_is_discarded(self):
+        upstream = _upstream(return_value=_session_token('session-3'))
+        cache = _cache(upstream)
+
+        async with _running_invalidator(cache) as deliver:
+            await cache.get_token('T')
+            await deliver(b'not-json')
+            await deliver(_marshaled({'data': {}}))
+
+            # asserted before leaving: losing the bus flushes the cache
+            result = await cache.get_token('T')
+
+        assert result == _session_token('session-3')
+        assert upstream.get_token.await_count == 1
+
+    async def test_invalidator_flushes_then_degrades_with_bus_state(self):
+        upstream = _upstream(return_value=_session_token('session-4'))
+        cache = _cache(upstream)
+
+        channel = AsyncMock()
+        channel.queue.return_value = {'queue': 'q'}
+
+        connection = Mock()
+        connection.is_closing = False
+        channels = [channel]
+
+        async def get_channel(*, wait=False):
+            if channels:
+                return channels.pop()
+            raise BusConnectionError('closing')
+
+        connection.get_channel = get_channel
+        invalidator = SessionInvalidator(connection, _BUS_CONFIG, cache)
+        cache.eviction_lost()
+        await cache.get_token('T')  # degraded entry, then flushed on subscribe
+
+        task = asyncio.create_task(invalidator.run())
+        await asyncio.sleep(0.01)  # let it subscribe
+
+        await cache.get_token('T')  # miss after the flush: refetch, full ttl
+
+        await invalidator._consumer.connection_lost()
+        connection.is_closing = True
+        await asyncio.wait_for(task, timeout=1)
+
+        assert upstream.get_token.await_count == 2
+        channel.queue_bind.assert_awaited_once_with(
+            'q',
+            'wazo-headers',
+            '',
+            arguments={'name': 'auth_session_deleted'},
+        )

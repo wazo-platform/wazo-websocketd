@@ -10,7 +10,8 @@ from urllib.parse import parse_qsl, urlparse
 import websockets
 
 from .auth import MasterTenantProxy
-from .bus import BusConsumer, BusService
+from .bus import BusService
+from .consumers import UserBusSubscriber
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -83,6 +84,7 @@ class Session:
         ws,
         path,
     ):
+        self._config = config
         self._ws_ping_interval = config['websocket']['ping_interval']
         self._authenticator = authenticator
         self._protocol_version = 1
@@ -92,7 +94,7 @@ class Session:
         self._path = path
         self._started = False
         self._bus_service: BusService = bus_service
-        self._consumer: BusConsumer = None  # type: ignore[assignment]
+        self._consumer: UserBusSubscriber = None  # type: ignore[assignment]
         self._user_uuid: str | None = None
         self._tenant_uuid: str | None = None
 
@@ -190,7 +192,9 @@ class Session:
         self._user_uuid = token['metadata'].get('uuid')
         self._tenant_uuid = token['metadata'].get('tenant_uuid')
 
-        async with await self._bus_service.create_consumer(token) as self._consumer:
+        async with UserBusSubscriber(
+            self._bus_service.connection(), self._config, token
+        ) as self._consumer:
             await self._ws.send(
                 self._protocol_encoder.encode_init(version=self._protocol_version)
             )
@@ -238,16 +242,16 @@ class Session:
             await func(msg)
 
     async def _task_transmit_event(self):
-        async for message in self._consumer:
+        async for event in self._consumer:
             if not self._started:
                 logger.debug(
                     'unable to push event to websocket as session hasn\'t started yet'
                 )
                 continue
             if self._protocol_version == 1:
-                payload = message.raw
+                payload = event.raw
             else:
-                payload = self._protocol_encoder.encode_event(message.content)
+                payload = self._protocol_encoder.encode_event(event.content)
             await self._ws.send(payload)
 
     async def _task_authentification(self):
@@ -256,7 +260,7 @@ class Session:
     async def _do_ws_subscribe(self, msg):
         event_name = msg.value
         logger.debug('subscribing to event "%s"', event_name)
-        await self._consumer.bind(event_name)
+        await self._consumer.subscribe(event_name)
         if not self._started or self._protocol_version == 2:
             await self._ws.send(self._protocol_encoder.encode_subscribe())
 

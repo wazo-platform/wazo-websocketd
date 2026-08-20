@@ -25,6 +25,7 @@ class FakeWazoAuth:
     def __init__(self, socket_path: str | None = None, host: str = '127.0.0.1') -> None:
         self.tokens: dict[str, dict[str, Any]] = {}
         self.statuses: dict[str, int] = {}
+        self.unparseable: set[str] = set()
         self.requests: list[tuple[str, str, str | None]] = []
         self.created: list[tuple[dict[str, Any], str | None]] = []
         self.created_token: dict[str, Any] = {'token': 'service-token'}
@@ -85,6 +86,9 @@ class FakeWazoAuth:
     async def _handle(self, request: web.Request) -> web.Response:
         token_id = request.match_info['token_id']
         self.requests.append((request.method, token_id, request.query.get('scope')))
+        if token_id in self.unparseable:
+            # a proxy answering 200 with its own error page
+            return web.Response(text='<html>not json</html>', content_type='text/html')
         status = self.statuses.get(token_id, 200 if token_id in self.tokens else 404)
         if status != 200:
             if request.method == 'HEAD':

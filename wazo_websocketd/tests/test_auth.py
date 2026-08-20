@@ -92,6 +92,14 @@ class TestAsyncAuthClient:
                 with pytest.raises(AuthServerUnavailableError):
                     await client.get_token('T')
 
+    async def test_a_success_we_cannot_parse_is_an_outage_not_a_rejection(self):
+        async with fake_wazo_auth() as fake:
+            fake.unparseable.add('T')
+            async with auth_client({'auth': fake.config()}) as client:
+                # relaying it as a rejection hands the broker a bogus http status
+                with pytest.raises(AuthServerUnavailableError):
+                    await client.get_token('T')
+
     async def test_an_unreachable_server_is_an_outage(self):
         async with auth_client({'auth': refused_config()}) as client:
             with pytest.raises(AuthServerUnavailableError):
