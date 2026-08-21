@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from typing import Any
@@ -204,6 +204,7 @@ class _BusConsumer:
         exchange: str,
         handler: DeliveryHandler,
         wait: bool,
+        bindings: Sequence[dict] = (),
         prefetch: int = _PREFETCH,
         on_setup: SetupHook | None = None,
     ):
@@ -217,6 +218,7 @@ class _BusConsumer:
         self._queue_name = queue_name
         self._handler = handler
         self._wait = wait
+        self._bindings = bindings
         self._on_setup = on_setup
 
     async def __aenter__(self):
@@ -266,11 +268,15 @@ class _BusConsumer:
         )
 
     async def _start_consuming(self) -> None:
-        channel = self._channel = await self._connection.get_channel(wait=self._wait)
+        self._channel = await self._connection.get_channel(wait=self._wait)
+
         if self._on_setup is not None:
-            await self._on_setup(channel)
-        self._amqp_queue = await self._create_queue(channel, self._prefetch)
-        self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
+            await self._on_setup(self._channel)
+
+        self._amqp_queue = await self._create_queue()
+        for arguments in self._bindings:
+            await self.bind(arguments)
+        self._consumer_tag = await self._consume_queue()
 
     async def _stop_consuming(self) -> None:
         if self._channel.is_open:
@@ -278,19 +284,21 @@ class _BusConsumer:
                 await self._channel.basic_cancel(self._consumer_tag)
             await self._channel.close()
 
-    async def _create_queue(self, channel: Channel, prefetch: int) -> str:
-        await channel.basic_qos(prefetch_count=prefetch, connection_global=False)
+    async def _create_queue(self) -> str:
+        await self._channel.basic_qos(
+            prefetch_count=self._prefetch, connection_global=False
+        )
 
-        response = await channel.queue(
+        response = await self._channel.queue(
             self._queue_name, durable=False, auto_delete=True, exclusive=True
         )
         if response['queue'] is None:
             raise BusConnectionError
         return response['queue']
 
-    async def _consume_queue(self, channel: Channel, queue_name: str) -> str:
-        response = await channel.basic_consume(
-            self._on_message, queue_name, exclusive=True
+    async def _consume_queue(self) -> str:
+        response = await self._channel.basic_consume(
+            self._on_message, self._amqp_queue, exclusive=True
         )
         if response['consumer_tag'] is None:
             raise BusConnectionError

@@ -218,6 +218,7 @@ class SessionInvalidator:
             exchange=self._exchange_name,
             handler=self._on_deleted_session,
             wait=True,  # started with the bus, so let the connection come up
+            bindings=[{'name': SESSION_DELETED_EVENT}],
             on_setup=self._declare_exchange,
         )
 
@@ -237,7 +238,6 @@ class SessionInvalidator:
         while True:
             try:
                 async with self._consumer:
-                    await self._consumer.bind({'name': SESSION_DELETED_EVENT})
                     delays = self._delays()
                     self._cache.eviction_active()
                     logger.info('bus session eviction active')
