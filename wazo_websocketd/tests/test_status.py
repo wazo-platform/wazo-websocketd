@@ -82,14 +82,13 @@ class TestStatusOverTcp:
         assert status == 503
         assert body['state'] == 'starting'
 
-    async def test_it_listens_where_it_is_told(self):
-        server = await self._started(listen='127.0.0.1')
+    async def test_it_listens_only_where_it_is_told(self):
+        server = await self._started(listen='127.0.0.2')
 
-        host, port = server._runner.addresses[0][:2]
-        status, _ = await _get_status(f'http://{host}:{port}/status')
+        status, _ = await _get_status(f'http://127.0.0.2:{server.port}/status')
+        with pytest.raises(aiohttp.ClientConnectorError):
+            await _get_status(f'http://127.0.0.1:{server.port}/status')
 
-        assert host == '127.0.0.1'
-        assert port != 9504  # the ephemeral port we asked for, not the default
         assert status == 200
 
 

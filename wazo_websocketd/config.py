@@ -100,6 +100,19 @@ def _parse_cli_args():
         "over TCP.",
     )
     parser.add_argument(
+        '--status-listen',
+        action='store',
+        help="Address the status endpoint binds to when this process runs "
+        "standalone. Defaults to loopback; a supervised process serves its status "
+        "on a unix socket instead and ignores this.",
+    )
+    parser.add_argument(
+        '--status-port',
+        action='store',
+        type=int,
+        help="Port the status endpoint binds to when this process runs standalone.",
+    )
+    parser.add_argument(
         '-d',
         '--debug',
         action='store_true',
@@ -119,6 +132,10 @@ def _parse_cli_args():
         result['user'] = parsed_args.user
     if parsed_args.supervised_as:
         result['supervised_as'] = parsed_args.supervised_as
+    if parsed_args.status_listen:
+        result.setdefault('status', {})['listen'] = parsed_args.status_listen
+    if parsed_args.status_port:
+        result.setdefault('status', {})['port'] = parsed_args.status_port
 
     return result
 

@@ -11,6 +11,7 @@ import socket
 import struct
 from collections.abc import Callable
 from enum import StrEnum
+from typing import Any
 
 from aiohttp import web
 
@@ -59,8 +60,11 @@ async def socket_peer_pid(socket_path: str) -> int | None:
 
 async def serve_unix(runner: web.AppRunner, socket_path: str) -> None:
     await remove_stale_socket(socket_path)
-    await web.UnixSite(runner, socket_path).start()
-    os.chmod(socket_path, 0o600)
+    previous = os.umask(0o177)
+    try:
+        await web.UnixSite(runner, socket_path).start()
+    finally:
+        os.umask(previous)
 
 
 async def remove_stale_socket(socket_path: str) -> None:
@@ -80,8 +84,9 @@ class StatusServer:
         *,
         name: str,
         supervised: bool,
-        connection_counter: Callable[[], int],
+        connection_counter: Callable[[], int] = lambda: 0,
         ready_checker: Callable[[], bool] | None = None,
+        metrics: Callable[[], dict[str, Any]] | None = None,
         host_app: web.Application | None = None,
         listen: str,
         port: int,
@@ -90,6 +95,7 @@ class StatusServer:
         self._supervised = supervised
         self._connection_counter = connection_counter
         self._ready_checker = ready_checker
+        self._metrics = metrics
         self._listen = listen
         self._port = port
         self._draining = False
@@ -116,19 +122,27 @@ class StatusServer:
         self._draining = True
 
     async def start(self) -> None:
-        if self._runner is None:  # a host app already serves our routes
+        if self._runner is None:
+            logger.info('status endpoint served by the host application')
             return
+
         await self._runner.setup()
         if self._supervised:
-            socket_path = self.socket_path
-            await serve_unix(self._runner, socket_path)
-            self._socket_path = socket_path  # ours to unlink only once bound
-            logger.info('status endpoint listening on %s', socket_path)
+            await self._serve_unix_socket()
         else:
-            await web.TCPSite(self._runner, self._listen, self._port).start()
-            logger.info(
-                'status endpoint listening on %s:%d', *self._runner.addresses[0]
-            )
+            await self._serve_port()
+
+    async def _serve_unix_socket(self) -> None:
+        assert self._runner is not None
+        socket_path = self.socket_path
+        await serve_unix(self._runner, socket_path)
+        self._socket_path = socket_path  # ours to unlink only once bound
+        logger.info('status endpoint listening on %s', socket_path)
+
+    async def _serve_port(self) -> None:
+        assert self._runner is not None
+        await web.TCPSite(self._runner, self._listen, self._port).start()
+        logger.info('status endpoint listening on %s:%d', *self._runner.addresses[0])
 
     async def stop(self) -> None:
         if self._runner is None:
@@ -146,6 +160,7 @@ class StatusServer:
                 'connections': self._connection_counter(),
                 'name': self._name,
                 'pid': os.getpid(),
+                **(self._metrics() if self._metrics else {}),
             },
             status=200 if state is WorkerState.READY else 503,
         )
