@@ -1,5 +1,6 @@
 https://github.com/wazo-platform/wazo-test-helpers/archive/master.zip
 aioamqp
+aiohttp
 pytest
 requests
 # Constraint can be removed when issue is fixed: https://github.com/python-websockets/websockets/issues/1548

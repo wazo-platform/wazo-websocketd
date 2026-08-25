@@ -1,4 +1,4 @@
-# Copyright 2016-2023 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import os.path
@@ -9,6 +9,8 @@ ASSET_ROOT = path.join(os.path.dirname(__file__), '..', '..', 'assets')
 
 WAZO_ORIGIN_UUID = 'the-predefined-wazo-uuid'
 START_TIMEOUT = int(environ.get('INTEGRATION_TEST_TIMEOUT', '60'))
+
+SESSION_DELETED_EVENT = 'auth_session_deleted'
 
 INVALID_TOKEN_ID = 'invalid-token'
 UNAUTHORIZED_TOKEN_ID = 'invalid-acl-token'

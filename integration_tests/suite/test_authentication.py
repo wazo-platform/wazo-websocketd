@@ -3,6 +3,7 @@
 
 import asyncio
 import time
+from uuid import uuid4
 
 import websockets
 
@@ -83,8 +84,10 @@ class TestTokenExpirationCheckStatic(IntegrationTest):
     _CLIENT_TIMEOUT = 5
 
     async def test_token_expire_use_static_strategy(self):
-        with self.auth_client.token() as token:
+        session_uuid = uuid4()
+        with self.auth_client.token(session_uuid=session_uuid) as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
+        await self.bus_client.publish_session_deleted(session_uuid)
         self.websocketd_client.timeout = self._CLIENT_TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
@@ -96,8 +99,10 @@ class TestTokenExpiration(IntegrationTest):
     _TIMEOUT = 5
 
     async def test_token_expire_closes_websocket(self):
-        with self.auth_client.token() as token:
+        session_uuid = uuid4()
+        with self.auth_client.token(session_uuid=session_uuid) as token:
             await self.websocketd_client.connect_and_wait_for_init(token)
+        await self.bus_client.publish_session_deleted(session_uuid)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
 
@@ -113,14 +118,16 @@ class TestTokenExpiration(IntegrationTest):
         self.auth_client.revoke_token(new_token)
 
     async def test_token_renew_and_expire(self):
-        token = self.auth_client.make_token()
+        session_uuid = uuid4()
+        token = self.auth_client.make_token(session_uuid=session_uuid)
         await self.websocketd_client.connect_and_wait_for_init(token, version=2)
         await self.websocketd_client.op_start()
-        new_token = self.auth_client.make_token()
+        new_token = self.auth_client.make_token(session_uuid=session_uuid)
         await self.websocketd_client.op_token(new_token)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_nothing()
         self.auth_client.revoke_token(new_token)
+        await self.bus_client.publish_session_deleted(session_uuid)
         self.websocketd_client.timeout = self._TIMEOUT
         await self.websocketd_client.wait_for_close(CLOSE_CODE_AUTH_EXPIRED)
         self.auth_client.revoke_token(token)

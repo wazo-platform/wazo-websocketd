@@ -13,3 +13,8 @@ auth:
 
 bus:
   host: rabbitmq
+
+broker:
+  listen: 0.0.0.0
+  connect: broker
+  port: 9506

@@ -5,6 +5,7 @@ import asyncio
 import unittest
 from contextlib import asynccontextmanager
 
+import aiohttp
 import pytest
 from wazo_test_helpers.asset_launching_test_case import (
     AssetLaunchingTestCase,
@@ -25,7 +26,7 @@ from .constants import (
     TENANT2_UUID,
     TOKEN_UUID,
 )
-from .wait_strategy import WaitStrategy, WaitUntilValidConnection
+from .wait_strategy import AsyncWaitStrategy, BrokerReady, WebsocketdReady
 from .websocketd import WebSocketdClient
 
 use_asset = pytest.mark.usefixtures
@@ -52,7 +53,7 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
     # FIXME: Until a proper /status route is establish, wait a small amount
     # of time after creating service credentials to allow websocketd to find
     # who is the master tenant
-    wait_strategy: WaitStrategy = WaitUntilValidConnection()
+    wait_strategy = AsyncWaitStrategy(BrokerReady(), WebsocketdReady())
 
     @classmethod
     def setUpClass(cls):
@@ -108,7 +109,7 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
                         break
                     await asyncio.sleep(1)
                 cls.configure_auth()
-            await WaitUntilValidConnection().await_for_connection(cls)
+            await cls.wait_strategy.await_ready(cls)
 
     @classmethod
     def make_filesystem(cls):
@@ -129,6 +130,14 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
         except (NoSuchService, NoSuchPort):
             return WrongClient('rabbitmq')
         return BusClient(port)
+
+    @classmethod
+    async def broker_status(cls, timeout=5.0):
+        port = cls.service_port(9504, 'broker')
+        client_timeout = aiohttp.ClientTimeout(total=timeout)
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
+            async with session.get(f'http://127.0.0.1:{port}/status') as response:
+                return response.status, await response.json()
 
     @classmethod
     def make_websocketd(cls, loop):

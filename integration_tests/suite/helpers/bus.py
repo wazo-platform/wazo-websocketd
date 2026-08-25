@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -10,7 +10,13 @@ from uuid import UUID
 import aioamqp
 from aioamqp.exceptions import AmqpClosedConnection
 
-from .constants import START_TIMEOUT, TENANT1_UUID, USER1_UUID, WAZO_ORIGIN_UUID
+from .constants import (
+    SESSION_DELETED_EVENT,
+    START_TIMEOUT,
+    TENANT1_UUID,
+    USER1_UUID,
+    WAZO_ORIGIN_UUID,
+)
 
 
 class BusClient:
@@ -43,6 +49,15 @@ class BusClient:
             await self._channel.close()
             await self._protocol.close()
             self._transport.close()
+
+    async def publish_session_deleted(self, session_uuid: str | UUID) -> None:
+        if self._channel is None:
+            await self.connect()
+        event = {
+            'name': SESSION_DELETED_EVENT,
+            'data': {'uuid': str(session_uuid)},
+        }
+        await self.publish(event)
 
     async def publish(
         self,

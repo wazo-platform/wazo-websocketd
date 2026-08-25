@@ -14,6 +14,18 @@ services:
     ports:
       - "5672"
 
+  broker:
+    image: wazo-websocketd-test
+    command: ["wazo-websocketd-broker", "--status-listen", "0.0.0.0"]
+    volumes:
+      - "../..:/usr/src/wazo-websocketd"
+      - "./etc/wazo-websocketd/conf.d/50-base.yml:/etc/wazo-websocketd/conf.d/50-base.yml"
+    ports:
+      - "9504"
+    environment:
+      HOME: "/usr/src/wazo-websocketd"
+      XIVO_UUID: "the-predefined-wazo-uuid"
+
   websocketd:
     image: wazo-websocketd-test
     volumes:
