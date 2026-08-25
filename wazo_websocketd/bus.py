@@ -7,7 +7,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
-from itertools import chain, cycle, repeat
+from itertools import cycle
 from multiprocessing import Value
 from typing import Any
 
@@ -19,6 +19,7 @@ from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from aioamqp.properties import Properties
 
 from .exception import BusConnectionError, BusConnectionLostError
+from .helpers.timing import capped_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class BusConnection:
             )
 
     async def connect(self):
-        timeouts = chain((1, 2, 4, 8, 16), repeat(32))
+        timeouts = capped_backoff(1, 5, 32)
         while True:
             try:
                 transport, protocol = await aioamqp.from_url(self._url, heartbeat=10)

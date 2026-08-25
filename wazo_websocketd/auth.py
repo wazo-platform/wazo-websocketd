@@ -68,16 +68,15 @@ class AsyncAuthClient:
         self._timeout: float = config.get('timeout') or self._TIMEOUT
         self._session: aiohttp.ClientSession | None = None
 
-    @staticmethod
-    def _build_endpoint(config: dict[str, Any]) -> str:
-        host = config.get('host', 'localhost')
+    def _build_endpoint(self, config: dict[str, Any]) -> str:
         prefix = config.get('prefix') or ''
         if prefix and not prefix.startswith('/'):
             prefix = f'/{prefix}'
 
-        if is_unix_socket(host):
+        if self._socket_path:
             return f'http://localhost{prefix}/0.1'
 
+        host = config.get('host', 'localhost')
         if not config.get('https') and host not in _LOOPBACK_HOSTS:
             logger.warning(
                 'talking to wazo-auth on %s in clear text: set `auth.https`', host
@@ -287,7 +286,6 @@ class Authenticator:
         self._auth_check = auth_check
 
     def get_token(self, token_id: str) -> Awaitable[TokenDict]:
-        # This function returns a coroutine.
         return self._auth_client.get_token(token_id)
 
     def run_check(self, token_getter: _TokenGetter) -> Awaitable[None]:
@@ -320,10 +318,6 @@ class MasterTenantProxy:
         else:
             logger.info('setting master_tenant_uuid to \'%s\'', tenant_uuid)
             cls.proxy.value = tenant_uuid
-
-    @classmethod
-    def get_master_tenant(cls) -> str | None:
-        return cls.proxy.value
 
     @classmethod
     def matches(cls, tenant_uuid: str) -> bool:

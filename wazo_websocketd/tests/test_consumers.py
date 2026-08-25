@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock
@@ -22,7 +21,8 @@ from ..exception import (
     EventPermissionError,
     InvalidEvent,
 )
-from ..token_cache import CachingAuthenticator
+from .helpers import BUS_CONFIG as _BUS_CONFIG
+from .helpers import caching_authenticator, marshaled, session_token, token_provider
 
 
 def _token(**metadata):
@@ -192,38 +192,6 @@ class TestEventBindings:
         assert consumer._generate_bindings('*') == [{'origin_uuid': origin_uuid}]
 
 
-_BUS_CONFIG = {'bus': {'exchange_name': 'wazo-headers', 'exchange_type': 'headers'}}
-_TOKEN = {
-    'token': 'tok',
-    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-    'utc_expires_at': '2999-01-01T00:00:00',
-}
-
-
-def _upstream(**get_token_kwargs):
-    upstream = Mock()
-    upstream.get_token = AsyncMock(**get_token_kwargs)
-    return upstream
-
-
-def _cache(upstream):
-    return CachingAuthenticator(
-        upstream,
-        positive_ttl=10.0,
-        negative_ttl=5.0,
-        max_size=16 * 1024 * 1024,
-        max_negative_entries=10000,
-    )
-
-
-def _session_token(session_uuid):
-    return {**_TOKEN, 'session_uuid': session_uuid}
-
-
-def _marshaled(event):
-    return json.dumps(event).encode()
-
-
 def _bus_connection():
     channel = AsyncMock()
     channel.queue.return_value = {'queue': 'q'}
@@ -254,49 +222,49 @@ async def _running_invalidator(cache):
 
 class TestSessionInvalidator:
     async def test_session_deleted_event_refuses_the_session_tokens(self):
-        upstream = _upstream(return_value=_session_token('session-1'))
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=session_token('session-1'))
+        cache = caching_authenticator(upstream)
         event = {'name': 'auth_session_deleted', 'data': {'uuid': 'session-1'}}
 
         async with _running_invalidator(cache) as deliver:
             await cache.get_token('T')
-            await deliver(_marshaled(event))
+            await deliver(marshaled(event))
 
         with pytest.raises(AuthenticationError):
             await cache.get_token('T')  # revoked: refused without asking upstream
         assert upstream.get_token.await_count == 1
 
     async def test_unwrapped_session_deleted_payload_is_understood(self):
-        upstream = _upstream(return_value=_session_token('session-2'))
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=session_token('session-2'))
+        cache = caching_authenticator(upstream)
         event = {'name': 'auth_session_deleted', 'uuid': 'session-2'}
 
         async with _running_invalidator(cache) as deliver:
             await cache.get_token('T')
-            await deliver(_marshaled(event))
+            await deliver(marshaled(event))
 
         with pytest.raises(AuthenticationError):
             await cache.get_token('T')
         assert upstream.get_token.await_count == 1
 
     async def test_malformed_session_deleted_event_is_discarded(self):
-        upstream = _upstream(return_value=_session_token('session-3'))
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=session_token('session-3'))
+        cache = caching_authenticator(upstream)
 
         async with _running_invalidator(cache) as deliver:
             await cache.get_token('T')
             await deliver(b'not-json')
-            await deliver(_marshaled({'data': {}}))
+            await deliver(marshaled({'data': {}}))
 
             # asserted before leaving: losing the bus flushes the cache
             result = await cache.get_token('T')
 
-        assert result == _session_token('session-3')
+        assert result == session_token('session-3')
         assert upstream.get_token.await_count == 1
 
     async def test_invalidator_flushes_then_degrades_with_bus_state(self):
-        upstream = _upstream(return_value=_session_token('session-4'))
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=session_token('session-4'))
+        cache = caching_authenticator(upstream)
 
         channel = AsyncMock()
         channel.queue.return_value = {'queue': 'q'}

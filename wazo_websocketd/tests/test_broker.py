@@ -5,7 +5,7 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import aiohttp
 import pytest
@@ -16,32 +16,8 @@ from wazo_auth_client import Client as AuthClient
 from ..auth import FallbackAuthClient
 from ..broker import BrokerServer, _HTTPApplication
 from ..exception import AuthenticationError, AuthServerUnavailableError
-from ..token_cache import CachingAuthenticator
-from .helpers import fake_wazo_auth
-
-_BUS_CONFIG = {'bus': {'exchange_name': 'wazo-headers', 'exchange_type': 'headers'}}
-
-_TOKEN = {
-    'token': 'tok',
-    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-    'utc_expires_at': '2999-01-01T00:00:00',
-}
-
-
-def _upstream(**get_token_kwargs):
-    upstream = Mock()
-    upstream.get_token = AsyncMock(**get_token_kwargs)
-    return upstream
-
-
-def _cache(upstream):
-    return CachingAuthenticator(
-        upstream,
-        positive_ttl=10.0,
-        negative_ttl=5.0,
-        max_size=16 * 1024 * 1024,
-        max_negative_entries=10000,
-    )
+from .helpers import TOKEN as _TOKEN
+from .helpers import caching_authenticator, fake_wazo_auth, token_provider
 
 
 @asynccontextmanager
@@ -80,6 +56,7 @@ def _server_config(upstream, listen):
             'vhost': '',
             'exchange_name': 'wazo-headers',
             'exchange_type': 'headers',
+            'consumer_prefetch': 250,
         },
         'broker': {'listen': listen, 'port': 0},
         'status': {'listen': '127.0.0.1', 'port': 0},
@@ -107,19 +84,6 @@ async def _get_over_unix_socket(socket_path, path):
     async with aiohttp.ClientSession(connector=connector) as session:
         async with session.get(f'http://localhost{path}') as response:
             return response.status, await response.json()
-
-
-def _session_token(session_uuid):
-    return {
-        'token': 'tok',
-        'session_uuid': session_uuid,
-        'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-        'utc_expires_at': '2999-01-01T00:00:00',
-    }
-
-
-def _marshaled(event):
-    return json.dumps(event).encode()
 
 
 class TestBrokerServer:
@@ -222,16 +186,16 @@ class TestBrokerServer:
 
 class TestTokenValidationApi:
     async def test_get_token_speaks_the_wazo_auth_api(self):
-        upstream = _upstream(return_value=_TOKEN)
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=_TOKEN)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             result = await call(client.token.get, 'T', 'chatd.users.read')
         assert result == _TOKEN
         upstream.get_token.assert_awaited_once_with('T', 'chatd.users.read')
 
     async def test_get_token_is_cached_per_token_and_acl(self):
-        upstream = _upstream(return_value=_TOKEN)
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=_TOKEN)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             await call(client.token.get, 'T', 'websocketd')
             await call(client.token.get, 'T', 'websocketd')
@@ -239,18 +203,18 @@ class TestTokenValidationApi:
         assert upstream.get_token.await_count == 2
 
     async def test_get_token_without_scope_shares_the_default_scope_entry(self):
-        upstream = _upstream(return_value=_TOKEN)
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=_TOKEN)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             await call(client.token.get, 'T', 'websocketd')
             await call(client.token.get, 'T')
         assert upstream.get_token.await_count == 1
 
     async def test_get_token_relays_upstream_rejection_status(self):
-        upstream = _upstream(
+        upstream = token_provider(
             side_effect=AuthenticationError('unknown token', status_code=404)
         )
-        cache = _cache(upstream)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             with pytest.raises(requests.HTTPError) as excinfo:
                 await call(client.token.get, 'T', 'websocketd')
@@ -258,8 +222,8 @@ class TestTokenValidationApi:
         assert result == 404
 
     async def test_get_token_returns_503_when_auth_unavailable(self):
-        upstream = _upstream(side_effect=AuthServerUnavailableError('down'))
-        cache = _cache(upstream)
+        upstream = token_provider(side_effect=AuthServerUnavailableError('down'))
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             with pytest.raises(requests.HTTPError) as excinfo:
                 await call(client.token.get, 'T', 'websocketd')
@@ -267,23 +231,25 @@ class TestTokenValidationApi:
         assert result == 503
 
     async def test_head_valid_token_reports_valid(self):
-        upstream = _upstream(return_value=_TOKEN)
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=_TOKEN)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             result = await call(client.token.is_valid, 'T', 'websocketd')
         assert result is True
         upstream.get_token.assert_awaited_once_with('T', 'websocketd')
 
     async def test_head_rejected_token_reports_invalid(self):
-        upstream = _upstream(side_effect=AuthenticationError('denied', status_code=403))
-        cache = _cache(upstream)
+        upstream = token_provider(
+            side_effect=AuthenticationError('denied', status_code=403)
+        )
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             result = await call(client.token.is_valid, 'T', 'websocketd')
         assert result is False
 
     async def test_head_returns_503_when_auth_unavailable(self):
-        upstream = _upstream(side_effect=AuthServerUnavailableError('down'))
-        cache = _cache(upstream)
+        upstream = token_provider(side_effect=AuthServerUnavailableError('down'))
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             with pytest.raises(requests.HTTPError) as excinfo:
                 await call(client.token.is_valid, 'T', 'websocketd')
@@ -291,8 +257,8 @@ class TestTokenValidationApi:
         assert result == 503
 
     async def test_head_and_get_share_the_cache(self):
-        upstream = _upstream(return_value=_TOKEN)
-        cache = _cache(upstream)
+        upstream = token_provider(return_value=_TOKEN)
+        cache = caching_authenticator(upstream)
         async with _broker(cache) as (client, call):
             await call(client.token.is_valid, 'T', 'websocketd')
             result = await call(client.token.get, 'T', 'websocketd')

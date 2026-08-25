@@ -7,7 +7,7 @@ import logging
 
 from xivo import xivo_logging
 
-_NOISY_LOGGERS = ['urllib3', 'aioamqp', 'aiohttp']
+_NOISY_LOGGERS = ['urllib3', 'aioamqp', 'aiohttp', 'stevedore.extension']
 
 
 class _ProcessLabelFilter(logging.Filter):

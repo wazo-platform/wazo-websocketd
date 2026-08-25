@@ -13,7 +13,6 @@ from tempfile import TemporaryDirectory
 import websockets.server
 from setproctitle import setproctitle
 from websockets.server import WebSocketServer as Serve
-from xivo.xivo_logging import setup_logging, silence_loggers
 
 from .auth import (
     Authenticator,
@@ -22,6 +21,7 @@ from .auth import (
     build_authenticator,
 )
 from .bus import BusService
+from .helpers.logs import setup_process_logging
 from .protocol import SessionProtocolDecoder, SessionProtocolEncoder
 from .session import SessionFactory
 
@@ -104,10 +104,7 @@ class ProcessPool:
         asyncio.set_event_loop(loop)
         MasterTenantProxy.proxy = master_tenant_proxy
 
-        setup_logging(
-            config['log_file'], debug=config['debug'], log_level=config['log_level']
-        )
-        silence_loggers(['aioamqp', 'urllib3', 'stevedore.extension'], logging.WARNING)
+        setup_process_logging(config, 'worker')
 
     @staticmethod
     def _run(config: dict):

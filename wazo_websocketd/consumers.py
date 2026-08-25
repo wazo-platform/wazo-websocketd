@@ -6,7 +6,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from itertools import chain, repeat
 from secrets import token_hex
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -25,7 +24,7 @@ from .exception import (
     InvalidEvent,
     InvalidTokenError,
 )
-from .helpers.timing import exponential_backoff
+from .helpers.timing import capped_backoff
 from .helpers.token import TokenUser
 
 if TYPE_CHECKING:
@@ -218,6 +217,7 @@ class SessionInvalidator:
             exchange=self._exchange_name,
             handler=self._on_deleted_session,
             wait=True,  # started with the bus, so let the connection come up
+            prefetch=config['bus']['consumer_prefetch'],
             bindings=[{'name': SESSION_DELETED_EVENT}],
             on_setup=self._declare_exchange,
         )
@@ -225,8 +225,6 @@ class SessionInvalidator:
     async def run(self) -> None:
         try:
             await self._run()
-        except asyncio.CancelledError:
-            raise
         except Exception:
             logger.exception('bus session eviction stopped')
             raise
@@ -263,10 +261,7 @@ class SessionInvalidator:
                 await asyncio.sleep(delay)
 
     def _delays(self):
-        return chain(
-            exponential_backoff(self._RETRY_DELAY, self._RETRIES),
-            repeat(self._RETRY_CEILING),
-        )
+        return capped_backoff(self._RETRY_DELAY, self._RETRIES, self._RETRY_CEILING)
 
     async def _declare_exchange(self, channel: Channel) -> None:
         await channel.exchange(self._exchange_name, self._exchange_type, durable=True)

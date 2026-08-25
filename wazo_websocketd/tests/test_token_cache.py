@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import asyncio
-import time
 from datetime import timedelta
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import UUID
@@ -12,62 +11,21 @@ import pytest
 from ..exception import AuthenticationError, AuthServerUnavailableError
 from ..helpers.timing import utcnow_naive
 from ..token_cache import CachingAuthenticator, _token_size, mask_uuid
-from .helpers import Clock
-
-_TOKEN = {
-    'token': 'tok',
-    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-    'utc_expires_at': '2999-01-01T00:00:00',
-}
-
-
-def _session_token(session_uuid, token_id='T'):
-    # like wazo-auth's Token.to_dict, session_uuid is a top-level field
-    return {
-        'token': token_id,
-        'session_uuid': session_uuid,
-        'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-        'utc_expires_at': '2999-01-01T00:00:00',
-    }
-
-
-def _authenticator(**get_token_kwargs):
-    authenticator = Mock()
-    authenticator.get_token = AsyncMock(**get_token_kwargs)
-    return authenticator
-
-
-def _caching(
-    authenticator,
-    *,
-    positive_ttl=10.0,
-    negative_ttl=60.0,
-    max_size=16 * 1024 * 1024,
-    max_negative_entries=10000,
-    timer=time.monotonic,
-):
-    return CachingAuthenticator(
-        authenticator,
-        positive_ttl=positive_ttl,
-        negative_ttl=negative_ttl,
-        max_size=max_size,
-        max_negative_entries=max_negative_entries,
-        timer=timer,
-    )
+from .helpers import TOKEN, Clock, caching_authenticator, session_token, token_provider
 
 
 class TestCaching:
     async def test_a_validated_token_is_served_from_the_cache(self):
-        authenticator = _authenticator(return_value=_TOKEN)
-        cache = _caching(authenticator)
+        authenticator = token_provider(return_value=TOKEN)
+        cache = caching_authenticator(authenticator)
 
-        assert await cache.get_token('T') == _TOKEN
-        assert await cache.get_token('T') == _TOKEN
+        assert await cache.get_token('T') == TOKEN
+        assert await cache.get_token('T') == TOKEN
         assert authenticator.get_token.await_count == 1
 
     async def test_the_cache_is_keyed_by_token_and_scope(self):
-        authenticator = _authenticator(return_value=_TOKEN)
-        cache = _caching(authenticator)
+        authenticator = token_provider(return_value=TOKEN)
+        cache = caching_authenticator(authenticator)
 
         await cache.get_token('T', 'websocketd')
         await cache.get_token('T', 'chatd')
@@ -78,9 +36,9 @@ class TestCaching:
         authenticator.get_token.assert_any_await('T', 'chatd')
 
     async def test_an_entry_expires_with_its_ttl(self):
-        authenticator = _authenticator(return_value=_TOKEN)
+        authenticator = token_provider(return_value=TOKEN)
         clock = Clock(1000.0)
-        cache = _caching(authenticator, positive_ttl=30, timer=clock)
+        cache = caching_authenticator(authenticator, positive_ttl=30, timer=clock)
 
         await cache.get_token('T')
         clock.now = 1060.0
@@ -91,11 +49,11 @@ class TestCaching:
     async def test_an_entry_never_outlives_the_token_it_holds(self):
         expires_in = 2.0
         token = dict(
-            _TOKEN, utc_expires_at=str(utcnow_naive() + timedelta(seconds=expires_in))
+            TOKEN, utc_expires_at=str(utcnow_naive() + timedelta(seconds=expires_in))
         )
-        authenticator = _authenticator(return_value=token)
+        authenticator = token_provider(return_value=token)
         clock = Clock(1000.0)
-        cache = _caching(authenticator, positive_ttl=300, timer=clock)
+        cache = caching_authenticator(authenticator, positive_ttl=300, timer=clock)
 
         await cache.get_token('T')
         clock.now += expires_in + 1.0
@@ -106,9 +64,9 @@ class TestCaching:
         assert authenticator.get_token.await_count == 2
 
     async def test_an_already_expired_token_is_served_but_not_kept(self):
-        token = {**_TOKEN, 'utc_expires_at': '2000-01-01T00:00:00'}
-        authenticator = _authenticator(return_value=token)
-        cache = _caching(authenticator)
+        token = {**TOKEN, 'utc_expires_at': '2000-01-01T00:00:00'}
+        authenticator = token_provider(return_value=token)
+        cache = caching_authenticator(authenticator)
 
         assert await cache.get_token('T') == token
         assert await cache.get_token('T') == token
@@ -116,8 +74,8 @@ class TestCaching:
         assert authenticator.get_token.await_count == 2
 
     async def test_a_timezone_aware_expiry_is_understood(self):
-        token = {**_TOKEN, 'utc_expires_at': '2999-01-01T00:00:00+00:00'}
-        cache = _caching(_authenticator(return_value=token))
+        token = {**TOKEN, 'utc_expires_at': '2999-01-01T00:00:00+00:00'}
+        cache = caching_authenticator(token_provider(return_value=token))
 
         assert await cache.get_token('T') == token
         assert cache.positive_entries() == 1
@@ -125,8 +83,8 @@ class TestCaching:
 
 class TestRejections:
     async def test_a_rejection_is_cached(self):
-        authenticator = _authenticator(side_effect=AuthenticationError('bad'))
-        cache = _caching(authenticator)
+        authenticator = token_provider(side_effect=AuthenticationError('bad'))
+        cache = caching_authenticator(authenticator)
 
         for _ in range(2):
             with pytest.raises(AuthenticationError):
@@ -135,10 +93,10 @@ class TestRejections:
         assert authenticator.get_token.await_count == 1
 
     async def test_a_rejection_keeps_the_status_it_came_with(self):
-        authenticator = _authenticator(
+        authenticator = token_provider(
             side_effect=AuthenticationError('unknown token', status_code=404)
         )
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         statuses = []
         for _ in range(2):
@@ -150,11 +108,11 @@ class TestRejections:
         assert authenticator.get_token.await_count == 1
 
     async def test_a_rejection_is_only_cached_briefly(self):
-        authenticator = _authenticator(
+        authenticator = token_provider(
             side_effect=AuthenticationError('unknown token', status_code=404)
         )
         clock = Clock(1000.0)
-        cache = _caching(authenticator, timer=clock)
+        cache = caching_authenticator(authenticator, timer=clock)
 
         for _ in range(2):
             with pytest.raises(AuthenticationError):
@@ -167,7 +125,7 @@ class TestRejections:
         assert authenticator.get_token.await_count == 2
 
     async def test_a_token_wazo_auth_starts_accepting_is_served_again(self):
-        outcomes = [AuthenticationError('not replicated yet', status_code=404), _TOKEN]
+        outcomes = [AuthenticationError('not replicated yet', status_code=404), TOKEN]
         authenticator = Mock()
 
         async def get_token(_token_id, _acl=None):
@@ -178,17 +136,17 @@ class TestRejections:
 
         authenticator.get_token = AsyncMock(side_effect=get_token)
         clock = Clock(1000.0)
-        cache = _caching(authenticator, timer=clock)
+        cache = caching_authenticator(authenticator, timer=clock)
 
         with pytest.raises(AuthenticationError):
             await cache.get_token('T')
         clock.now += CachingAuthenticator.NEGATIVE_TTL_CEILING + 1
 
-        assert await cache.get_token('T') == _TOKEN
+        assert await cache.get_token('T') == TOKEN
 
     async def test_an_outage_is_never_cached_as_a_rejection(self):
-        authenticator = _authenticator(side_effect=AuthServerUnavailableError('down'))
-        cache = _caching(authenticator)
+        authenticator = token_provider(side_effect=AuthServerUnavailableError('down'))
+        cache = caching_authenticator(authenticator)
 
         for _ in range(2):
             with pytest.raises(AuthServerUnavailableError):
@@ -206,18 +164,18 @@ class TestSingleFlight:
             nonlocal calls
             calls += 1
             await release.wait()
-            return _TOKEN
+            return TOKEN
 
         authenticator = Mock()
         authenticator.get_token = slow_get_token
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         first = asyncio.create_task(cache.get_token('T'))
         second = asyncio.create_task(cache.get_token('T'))
         await asyncio.sleep(0.01)  # let both reach the in-flight lookup
         release.set()
 
-        assert await asyncio.gather(first, second) == [_TOKEN, _TOKEN]
+        assert await asyncio.gather(first, second) == [TOKEN, TOKEN]
         assert calls == 1
 
     async def test_a_waiter_giving_up_does_not_cancel_the_shared_request(self):
@@ -228,11 +186,11 @@ class TestSingleFlight:
             nonlocal calls
             calls += 1
             await release.wait()
-            return _TOKEN
+            return TOKEN
 
         authenticator = Mock()
         authenticator.get_token = slow_get_token
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         leaving = asyncio.create_task(cache.get_token('T'))
         staying = asyncio.create_task(cache.get_token('T'))
@@ -242,7 +200,7 @@ class TestSingleFlight:
         await asyncio.sleep(0.01)
         release.set()
 
-        assert await staying == _TOKEN
+        assert await staying == TOKEN
         assert calls == 1
 
 
@@ -255,11 +213,11 @@ class TestInFlightBudget:
             nonlocal started
             started += 1
             await release.wait()
-            return _TOKEN
+            return TOKEN
 
         authenticator = Mock()
         authenticator.get_token = slow_get_token
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         with patch.object(CachingAuthenticator, 'MAX_INFLIGHT_LOOKUPS', 2):
             accepted = [asyncio.create_task(cache.get_token(t)) for t in 'AB']
@@ -269,7 +227,7 @@ class TestInFlightBudget:
             release.set()
             result = await asyncio.gather(*accepted)
 
-        assert result == [_TOKEN, _TOKEN]
+        assert result == [TOKEN, TOKEN]
         assert started == 2  # the refused lookup never reached wazo-auth
 
     async def test_stopping_cancels_the_lookups_still_in_flight(self):
@@ -281,7 +239,7 @@ class TestInFlightBudget:
 
         authenticator = Mock()
         authenticator.get_token = hanging_get_token
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         waiter = asyncio.create_task(cache.get_token('T'))
         await reached_upstream.wait()
@@ -295,12 +253,12 @@ class TestInFlightBudget:
 class TestSessionEviction:
     async def test_a_deleted_session_takes_its_tokens_with_it(self):
         tokens = {
-            'A': _session_token('session-a', token_id='A'),
-            'B': _session_token('session-b', token_id='B'),
+            'A': session_token('session-a', token_id='A'),
+            'B': session_token('session-b', token_id='B'),
         }
         authenticator = Mock()
         authenticator.get_token = AsyncMock(side_effect=lambda t, acl=None: tokens[t])
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         await cache.get_token('A')
         await cache.get_token('B')
@@ -315,11 +273,11 @@ class TestSessionEviction:
         assert authenticator.get_token.await_count == 2
 
     async def test_the_refusal_expires_so_wazo_auth_stays_the_authority(self):
-        authenticator = _authenticator(
-            return_value=_session_token('session-a', token_id='A')
+        authenticator = token_provider(
+            return_value=session_token('session-a', token_id='A')
         )
         clock = Clock(1000.0)
-        cache = _caching(authenticator, negative_ttl=5.0, timer=clock)
+        cache = caching_authenticator(authenticator, negative_ttl=5.0, timer=clock)
 
         await cache.get_token('A')
         cache.evict_session('session-a')
@@ -329,11 +287,11 @@ class TestSessionEviction:
         assert authenticator.get_token.await_count == 2
 
     async def test_deleting_an_uncached_session_changes_nothing(self):
-        cache = _caching(_authenticator(return_value=_TOKEN))
+        cache = caching_authenticator(token_provider(return_value=TOKEN))
 
         cache.evict_session('unknown-session')
 
-        assert await cache.get_token('T') == _TOKEN
+        assert await cache.get_token('T') == TOKEN
 
     async def test_a_lookup_in_flight_when_the_deletion_arrives_is_refused(self):
         release = asyncio.Event()
@@ -341,9 +299,9 @@ class TestSessionEviction:
         async def slow_upstream(_token_id, _acl=None):
             # wazo-auth still answers 200: it has not committed the delete yet
             await release.wait()
-            return _session_token('session-a', token_id='A')
+            return session_token('session-a', token_id='A')
 
-        cache = _caching(_authenticator(side_effect=slow_upstream))
+        cache = caching_authenticator(token_provider(side_effect=slow_upstream))
 
         lookup = asyncio.ensure_future(cache.get_token('A'))
         await asyncio.sleep(0)
@@ -358,8 +316,8 @@ class TestSessionEviction:
 
     async def test_a_session_deleted_long_ago_no_longer_taints_new_tokens(self):
         clock = Clock(1000.0)
-        token = _session_token('session-a', token_id='A')
-        cache = _caching(_authenticator(return_value=token), timer=clock)
+        token = session_token('session-a', token_id='A')
+        cache = caching_authenticator(token_provider(return_value=token), timer=clock)
 
         cache.evict_session('session-a')
         clock.now += CachingAuthenticator.DELETED_SESSION_MEMORY + 1.0
@@ -369,12 +327,11 @@ class TestSessionEviction:
 
     async def test_eviction_does_not_walk_the_whole_cache(self):
         tokens = {
-            f'T{i}': _session_token(f'session-{i}', token_id=f'T{i}')
-            for i in range(500)
+            f'T{i}': session_token(f'session-{i}', token_id=f'T{i}') for i in range(500)
         }
         authenticator = Mock()
         authenticator.get_token = AsyncMock(side_effect=lambda t, acl=None: tokens[t])
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         for token_id in tokens:
             await cache.get_token(token_id)
@@ -397,12 +354,11 @@ class TestSessionEviction:
     async def test_the_session_index_does_not_outgrow_the_cache(self):
         clock = Clock(1000.0)
         tokens = {
-            f'T{i}': _session_token(f'session-{i}', token_id=f'T{i}')
-            for i in range(100)
+            f'T{i}': session_token(f'session-{i}', token_id=f'T{i}') for i in range(100)
         }
         authenticator = Mock()
         authenticator.get_token = AsyncMock(side_effect=lambda t, acl=None: tokens[t])
-        cache = _caching(authenticator, positive_ttl=10.0, timer=clock)
+        cache = caching_authenticator(authenticator, positive_ttl=10.0, timer=clock)
         first_half, second_half = list(tokens)[:50], list(tokens)[50:]
 
         for token_id in first_half:
@@ -417,9 +373,9 @@ class TestSessionEviction:
 
 class TestDegradedMode:
     async def test_new_entries_are_clamped_while_eviction_is_lost(self):
-        authenticator = _authenticator(return_value=_TOKEN)
+        authenticator = token_provider(return_value=TOKEN)
         clock = Clock(1000.0)
-        cache = _caching(authenticator, positive_ttl=300, timer=clock)
+        cache = caching_authenticator(authenticator, positive_ttl=300, timer=clock)
 
         cache.eviction_lost()
         await cache.get_token('T')
@@ -433,9 +389,9 @@ class TestDegradedMode:
         assert authenticator.get_token.await_count == 3
 
     async def test_entries_cached_before_the_loss_are_clamped_too(self):
-        authenticator = _authenticator(return_value=_TOKEN)
+        authenticator = token_provider(return_value=TOKEN)
         clock = Clock(1000.0)
-        cache = _caching(authenticator, positive_ttl=300, timer=clock)
+        cache = caching_authenticator(authenticator, positive_ttl=300, timer=clock)
 
         await cache.get_token('T')  # cached with the full 300s ttl
         cache.eviction_lost()  # staleness must be bounded
@@ -450,10 +406,10 @@ class TestDegradedMode:
         async def get_token(token_id, _acl=None):
             if token_id == 'bad':
                 raise AuthenticationError('nope', status_code=404)
-            return _session_token('s', token_id='good')
+            return session_token('s', token_id='good')
 
         authenticator.get_token = AsyncMock(side_effect=get_token)
-        cache = _caching(authenticator)
+        cache = caching_authenticator(authenticator)
 
         await cache.get_token('good')
         with pytest.raises(AuthenticationError):
@@ -470,9 +426,9 @@ class TestDegradedMode:
 
 class TestCacheBudget:
     async def test_the_cache_is_bounded_by_size(self):
-        authenticator = _authenticator(return_value=_TOKEN)
-        budget = 2 * _token_size(_TOKEN)
-        cache = _caching(authenticator, max_size=budget)
+        authenticator = token_provider(return_value=TOKEN)
+        budget = 2 * _token_size(TOKEN)
+        cache = caching_authenticator(authenticator, max_size=budget)
 
         for i in range(5):
             await cache.get_token(f'T{i}')
@@ -481,9 +437,9 @@ class TestCacheBudget:
         assert cache._positive.currsize <= budget
 
     async def test_a_token_larger_than_the_budget_is_served_but_not_kept(self):
-        cache = _caching(_authenticator(return_value=_TOKEN), max_size=1)
+        cache = caching_authenticator(token_provider(return_value=TOKEN), max_size=1)
 
-        assert await cache.get_token('T') == _TOKEN
+        assert await cache.get_token('T') == TOKEN
         assert cache.positive_entries() == 0
 
     def test_a_token_size_grows_with_its_acls(self):

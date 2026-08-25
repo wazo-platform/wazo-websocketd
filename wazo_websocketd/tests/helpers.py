@@ -3,14 +3,18 @@
 
 from __future__ import annotations
 
+import json
 import socket
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
+from unittest.mock import AsyncMock, Mock
 
 from aiohttp import web
 
 from ..auth import BROKER_RESPONSE_HEADER, AsyncAuthClient, build_auth_client
+from ..token_cache import CachingAuthenticator
 
 
 class Clock:
@@ -161,3 +165,52 @@ def refused_config() -> dict[str, Any]:
 
 def refused_broker_config() -> dict[str, Any]:
     return {'listen': '127.0.0.1', 'port': _closed_port(), 'https': False}
+
+
+BUS_CONFIG = {
+    'bus': {
+        'exchange_name': 'wazo-headers',
+        'exchange_type': 'headers',
+        'consumer_prefetch': 250,
+    }
+}
+
+TOKEN = {
+    'token': 'tok',
+    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
+    'utc_expires_at': '2999-01-01T00:00:00',
+}
+
+
+def session_token(session_uuid: str, token_id: str = 'T') -> dict[str, Any]:
+    # like wazo-auth's Token.to_dict, session_uuid is a top-level field
+    return {**TOKEN, 'token': token_id, 'session_uuid': session_uuid}
+
+
+def token_provider(**get_token_kwargs: Any) -> Mock:
+    provider = Mock()
+    provider.get_token = AsyncMock(**get_token_kwargs)
+    return provider
+
+
+def caching_authenticator(
+    provider: Any,
+    *,
+    positive_ttl: float = 10.0,
+    negative_ttl: float = 60.0,
+    max_size: int = 16 * 1024 * 1024,
+    max_negative_entries: int = 10000,
+    timer: Any = time.monotonic,
+) -> CachingAuthenticator:
+    return CachingAuthenticator(
+        provider,
+        positive_ttl=positive_ttl,
+        negative_ttl=negative_ttl,
+        max_size=max_size,
+        max_negative_entries=max_negative_entries,
+        timer=timer,
+    )
+
+
+def marshaled(event: dict[str, Any]) -> bytes:
+    return json.dumps(event).encode()

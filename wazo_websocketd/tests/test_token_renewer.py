@@ -8,12 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from ..token_renewer import ServiceTokenRenewer
-
-_TOKEN = {
-    'token': 'tok',
-    'metadata': {'uuid': 'u', 'tenant_uuid': 't'},
-    'utc_expires_at': '2999-01-01T00:00:00',
-}
+from .helpers import TOKEN
 
 
 class TestServiceTokenRenewer:
@@ -21,7 +16,7 @@ class TestServiceTokenRenewer:
     def auth_client(self):
         with patch('wazo_websocketd.token_renewer.AsyncAuthClient') as factory:
             self.client = factory.return_value
-            self.client.create_token = AsyncMock(return_value=_TOKEN)
+            self.client.create_token = AsyncMock(return_value=TOKEN)
             self.client.close = AsyncMock()
             self.renewer = ServiceTokenRenewer({'auth': {}})
             yield
@@ -46,7 +41,7 @@ class TestServiceTokenRenewer:
             self.renewer.subscribe(self.renewer.stop, oneshot=True)
             await asyncio.sleep(0.05)
 
-        served.assert_called_once_with(_TOKEN)
+        served.assert_called_once_with(TOKEN)
 
     async def test_a_failure_to_mint_a_token_says_why(self, caplog):
         self.client.create_token = AsyncMock(

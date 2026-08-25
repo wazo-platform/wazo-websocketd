@@ -19,6 +19,7 @@ from .config import is_unix_socket, load_config
 from .consumers import SessionInvalidator
 from .exception import AuthenticationError, AuthServerUnavailableError
 from .helpers.process import bootstrap, child_identity, drop_privileges
+from .helpers.tasks import is_pending
 from .status import BROKER_ID, StatusServer, serve_unix
 from .token_cache import CachingAuthenticator, mask_uuid
 
@@ -99,7 +100,7 @@ class _HTTPApplication:
 class BrokerServer:
     def __init__(self, config: dict):
         self._config = config
-        self._tasks: list[asyncio.Task] = []
+        self._invalidator_task: asyncio.Task | None = None
 
         self._upstream_client = AsyncAuthClient(config['auth'])
 
@@ -132,9 +133,7 @@ class BrokerServer:
         )
 
     def _is_ready(self) -> bool:
-        return not self._cache.is_degraded() and any(
-            not task.done() for task in self._tasks
-        )
+        return not self._cache.is_degraded() and is_pending(self._invalidator_task)
 
     def _metrics(self) -> dict[str, Any]:
         return {
@@ -160,7 +159,7 @@ class BrokerServer:
 
         loop = asyncio.get_event_loop()
         await self._bus.start()
-        self._tasks = [loop.create_task(self._invalidator.run())]
+        self._invalidator_task = loop.create_task(self._invalidator.run())
 
         await self._status_server.start()
 
@@ -185,9 +184,9 @@ class BrokerServer:
 
     async def stop(self) -> None:
         await self._bus.stop()
-        for task in self._tasks:
-            task.cancel()
-        await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self._invalidator_task is not None:
+            self._invalidator_task.cancel()
+            await asyncio.gather(self._invalidator_task, return_exceptions=True)
         await self._status_server.stop()
         await self._runner.cleanup()
         await self._cache.stop()

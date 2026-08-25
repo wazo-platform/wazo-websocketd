@@ -6,14 +6,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from itertools import chain, repeat
 from typing import Any, NamedTuple
 
 from wazo_auth_client.types import TokenDict
 
 from .auth import AsyncAuthClient
 from .helpers.tasks import is_pending
-from .helpers.timing import exponential_backoff
+from .helpers.timing import capped_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ class ServiceTokenRenewer:
             await asyncio.sleep(self._expiration * self.DEFAULT_LEEWAY_FACTOR)
 
     async def _fetch_token(self) -> TokenDict:
-        delays = chain(exponential_backoff(1, 5), repeat(32))
+        delays = capped_backoff(1, 5, 32)
         while True:
             try:
                 return await self._client.create_token(self._expiration)

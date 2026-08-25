@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime
 import functools
 from collections.abc import Iterator
+from itertools import chain, repeat
 
 
 def utcnow_naive() -> datetime.datetime:
@@ -23,3 +24,7 @@ def parse_expiration(value: str) -> datetime.datetime:
 def exponential_backoff(delay: float, retries: int) -> Iterator[float]:
     for attempt in range(retries):
         yield delay * 2**attempt
+
+
+def capped_backoff(delay: float, retries: int, ceiling: float) -> Iterator[float]:
+    return chain(exponential_backoff(delay, retries), repeat(ceiling))
