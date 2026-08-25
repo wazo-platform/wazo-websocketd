@@ -11,7 +11,7 @@ from ctypes import Array as CArray
 from ctypes import c_wchar
 from datetime import datetime
 from multiprocessing.sharedctypes import RawArray
-from ssl import SSLContext, create_default_context
+from ssl import SSLContext, TLSVersion, create_default_context
 from typing import Any, ClassVar
 
 import aiohttp
@@ -30,11 +30,14 @@ _SERVER_ERROR = 500
 
 logger = logging.getLogger(__name__)
 _TokenGetter = Callable[[], dict[str, Any]]
+_LOOPBACK_HOSTS = {'localhost', '127.0.0.1', '::1'}
 
 
 def _build_ssl(verify_certificate: bool | str) -> bool | SSLContext | None:
     if isinstance(verify_certificate, str):
-        return create_default_context(cafile=verify_certificate)
+        context = create_default_context(cafile=verify_certificate)
+        context.minimum_version = TLSVersion.TLSv1_2
+        return context
     return None if verify_certificate else False
 
 
@@ -71,8 +74,13 @@ class AsyncAuthClient:
         if is_unix_socket(host):
             return f'http://localhost{prefix}/0.1'
 
-        scheme = 'https' if config.get('https') else 'http'
-        return f'{scheme}://{host}:{config["port"]}{prefix}/0.1'
+        if not config.get('https'):
+            if host not in _LOOPBACK_HOSTS:
+                logger.warning(
+                    'talking to wazo-auth on %s in clear text: set `auth.https`', host
+                )
+            return f'http://{host}:{config["port"]}{prefix}/0.1'
+        return f'https://{host}:{config["port"]}{prefix}/0.1'
 
     async def get_token(self, token_id: str, acl: str | None = None) -> TokenDict:
         logger.debug('retrieving token data and validating authorization')
