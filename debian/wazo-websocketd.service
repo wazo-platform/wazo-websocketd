@@ -8,6 +8,7 @@ StartLimitIntervalSec=150
 [Service]
 RuntimeDirectory=wazo-websocketd
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 ExecStart=/usr/bin/wazo-websocketd
 ExecStartPost=/usr/bin/wazo-websocketd-wait-online
 ExecReload=/bin/kill -USR2 $MAINPID
