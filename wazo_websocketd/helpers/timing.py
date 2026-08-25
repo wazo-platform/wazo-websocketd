@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import datetime
 import functools
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from itertools import chain, repeat
 
 
@@ -28,3 +29,23 @@ def exponential_backoff(delay: float, retries: int) -> Iterator[float]:
 
 def capped_backoff(delay: float, retries: int, ceiling: float) -> Iterator[float]:
     return chain(exponential_backoff(delay, retries), repeat(ceiling))
+
+
+class Cooldown:
+    def __init__(
+        self, duration: float, timer: Callable[[], float] = time.monotonic
+    ) -> None:
+        self._duration = duration
+        self._timer = timer
+        self._since = timer()
+
+    @property
+    def elapsed(self) -> float:
+        return self._timer() - self._since
+
+    @property
+    def expired(self) -> bool:
+        return self.elapsed >= self._duration
+
+    def restart(self) -> None:
+        self._since = self._timer()

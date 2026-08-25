@@ -25,7 +25,7 @@ from .exception import (
     AuthServerUnavailableError,
     AuthServerUnreachableError,
 )
-from .helpers.timing import parse_expiration, utcnow_naive
+from .helpers.timing import Cooldown, parse_expiration, utcnow_naive
 
 DEFAULT_ACL = 'websocketd'
 BROKER_RESPONSE_HEADER = 'X-Wazo-Websocketd-Broker'
@@ -159,9 +159,17 @@ class AsyncAuthClient:
 class FallbackAuthClient(AsyncAuthClient):
     """Reads through this server, falling back to another when unreachable."""
 
-    def __init__(self, config: dict[str, Any], fallback: AsyncAuthClient) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        fallback: AsyncAuthClient,
+        *,
+        unreachable_cooldown: float = 5.0,
+    ) -> None:
         super().__init__(config)
         self._fallback = fallback
+        self._unreachable_cooldown = unreachable_cooldown
+        self._breaker: Cooldown | None = None
 
     async def create_token(self, expiration: int) -> TokenDict:
         return await self._fallback.create_token(expiration)
@@ -176,13 +184,34 @@ class FallbackAuthClient(AsyncAuthClient):
         super()._classify_error(error)
 
     async def _send(self, method: str, path: str, **kwargs: Any) -> Any:
-        try:
-            return await super()._send(method, path, **kwargs)
-        except AuthServerUnreachableError as e:
-            logger.warning(
-                '%s unreachable, falling back to the next one: %s', self._base_url, e
-            )
+        if self._breaker is not None and not self._breaker.expired:
             return await self._fallback._send(method, path, **kwargs)
+
+        try:
+            answer = await super()._send(method, path, **kwargs)
+        except AuthServerUnreachableError as e:
+            self._open_breaker(e)
+            return await self._fallback._send(method, path, **kwargs)
+
+        self._close_breaker()
+        return answer
+
+    def _open_breaker(self, error: Exception) -> None:
+        if self._breaker is None:
+            logger.warning(
+                '%s unreachable, reading from the next one for %gs at a time: %s',
+                self._base_url,
+                self._unreachable_cooldown,
+                error,
+            )
+            self._breaker = Cooldown(self._unreachable_cooldown)
+        else:
+            self._breaker.restart()
+
+    def _close_breaker(self) -> None:
+        if self._breaker is not None:
+            logger.info('%s is answering again', self._base_url)
+            self._breaker = None
 
 
 class _AuthChecker(ABC):

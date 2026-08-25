@@ -4,7 +4,8 @@
 import datetime
 from itertools import chain, islice, repeat
 
-from ..timing import exponential_backoff, parse_expiration, utcnow_naive
+from ...tests.helpers import Clock
+from ..timing import Cooldown, exponential_backoff, parse_expiration, utcnow_naive
 
 
 class TestExponentialBackoff:
@@ -33,3 +34,50 @@ class TestExpiration:
 
     def test_utcnow_is_naive(self):
         assert utcnow_naive().tzinfo is None
+
+
+class TestCooldown:
+    def test_the_wait_starts_when_the_cooldown_does(self):
+        clock = Clock()
+        cooldown = Cooldown(10.0, timer=clock)
+
+        assert cooldown.expired is False
+
+        clock.now += 10.0
+        assert cooldown.expired is True
+
+    def test_looking_does_not_extend_the_wait(self):
+        clock = Clock()
+        cooldown = Cooldown(10.0, timer=clock)
+
+        expired = []
+        for _ in range(3):
+            expired.append(cooldown.expired)
+            clock.now += 5.0
+
+        assert expired == [False, False, True]
+
+    def test_restarting_puts_the_full_wait_back(self):
+        clock = Clock()
+        cooldown = Cooldown(10.0, timer=clock)
+
+        clock.now += 9.0
+        cooldown.restart()
+
+        clock.now += 9.0
+        assert cooldown.expired is False
+
+        clock.now += 1.0
+        assert cooldown.expired is True
+
+    def test_a_cooldown_reports_how_long_it_has_been_waiting(self):
+        clock = Clock()
+        cooldown = Cooldown(10.0, timer=clock)
+
+        assert cooldown.elapsed == 0.0
+
+        clock.now += 4.0
+        assert cooldown.elapsed == 4.0
+
+        cooldown.restart()
+        assert cooldown.elapsed == 0.0

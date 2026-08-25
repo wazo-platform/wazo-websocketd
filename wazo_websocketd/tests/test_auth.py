@@ -4,7 +4,7 @@
 import asyncio
 import datetime
 from typing import cast
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 import pytest
@@ -25,8 +25,10 @@ from ..exception import (
     AuthenticationError,
     AuthenticationExpiredError,
     AuthServerUnavailableError,
+    AuthServerUnreachableError,
 )
 from .helpers import (
+    TOKEN,
     auth_client,
     broker_client,
     fake_wazo_auth,
@@ -463,6 +465,68 @@ class TestMasterTenant:
     def test_nothing_matches_while_it_is_unknown(self):
         assert MasterTenantProxy.matches('') is False
         assert MasterTenantProxy.matches('tenant-1') is False
+
+
+class TestBrokerBreaker:
+    def _client(self, cooldown=5.0):
+        fallback = Mock()
+        fallback._send = AsyncMock(return_value=TOKEN)
+        return FallbackAuthClient(
+            refused_broker_config(), fallback, unreachable_cooldown=cooldown
+        )
+
+    @staticmethod
+    def _broker_attempts(**kwargs):
+        return patch.object(AsyncAuthClient, '_send', new_callable=AsyncMock, **kwargs)
+
+    async def test_an_unreachable_broker_is_attempted_once_then_left_alone(self):
+        client = self._client()
+
+        with self._broker_attempts(
+            side_effect=AuthServerUnreachableError('blackholed')
+        ) as attempt:
+            assert await client.get_token('T') == TOKEN
+            assert await client.get_token('T') == TOKEN
+
+        # the second lookup skipped the broker instead of waiting for it again
+        assert attempt.await_count == 1
+
+    async def test_the_broker_is_tried_again_once_the_cooldown_lapses(self):
+        client = self._client(cooldown=0)
+
+        with self._broker_attempts(
+            side_effect=AuthServerUnreachableError('blackholed')
+        ) as attempt:
+            await client.get_token('T')
+            await client.get_token('T')
+
+        assert attempt.await_count == 2
+
+    async def test_a_broker_that_answers_again_is_read_through(self):
+        client = self._client(cooldown=0)
+
+        with self._broker_attempts(side_effect=AuthServerUnreachableError('gone')):
+            await client.get_token('T')
+
+        with self._broker_attempts(return_value=TOKEN) as attempt:
+            await client.get_token('T')
+            await client.get_token('T')
+
+        assert attempt.await_count == 2
+        assert client._breaker is None  # the breaker closed on the first answer
+
+    async def test_a_broker_reporting_an_outage_is_not_taken_out_of_the_path(self):
+        client = self._client()
+
+        with self._broker_attempts(
+            side_effect=AuthServerUnavailableError('wazo-auth is down')
+        ) as attempt:
+            for _ in range(2):
+                with pytest.raises(AuthServerUnavailableError):
+                    await client.get_token('T')
+
+        # a 503 means the broker is answering: skipping it would only stampede
+        assert attempt.await_count == 2
 
 
 class TestDefaultEndpoint:
