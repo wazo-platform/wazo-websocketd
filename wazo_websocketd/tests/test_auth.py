@@ -3,18 +3,21 @@
 
 import asyncio
 import datetime
+from typing import cast
 from unittest.mock import Mock
 
 import aiohttp
 import pytest
 
 from ..auth import (
+    AsyncAuthClient,
     Authenticator,
     _AuthChecker,
     _DynamicIntervalAuthChecker,
     _StaticIntervalAuthChecker,
     build_authenticator,
 )
+from ..config import _DEFAULT_CONFIG
 from ..exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -245,3 +248,16 @@ class TestDynamicIntervalAuthChecker:
             await check.run(
                 lambda: {'token': 'T', 'utc_expires_at': '2016-01-01T00:00:00'}
             )
+
+
+class TestDefaultEndpoint:
+    def test_the_shipped_config_reaches_wazo_auth_behind_nginx(self):
+        client = AsyncAuthClient(cast(dict, _DEFAULT_CONFIG['auth']))
+
+        # port 80 is nginx, which routes this prefix to wazo-auth
+        assert client._base_url == 'http://localhost:80/api/auth/0.1'
+
+    def test_a_prefix_set_to_null_reaches_wazo_auth_directly(self):
+        client = AsyncAuthClient({'host': 'auth', 'port': 9497, 'prefix': None})
+
+        assert client._base_url == 'http://auth:9497/0.1'

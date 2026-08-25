@@ -29,6 +29,7 @@ _DEFAULT_CONFIG = {
     'auth': {
         'host': 'localhost',
         'port': 80,
+        'prefix': '/api/auth',
         'https': False,
         'key_file': '/var/lib/wazo-auth-keys/wazo-websocketd-key.yml',
     },

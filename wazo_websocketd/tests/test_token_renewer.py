@@ -78,3 +78,11 @@ class TestServiceTokenRenewer:
 
             # a dead renewer stops minting tokens without saying so
             assert self.renewer._task.done() is False
+
+    async def test_stopping_a_renewer_that_already_died_still_closes_its_client(self):
+        self.renewer._task = asyncio.get_running_loop().create_task(asyncio.sleep(0))
+        await self.renewer._task
+
+        await self.renewer.stop()
+
+        self.client.close.assert_awaited_once_with()

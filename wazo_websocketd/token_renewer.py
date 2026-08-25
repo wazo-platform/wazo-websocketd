@@ -42,12 +42,12 @@ class ServiceTokenRenewer:
         return self
 
     async def stop(self, *_args: Any) -> None:
-        if not is_pending(self._task):
-            return
+        if is_pending(self._task):
+            self._task.cancel()
+            logger.info('service token renewer stopped')
 
-        self._task.cancel()
-        await self._client.close()
-        logger.info('service token renewer stopped')
+        # shielded: stopping from a subscriber cancels the task running this
+        await asyncio.shield(self._client.close())
 
     async def __aenter__(self) -> ServiceTokenRenewer:
         return await self.start()
