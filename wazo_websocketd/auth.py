@@ -74,13 +74,17 @@ class AsyncAuthClient:
         if is_unix_socket(host):
             return f'http://localhost{prefix}/0.1'
 
-        if not config.get('https'):
-            if host not in _LOOPBACK_HOSTS:
-                logger.warning(
-                    'talking to wazo-auth on %s in clear text: set `auth.https`', host
-                )
-            return f'http://{host}:{config["port"]}{prefix}/0.1'
-        return f'https://{host}:{config["port"]}{prefix}/0.1'
+        if not config.get('https') and host not in _LOOPBACK_HOSTS:
+            logger.warning(
+                'talking to wazo-auth on %s in clear text: set `auth.https`', host
+            )
+
+        # bracket ipv6 literals, which a url authority requires
+        if ':' in host and not host.startswith('['):
+            host = f'[{host}]'
+
+        scheme = 'https' if config.get('https') else 'http'
+        return f'{scheme}://{host}:{config["port"]}{prefix}/0.1'
 
     async def get_token(self, token_id: str, acl: str | None = None) -> TokenDict:
         logger.debug('retrieving token data and validating authorization')

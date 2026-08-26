@@ -250,6 +250,25 @@ class TestDynamicIntervalAuthChecker:
             )
 
 
+class TestEndpointAuthority:
+    @pytest.mark.parametrize(
+        'host, expected',
+        [
+            ('auth.example.com', 'https://auth.example.com:9497/0.1'),
+            ('::1', 'https://[::1]:9497/0.1'),
+            ('[::1]', 'https://[::1]:9497/0.1'),
+        ],
+    )
+    def test_an_ipv6_literal_is_bracketed_as_a_url_authority_requires(
+        self, host, expected
+    ):
+        client = AsyncAuthClient(
+            {'host': host, 'port': 9497, 'prefix': None, 'https': True}
+        )
+
+        assert client._base_url == expected
+
+
 class TestDefaultEndpoint:
     def test_the_shipped_config_reaches_wazo_auth_behind_nginx(self):
         client = AsyncAuthClient(cast(dict, _DEFAULT_CONFIG['auth']))
