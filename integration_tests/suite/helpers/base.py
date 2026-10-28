@@ -11,7 +11,6 @@ from wazo_test_helpers.asset_launching_test_case import (
     NoSuchPort,
     NoSuchService,
 )
-from wazo_test_helpers.auth import MockCredentials
 from wazo_test_helpers.filesystem import FileSystemClient
 
 from .auth import AuthClient
@@ -19,11 +18,9 @@ from .bus import BusClient
 from .constants import (
     ASSET_ROOT,
     MASTER_TENANT_UUID,
-    MASTER_USER_UUID,
     START_TIMEOUT,
     TENANT1_UUID,
     TENANT2_UUID,
-    TOKEN_UUID,
 )
 from .wait_strategy import WaitStrategy, WaitUntilValidConnection
 from .websocketd import WebSocketdClient
@@ -66,13 +63,6 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
         if isinstance(cls.auth_client, WrongClient):
             return
 
-        token = cls.auth_client.make_token(
-            token_uuid=TOKEN_UUID,
-            user_uuid=MASTER_USER_UUID,
-            tenant_uuid=MASTER_TENANT_UUID,
-        )
-        credentials = MockCredentials('websocketd-service', 'websocketd-password')
-        cls.auth_client.set_valid_credentials(credentials, token)
         cls.auth_client.set_tenants(
             {
                 'uuid': str(MASTER_TENANT_UUID),

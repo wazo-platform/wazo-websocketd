@@ -1,0 +1,16 @@
+tokens:
+  - token: 00000000-0000-4000-a000-0123456789ab
+    auth_id: 00000000-0000-4000-a000-00000000beef
+    session_uuid: my-session-uuid
+    acl:
+      - websocketd
+    metadata:
+      uuid: 00000000-0000-4000-a000-00000000beef
+      tenant_uuid: 00000000-0000-4000-a000-000000000001
+      purpose: user
+      admin: false
+
+valid_credentials:
+  - username: websocketd-service
+    password: websocketd-password
+    token: 00000000-0000-4000-a000-0123456789ab
