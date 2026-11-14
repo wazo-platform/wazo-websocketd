@@ -1,5 +1,12 @@
 # Changelog
 
+## 26.11
+
+* A user's queue now carries one binding for all the events addressed to that
+  user, plus one per subscribed event name for the tenant's broadcasts, instead
+  of two per subscribed name. Events whose name was not subscribed are dropped
+  by wazo-websocketd. Clients receive the same events; no client change is needed.
+
 ## 26.09
 
 * Requests to wazo-auth now default to `localhost:80`, through nginx.

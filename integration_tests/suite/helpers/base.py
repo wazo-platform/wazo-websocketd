@@ -115,6 +115,29 @@ class _BaseAssetLaunchingTestCase(AssetLaunchingTestCase):
         return FileSystemClient(execute=cls.docker_exec)
 
     @classmethod
+    def queue_bindings(cls, queue_prefix: str) -> list[str]:
+        # every binding whose destination is a queue named with this prefix,
+        # the default exchange's included, as `source<TAB>destination<TAB>arguments`
+        output = cls.docker_exec(
+            [
+                'rabbitmqctl',
+                '--quiet',
+                'list_bindings',
+                '--no-table-headers',
+                'source_name',
+                'destination_name',
+                'arguments',
+            ],
+            service_name='rabbitmq',
+        )
+        bindings = []
+        for line in output.decode('utf-8').splitlines():
+            fields = line.split('\t')
+            if len(fields) > 1 and fields[1].startswith(queue_prefix):
+                bindings.append(line)
+        return bindings
+
+    @classmethod
     def make_auth(cls):
         try:
             port = cls.service_port(9497, 'auth')

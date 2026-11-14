@@ -244,6 +244,8 @@ class BusConsumer:
         self._channel: Channel = None
         self._connection: _BusConnection = connection
         self._consumer_tag: str | None = None
+        self._event_names: set[str] = set()
+        self._own_events_uuids: set[str] = set()
         self._exchange_name: str = config['bus']['exchange_name']
         self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
@@ -337,22 +339,30 @@ class BusConsumer:
         return BusMessage(event_name, headers, acl, message, decoded)
 
     def _generate_bindings(self, event_name: str) -> list[dict]:
-        binding = {}
-        if event_name != '*':
-            binding['name'] = event_name
-
+        # an admin's bindings, or a user's bindings for `*`; a user's named
+        # bindings are made by `bind`, which shares the own-events binding
         if self._user.is_admin():
-            binding['origin_uuid'] = self._origin_uuid
+            binding = {'origin_uuid': self._origin_uuid}
+            if event_name != '*':
+                binding['name'] = event_name
             return [binding]
 
         # note: users don't need origin_uuid because the tenant exchange takes care of it
-        return [
-            binding | {f'user_uuid:{self._user.uuid}': True},
-            binding | {'user_uuid:*': True},
-        ]
+        return [self._own_events_binding(self._user.uuid), {'user_uuid:*': True}]
+
+    @staticmethod
+    def _own_events_binding(user_uuid: str) -> dict:
+        return {f'user_uuid:{user_uuid}': True}
 
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
+
+    def _is_subscribed(self, properties: Properties) -> bool:
+        # the name test the broker made when every binding carried `name`: the
+        # header only, as the broker read it, before any decoding
+        if '*' in self._event_names:
+            return True
+        return (properties.headers or {}).get('name') in self._event_names
 
     async def _on_message(
         self,
@@ -362,6 +372,12 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
+            if not self._is_subscribed(properties):
+                logger.debug(
+                    'discarding event `%s` (not subscribed)',
+                    (properties.headers or {}).get('name'),
+                )
+                return
             event = self._decode_content(content, properties)
         except InvalidEvent as exc:
             logger.error('error during message decoding (reason: %s)', exc)
@@ -401,7 +417,25 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name: str) -> None:
-        for binding in self._generate_bindings(event_name):
+        already_subscribed = event_name in self._event_names
+        self._event_names.add(event_name)
+
+        if self._user.is_admin() or event_name == '*':
+            bindings = self._generate_bindings(event_name)
+            if not self._user.is_admin():
+                self._own_events_uuids.add(self._user.uuid)
+        elif already_subscribed:
+            return
+        else:
+            # one binding for all the user's own events, whatever their name:
+            # `_on_message` drops the names the connection did not subscribe to
+            bindings = []
+            if self._user.uuid not in self._own_events_uuids:
+                self._own_events_uuids.add(self._user.uuid)
+                bindings.append(self._own_events_binding(self._user.uuid))
+            bindings.append({'name': event_name, 'user_uuid:*': True})
+
+        for binding in bindings:
             await self._channel.queue_bind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )
@@ -410,7 +444,25 @@ class BusConsumer:
         self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
-        for binding in self._generate_bindings(event_name):
+        if event_name not in self._event_names:
+            return
+        self._event_names.remove(event_name)
+
+        if self._user.is_admin():
+            bindings = self._generate_bindings(event_name)
+        elif event_name == '*':
+            bindings = [{'user_uuid:*': True}]
+        else:
+            bindings = [{'name': event_name, 'user_uuid:*': True}]
+
+        if not self._event_names:
+            bindings += [
+                self._own_events_binding(user_uuid)
+                for user_uuid in self._own_events_uuids
+            ]
+            self._own_events_uuids.clear()
+
+        for binding in bindings:
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
             )

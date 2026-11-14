@@ -254,6 +254,44 @@ class TestBus(IntegrationTest):
             await self.bus_client.publish(sentinel)
             self.assertEqual(await self.websocketd_client.recv_msg(), sentinel)
 
+    async def test_a_user_subscribing_by_name_binds_its_own_events_once(self):
+        names = [f'event_{n}' for n in range(17)]
+        other = 'not_subscribed'
+        user_uuid = uuid4()
+        token = self.auth_client.make_token(
+            user_uuid=user_uuid,
+            tenant_uuid=TENANT1_UUID,
+            acl=['websocketd'] + [f'event.{name}' for name in names + [other]],
+        )
+
+        def event(name, **extra):
+            return {'name': name, 'required_acl': f'event.{name}', **extra}
+
+        await self.bus_client.connect()
+        await self.websocketd_client.connect_and_wait_for_init(token)
+        try:
+            for name in names:
+                await self.websocketd_client.op_subscribe(name)
+            await self.websocketd_client.op_start()
+
+            bindings = self.asset_cls.queue_bindings(
+                f'wazo-websocketd.user-{user_uuid}.'
+            )
+            # 1 own-events + 17 broadcasts on the tenant exchange, 1 default
+            self.assertEqual(len(bindings), 19, bindings)
+
+            await self.bus_client.publish(event(other), user_uuid=user_uuid)
+            await self.bus_client.publish(event('event_0'), user_uuid=user_uuid)
+            self.assertEqual(await self.websocketd_client.recv_msg(), event('event_0'))
+
+            await self.bus_client.publish(event(other), user_uuid='*')
+            await self.bus_client.publish(event('event_1'), user_uuid='*')
+            self.assertEqual(await self.websocketd_client.recv_msg(), event('event_1'))
+
+            await self.websocketd_client.wait_for_nothing()
+        finally:
+            self.auth_client.revoke_token(token)
+
     async def _prepare(self, skip_start=False, version=1, skip_publish=False):
         await self.bus_client.connect()
         await self.websocketd_client.connect_and_wait_for_init(
