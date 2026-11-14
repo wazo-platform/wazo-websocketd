@@ -282,6 +282,14 @@ class TestBusSubscribedNameFilter:
 
         assert self._queued() == ['foo']
 
+    async def test_a_name_header_that_is_not_a_string_is_acked_and_dropped(self):
+        await self.consumer.bind('foo')
+
+        await self._deliver(name={'foo': 'bar'})
+        await self._deliver(name=['foo'])
+
+        assert self._queued() == []
+
     async def test_a_subscribed_name_still_needs_the_acl(self):
         self.consumer._access.matches_required_access.return_value = False
         await self.consumer.bind('foo')
@@ -397,6 +405,62 @@ class TestBusBindCalls:
             _broadcast('bar'),
         ]
 
+    async def test_a_bind_after_admin_turned_user_of_the_same_uuid_binds_its_own_events(
+        self,
+    ):
+        origin_uuid = Mock()
+        user_uuid = str(uuid4())
+        consumer = _wired(
+            _consumer(
+                origin_uuid=origin_uuid, purpose='user', admin=True, uuid=user_uuid
+            )
+        )
+
+        await consumer.bind('foo')
+        consumer.set_token(_token(purpose='user', admin=False, uuid=user_uuid))
+        await consumer.bind('bar')
+
+        assert _bound(consumer) == [
+            {'name': 'foo', 'origin_uuid': origin_uuid},
+            _own(user_uuid),
+            _broadcast('bar'),
+        ]
+
+    async def test_a_name_bound_again_after_a_uuid_change_binds_the_new_own_events(
+        self,
+    ):
+        first_uuid, second_uuid = str(uuid4()), str(uuid4())
+        consumer = _wired(_consumer(purpose='user', admin=False, uuid=first_uuid))
+
+        await consumer.bind('foo')
+        consumer.set_token(_token(purpose='user', admin=False, uuid=second_uuid))
+        await consumer.bind('foo')
+
+        assert _bound(consumer) == [
+            _own(first_uuid),
+            _broadcast('foo'),
+            _own(second_uuid),
+        ]
+
+    async def test_a_name_bound_again_after_admin_turned_user_binds_the_users_bindings(
+        self,
+    ):
+        origin_uuid = Mock()
+        user_uuid = str(uuid4())
+        consumer = _wired(
+            _consumer(origin_uuid=origin_uuid, purpose='user', admin=True)
+        )
+
+        await consumer.bind('foo')
+        consumer.set_token(_token(purpose='user', admin=False, uuid=user_uuid))
+        await consumer.bind('foo')
+
+        assert _bound(consumer) == [
+            {'name': 'foo', 'origin_uuid': origin_uuid},
+            _own(user_uuid),
+            _broadcast('foo'),
+        ]
+
 
 class TestBusUnbindCalls:
     def setup_method(self):
@@ -480,6 +544,36 @@ class TestBusUnbindCalls:
         assert _unbound(self.consumer) == []
         await self.consumer.unbind('bar')
         assert _unbound(self.consumer) == []
+
+    async def test_an_admin_unbinding_an_unknown_name_calls_nothing(self):
+        consumer = _wired(_consumer(purpose='user', admin=True))
+        await consumer.bind('foo')
+
+        await consumer.unbind('bar')
+
+        assert _unbound(consumer) == []
+
+    async def test_a_user_unbinding_a_name_it_bound_as_admin_calls_nothing(self):
+        consumer = _wired(_consumer(purpose='user', admin=True))
+        await consumer.bind('foo')
+        await consumer.bind('bar')
+        consumer.set_token(_token(purpose='user', admin=False))
+
+        await consumer.unbind('foo')
+
+        assert _unbound(consumer) == []
+
+    async def test_an_admin_unbinding_a_name_removes_its_origin_binding(self):
+        origin_uuid = Mock()
+        consumer = _wired(
+            _consumer(origin_uuid=origin_uuid, purpose='user', admin=True)
+        )
+        await consumer.bind('foo')
+        await consumer.bind('bar')
+
+        await consumer.unbind('foo')
+
+        assert _unbound(consumer) == [{'name': 'foo', 'origin_uuid': origin_uuid}]
 
 
 class TestBusBindings:

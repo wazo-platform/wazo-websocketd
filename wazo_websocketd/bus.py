@@ -9,7 +9,7 @@ import logging
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import aioamqp
 from aioamqp import AmqpProtocol
@@ -246,6 +246,7 @@ class BusConsumer:
         self._consumer_tag: str | None = None
         self._event_names: set[str] = set()
         self._own_events_uuids: set[str] = set()
+        self._broadcast_names: set[str] = set()
         self._exchange_name: str = config['bus']['exchange_name']
         self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
@@ -357,12 +358,12 @@ class BusConsumer:
     def _has_access(self, acl: str) -> bool:
         return self._access.matches_required_access(acl)
 
-    def _is_subscribed(self, properties: Properties) -> bool:
+    def _is_subscribed(self, event_name: Any) -> bool:
         # the name test the broker made when every binding carried `name`: the
         # header only, as the broker read it, before any decoding
         if '*' in self._event_names:
             return True
-        return (properties.headers or {}).get('name') in self._event_names
+        return isinstance(event_name, str) and event_name in self._event_names
 
     async def _on_message(
         self,
@@ -372,11 +373,9 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
-            if not self._is_subscribed(properties):
-                logger.debug(
-                    'discarding event `%s` (not subscribed)',
-                    (properties.headers or {}).get('name'),
-                )
+            event_name = (properties.headers or {}).get('name')
+            if not self._is_subscribed(event_name):
+                logger.debug('discarding event `%s` (not subscribed)', event_name)
                 return
             event = self._decode_content(content, properties)
         except InvalidEvent as exc:
@@ -417,23 +416,24 @@ class BusConsumer:
         self._connection.remove_consumer(self)
 
     async def bind(self, event_name: str) -> None:
-        already_subscribed = event_name in self._event_names
         self._event_names.add(event_name)
 
         if self._user.is_admin() or event_name == '*':
             bindings = self._generate_bindings(event_name)
             if not self._user.is_admin():
                 self._own_events_uuids.add(self._user.uuid)
-        elif already_subscribed:
-            return
         else:
             # one binding for all the user's own events, whatever their name:
-            # `_on_message` drops the names the connection did not subscribe to
+            # `_on_message` drops the names the connection did not subscribe to.
+            # Both are keyed on what the queue carries, not on the name being
+            # known: a `token` op may have changed the uuid or the admin flag
             bindings = []
             if self._user.uuid not in self._own_events_uuids:
                 self._own_events_uuids.add(self._user.uuid)
                 bindings.append(self._own_events_binding(self._user.uuid))
-            bindings.append({'name': event_name, 'user_uuid:*': True})
+            if event_name not in self._broadcast_names:
+                self._broadcast_names.add(event_name)
+                bindings.append({'name': event_name, 'user_uuid:*': True})
 
         for binding in bindings:
             await self._channel.queue_bind(
@@ -452,8 +452,11 @@ class BusConsumer:
             bindings = self._generate_bindings(event_name)
         elif event_name == '*':
             bindings = [{'user_uuid:*': True}]
-        else:
+        elif event_name in self._broadcast_names:
+            self._broadcast_names.remove(event_name)
             bindings = [{'name': event_name, 'user_uuid:*': True}]
+        else:
+            bindings = []
 
         if not self._event_names:
             bindings += [
