@@ -1,4 +1,4 @@
-# Copyright 2016-2025 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -248,6 +248,8 @@ class BusConsumer:
         self._prefetch: int = config['bus']['consumer_prefetch']
         self._origin_uuid: str = config['uuid']
         self._queue: asyncio.Queue = asyncio.Queue()
+        self._event_names: set[str] = set()
+        self._wildcard_bound: bool = False
 
     async def __aenter__(self):
         await self._start_consuming()
@@ -362,13 +364,19 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
+            name = (properties.headers or {}).get('name')
+            if isinstance(name, bytes):
+                name = name.decode('utf-8', 'replace')
+            if name and not self._is_subscribed(name):
+                return
             event = self._decode_content(content, properties)
         except InvalidEvent as exc:
             logger.error('error during message decoding (reason: %s)', exc)
         except EventPermissionError as exc:
             logger.debug('discarding event (reason: %s)', exc)
         else:
-            self._queue.put_nowait(event)
+            if self._is_subscribed(event.name):
+                self._queue.put_nowait(event)
         finally:
             await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
 
@@ -400,7 +408,19 @@ class BusConsumer:
             await self._channel.close()
         self._connection.remove_consumer(self)
 
+    def _is_subscribed(self, event_name: str) -> bool:
+        if self._user.is_admin():
+            return True
+        return '*' in self._event_names or event_name in self._event_names
+
     async def bind(self, event_name: str) -> None:
+        if not self._user.is_admin():
+            self._event_names.add(event_name)
+            if self._wildcard_bound:
+                return
+            self._wildcard_bound = True
+            event_name = '*'
+
         for binding in self._generate_bindings(event_name):
             await self._channel.queue_bind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
@@ -410,6 +430,9 @@ class BusConsumer:
         self._queue.put_nowait(BusConnectionLostError())
 
     async def unbind(self, event_name: str) -> None:
+        if not self._user.is_admin():
+            self._event_names.discard(event_name)
+            return
         for binding in self._generate_bindings(event_name):
             await self._channel.queue_unbind(
                 self._amqp_queue, self._bound_exchange, '', arguments=binding
