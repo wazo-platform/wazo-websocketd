@@ -238,7 +238,11 @@ class Session:
             if self._protocol_version == 1:
                 payload = message.raw
             else:
-                payload = self._protocol_encoder.encode_event(message.content)
+                if message.encoded is None:
+                    message.encoded = self._protocol_encoder.encode_event(
+                        message.content
+                    )
+                payload = message.encoded
             await self._ws.send(payload)
 
     async def _task_authentification(self):

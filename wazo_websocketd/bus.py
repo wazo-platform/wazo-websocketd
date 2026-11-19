@@ -6,10 +6,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass, field
+from functools import lru_cache
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
-from typing import NamedTuple
 
 import aioamqp
 from aioamqp import AmqpProtocol
@@ -283,11 +284,19 @@ class _BusConnection:
             tenant_uuid = (properties.headers or {}).get('tenant_uuid')
             if isinstance(tenant_uuid, bytes):
                 tenant_uuid = tenant_uuid.decode('utf-8', 'replace')
+            try:
+                event = _parse_event(content, properties)
+            except InvalidEvent as exc:
+                logger.error('error during message decoding (reason: %s)', exc)
+                return
+            except EventPermissionError as exc:
+                logger.debug('discarding event (reason: %s)', exc)
+                return
             for consumer in self._consumers:
                 if consumer._subscribed_tenant != tenant_uuid:
                     continue
                 try:
-                    consumer._handle_message(content, properties)
+                    consumer._dispatch(event)
                 except Exception:
                     logger.exception('error while dispatching tenant event')
         finally:
@@ -403,38 +412,13 @@ class BusConsumer:
         return response['queue']
 
     def _decode_content(self, content: bytes, properties: Properties) -> BusMessage:
-        headers = properties.headers
-        try:
-            decoded = content.decode('utf-8')
-            message = json.loads(decoded)
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            raise InvalidEvent('unable to decode message')
-
-        if not isinstance(message, dict):
-            raise InvalidEvent('invalid message format (not a dict)')
-
-        event_name = headers.get('name') or message.get('name')
-        if not event_name:
-            raise InvalidEvent('event is missing `name` field')
-
-        if 'required_acl' not in headers:
-            raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
-        acl = headers.get('required_acl')
-
-        if isinstance(acl, bytes):
-            acl = acl.decode('utf-8')
-        if acl and not isinstance(acl, str):
-            raise InvalidEvent(
-                'event ACL is not a string (type: %s)', type(acl).__name__
-            )
-
-        if not self._has_access(acl):
+        event = _parse_event(content, properties)
+        if not self._has_access(event.acl):
             raise EventPermissionError(
                 f'user `{self._user.uuid}` doesn\'t have '
-                f'the required ACL for event `{event_name}` (missing: {acl})'
+                f'the required ACL for event `{event.name}` (missing: {event.acl})'
             )
-
-        return BusMessage(event_name, headers, acl, message, decoded)
+        return event
 
     def _generate_bindings(self, event_name: str) -> list[dict]:
         binding = {}
@@ -451,8 +435,12 @@ class BusConsumer:
             binding | {'user_uuid:*': True},
         ]
 
-    def _has_access(self, acl: str) -> bool:
-        return self._access.matches_required_access(acl)
+    def _has_access(self, acl: str | None) -> bool:
+        return self._access(acl)
+
+    def _dispatch(self, event: BusMessage) -> None:
+        if self._is_subscribed(event.name) and self._has_access(event.acl):
+            self._queue.put_nowait(event)
 
     async def _on_message(
         self,
@@ -566,19 +554,49 @@ class BusConsumer:
 
     def set_token(self, token: TokenDict):
         self._user = user = _UserHelper.from_token(token)
-        self._access = AccessCheck(user.uuid, user.session_uuid, user.acl)
+        check = AccessCheck(user.uuid, user.session_uuid, user.acl)
+        self._access = lru_cache(maxsize=256)(check.matches_required_access)
 
     @staticmethod
     def _generate_name(*parts: str) -> str:
         return '.'.join(['wazo-websocketd', *parts])
 
 
-class BusMessage(NamedTuple):
+@dataclass
+class BusMessage:
     name: str
     headers: dict
     acl: str | None
     content: dict
     raw: str
+    encoded: str | None = field(default=None, compare=False, repr=False)
+
+
+def _parse_event(content: bytes, properties: Properties) -> BusMessage:
+    headers = properties.headers
+    try:
+        decoded = content.decode('utf-8')
+        message = json.loads(decoded)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise InvalidEvent('unable to decode message')
+
+    if not isinstance(message, dict):
+        raise InvalidEvent('invalid message format (not a dict)')
+
+    event_name = headers.get('name') or message.get('name')
+    if not event_name:
+        raise InvalidEvent('event is missing `name` field')
+
+    if 'required_acl' not in headers:
+        raise EventPermissionError(f'event `{event_name}` doesn\'t contain ACLs`')
+    acl = headers.get('required_acl')
+
+    if isinstance(acl, bytes):
+        acl = acl.decode('utf-8')
+    if acl and not isinstance(acl, str):
+        raise InvalidEvent('event ACL is not a string (type: %s)', type(acl).__name__)
+
+    return BusMessage(event_name, headers, acl, message, decoded)
 
 
 class BusService:
