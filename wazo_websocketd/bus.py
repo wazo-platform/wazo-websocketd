@@ -31,6 +31,26 @@ from .exception import (
 
 logger = logging.getLogger(__name__)
 
+TENANT_BROADCAST = {'user_uuid:*': True}
+
+
+def _tenant_exchange_name(tenant_uuid: str) -> str:
+    return BusConsumer._generate_name(f'tenant-{tenant_uuid}')
+
+
+async def _declare_tenant_exchange(
+    channel: Channel, upstream: str, tenant_uuid: str, origin_uuid: str
+) -> str:
+    exchange = _tenant_exchange_name(tenant_uuid)
+    await channel.exchange(exchange, 'headers', durable=False, auto_delete=True)
+    await channel.exchange_bind(
+        exchange,
+        upstream,
+        '',
+        arguments={'origin_uuid': origin_uuid, 'tenant_uuid': tenant_uuid},
+    )
+    return exchange
+
 
 class _UserHelper:
     def __init__(self, token: TokenDict):
@@ -91,6 +111,9 @@ class _BusConnection:
         self._protocol: AmqpProtocol = None  # type: ignore[assignment]
         self._transport: asyncio.Transport = None  # type: ignore[assignment]
         self._task: asyncio.Task = None  # type: ignore[assignment]
+        self._tenant_channel: Channel | None = None
+        self._tenant_queue: str | None = None
+        self._tenant_lock = asyncio.Lock()
 
     @classmethod
     def _get_unique_id(cls) -> int:
@@ -115,6 +138,7 @@ class _BusConnection:
             await self._protocol.wait_closed()
             self._transport.close()
             self._connected.clear()
+            self._tenant_channel = None
 
             # Notify consumers of disconnection
             await self._notify_closed()
@@ -184,6 +208,91 @@ class _BusConnection:
             raise ValueError('consumer does not belong to this connection')
         self._consumers.remove(consumer)
 
+    async def acquire_tenant_exchange(
+        self, tenant_uuid: str, upstream: str, origin_uuid: str, prefetch: int
+    ) -> str:
+        async with self._tenant_lock:
+            for _ in range(3):
+                subscribed = {t for c in self._consumers if (t := c._subscribed_tenant)}
+                try:
+                    if self._tenant_channel is None or not self._tenant_channel.is_open:
+                        await self._open_tenant_queue(prefetch)
+                        for tenant in subscribed | {tenant_uuid}:
+                            await self._bind_tenant(tenant, upstream, origin_uuid)
+                    elif tenant_uuid not in subscribed:
+                        await self._bind_tenant(tenant_uuid, upstream, origin_uuid)
+                    return _tenant_exchange_name(tenant_uuid)
+                except ChannelClosed as exc:
+                    logger.info(
+                        '[connection %d] tenant queue channel closed (%s), retrying',
+                        self._id,
+                        exc,
+                    )
+                    self._tenant_channel = None
+            raise BusConnectionError(
+                f'[connection {self._id}] unable to bind tenant `{tenant_uuid}`'
+            )
+
+    async def _open_tenant_queue(self, prefetch: int) -> None:
+        channel = await self.get_channel(wait=False)
+        await channel.basic_qos(prefetch_count=prefetch, connection_global=False)
+        queue = BusConsumer._generate_name('tenants', token_hex(3))
+        await channel.queue(queue, durable=False, auto_delete=True, exclusive=True)
+        await channel.basic_consume(self._on_tenant_message, queue, exclusive=True)
+        self._tenant_channel, self._tenant_queue = channel, queue
+
+    async def _bind_tenant(self, tenant_uuid: str, upstream: str, origin: str) -> None:
+        assert self._tenant_channel is not None
+        exchange = await _declare_tenant_exchange(
+            self._tenant_channel, upstream, tenant_uuid, origin
+        )
+        await self._tenant_channel.queue_bind(
+            self._tenant_queue, exchange, '', arguments=TENANT_BROADCAST
+        )
+
+    async def release_tenant_exchange(self, consumer: BusConsumer) -> None:
+        tenant_uuid = consumer._subscribed_tenant
+        if tenant_uuid is None:
+            return
+        async with self._tenant_lock:
+            if any(
+                c is not consumer and c._subscribed_tenant == tenant_uuid
+                for c in self._consumers
+            ):
+                return
+            if self._tenant_channel is None or not self._tenant_channel.is_open:
+                return
+            try:
+                await self._tenant_channel.queue_unbind(
+                    self._tenant_queue,
+                    _tenant_exchange_name(tenant_uuid),
+                    '',
+                    arguments=TENANT_BROADCAST,
+                )
+            except (AmqpClosedConnection, ChannelClosed):
+                pass
+
+    async def _on_tenant_message(
+        self,
+        channel: Channel,
+        content: bytes,
+        envelope: Envelope,
+        properties: Properties,
+    ) -> None:
+        try:
+            tenant_uuid = (properties.headers or {}).get('tenant_uuid')
+            if isinstance(tenant_uuid, bytes):
+                tenant_uuid = tenant_uuid.decode('utf-8', 'replace')
+            for consumer in self._consumers:
+                if consumer._subscribed_tenant != tenant_uuid:
+                    continue
+                try:
+                    consumer._handle_message(content, properties)
+                except Exception:
+                    logger.exception('error while dispatching tenant event')
+        finally:
+            await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
+
     async def _notify_closed(self):
         tasks = [consumer.connection_lost() for consumer in self._consumers]
         await asyncio.gather(*tasks)
@@ -250,6 +359,7 @@ class BusConsumer:
         self._queue: asyncio.Queue = asyncio.Queue()
         self._event_names: set[str] = set()
         self._wildcard_bound: bool = False
+        self._subscribed_tenant: str | None = None
 
     async def __aenter__(self):
         await self._start_consuming()
@@ -276,21 +386,9 @@ class BusConsumer:
         return response['consumer_tag']
 
     async def _create_tenant_exchange(self, channel: Channel, exchange: str) -> str:
-        tenant_uuid = self._user.tenant_uuid
-        tenant_exchange = self._generate_name(f'tenant-{tenant_uuid}')
-
-        await channel.exchange(
-            tenant_exchange, 'headers', durable=False, auto_delete=True
+        return await _declare_tenant_exchange(
+            channel, exchange, self._user.tenant_uuid, self._origin_uuid
         )
-
-        await channel.exchange_bind(
-            tenant_exchange,
-            exchange,
-            '',
-            arguments={'origin_uuid': self._origin_uuid, 'tenant_uuid': tenant_uuid},
-        )
-
-        return tenant_exchange
 
     async def _create_queue(self, channel: Channel, prefetch: int = 1) -> str:
         queue_name = self._generate_name(f'user-{self._user.uuid}', token_hex(3))
@@ -364,6 +462,12 @@ class BusConsumer:
         properties: Properties,
     ) -> None:
         try:
+            self._handle_message(content, properties)
+        finally:
+            await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
+
+    def _handle_message(self, content: bytes, properties: Properties) -> None:
+        try:
             name = (properties.headers or {}).get('name')
             if isinstance(name, bytes):
                 name = name.decode('utf-8', 'replace')
@@ -377,22 +481,30 @@ class BusConsumer:
         else:
             if self._is_subscribed(event.name):
                 self._queue.put_nowait(event)
-        finally:
-            await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
 
     async def _start_consuming(self) -> None:
         channel = self._channel = await self._connection.get_channel(wait=False)
         exchange = self._exchange_name
 
-        if not self._user.is_master_tenant():
+        if not self._user.is_admin():
+            exchange = await self._connection.acquire_tenant_exchange(
+                self._user.tenant_uuid,
+                self._exchange_name,
+                self._origin_uuid,
+                self._prefetch,
+            )
+            self._subscribed_tenant = self._user.tenant_uuid
+        elif not self._user.is_master_tenant():
             exchange = await self._create_tenant_exchange(channel, self._exchange_name)
         self._bound_exchange = exchange
 
-        # Create exclusive queue on exchange
-        self._amqp_queue = await self._create_queue(channel, self._prefetch)
-
-        # Start consuming on queue
-        self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
+        try:
+            self._amqp_queue = await self._create_queue(channel, self._prefetch)
+            self._consumer_tag = await self._consume_queue(channel, self._amqp_queue)
+        except BaseException:
+            await self._connection.release_tenant_exchange(self)
+            self._subscribed_tenant = None
+            raise
 
         if self._user.is_master_tenant():
             logger.debug('user `%s` connected as global admin', self._user.uuid)
@@ -402,6 +514,8 @@ class BusConsumer:
             logger.debug('user `%s` connected as user', self._user.uuid)
 
     async def _stop_consuming(self) -> None:
+        await self._connection.release_tenant_exchange(self)
+        self._subscribed_tenant = None
         if self._channel.is_open:
             if self._consumer_tag is not None:
                 await self._channel.basic_cancel(self._consumer_tag)
@@ -419,7 +533,13 @@ class BusConsumer:
             if self._wildcard_bound:
                 return
             self._wildcard_bound = True
-            event_name = '*'
+            await self._channel.queue_bind(
+                self._amqp_queue,
+                self._bound_exchange,
+                '',
+                arguments={f'user_uuid:{self._user.uuid}': True},
+            )
+            return
 
         for binding in self._generate_bindings(event_name):
             await self._channel.queue_bind(
