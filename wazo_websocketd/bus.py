@@ -6,11 +6,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from itertools import chain, cycle, repeat
 from multiprocessing import Value
 from secrets import token_hex
+from typing import Any
 
 import aioamqp
 from aioamqp import AmqpProtocol
@@ -19,6 +22,7 @@ from aioamqp.envelope import Envelope
 from aioamqp.exceptions import AmqpClosedConnection, ChannelClosed
 from aioamqp.properties import Properties
 from wazo_auth_client.types import TokenDict
+from websockets.legacy.protocol import broadcast
 from xivo.auth_verifier import AccessCheck
 
 from .auth import MasterTenantProxy
@@ -292,13 +296,26 @@ class _BusConnection:
             except EventPermissionError as exc:
                 logger.debug('discarding event (reason: %s)', exc)
                 return
+            sockets: defaultdict[Callable[[BusMessage], str], list] = defaultdict(list)
             for consumer in self._consumers:
                 if consumer._subscribed_tenant != tenant_uuid:
                     continue
                 try:
-                    consumer._dispatch(event)
+                    if not consumer._accepts(event):
+                        continue
                 except Exception:
                     logger.exception('error while dispatching tenant event')
+                    continue
+                if consumer._websocket is None:
+                    consumer._queue.put_nowait(event)
+                else:
+                    websocket, encode = consumer._websocket
+                    sockets[encode].append(websocket)
+            for encode, group in sockets.items():
+                try:
+                    broadcast(group, encode(event))
+                except Exception:
+                    logger.exception('error while broadcasting tenant event')
         finally:
             await channel.basic_client_ack(envelope.delivery_tag, multiple=True)
 
@@ -369,6 +386,7 @@ class BusConsumer:
         self._event_names: set[str] = set()
         self._wildcard_bound: bool = False
         self._subscribed_tenant: str | None = None
+        self._websocket: tuple[Any, Callable[[BusMessage], str]] | None = None
 
     async def __aenter__(self):
         await self._start_consuming()
@@ -438,9 +456,13 @@ class BusConsumer:
     def _has_access(self, acl: str | None) -> bool:
         return self._access(acl)
 
-    def _dispatch(self, event: BusMessage) -> None:
-        if self._is_subscribed(event.name) and self._has_access(event.acl):
-            self._queue.put_nowait(event)
+    def _accepts(self, event: BusMessage) -> bool:
+        return self._is_subscribed(event.name) and self._has_access(event.acl)
+
+    def attach_websocket(
+        self, websocket: Any, encode: Callable[[BusMessage], str]
+    ) -> None:
+        self._websocket = (websocket, encode)
 
     async def _on_message(
         self,

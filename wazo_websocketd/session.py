@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, urlparse
 import websockets
 
 from .auth import MasterTenantProxy
-from .bus import BusConsumer, BusService
+from .bus import BusConsumer, BusMessage, BusService
 from .exception import (
     AuthenticationError,
     AuthenticationExpiredError,
@@ -258,6 +258,12 @@ class Session:
     async def _do_ws_start(self, msg):
         self._started = True
         await self._ws.send(self._protocol_encoder.encode_start())
+        if self._protocol_version == 1:
+            self._consumer.attach_websocket(self._ws, _raw_payload)
+        else:
+            self._consumer.attach_websocket(
+                self._ws, self._protocol_encoder.encode_bus_message
+            )
 
     async def _do_ws_token(self, msg):
         token = await self._authenticator.get_token(msg.value)
@@ -306,3 +312,7 @@ def _extract_token_id_from_headers(headers):
         if name.lower() == 'x-auth-token':
             return value
     return None
+
+
+def _raw_payload(message: BusMessage) -> str:
+    return message.raw
