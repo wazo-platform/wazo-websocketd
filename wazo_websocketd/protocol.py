@@ -1,4 +1,4 @@
-# Copyright 2016-2024 The Wazo Authors  (see the AUTHORS file)
+# Copyright 2016-2026 The Wazo Authors  (see the AUTHORS file)
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from __future__ import annotations
@@ -6,8 +6,12 @@ from __future__ import annotations
 import collections
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from .exception import SessionProtocolError
+
+if TYPE_CHECKING:
+    from .bus import BusMessage
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,9 @@ class SessionProtocolEncoder:
 
     def encode_event(self, event):
         return self._encode("event", event)
+
+    def encode_bus_message(self, message: BusMessage) -> str:
+        return self.encode_event(message.content)
 
     def encode_pong(self, data):
         return self._encode("pong", data={"payload": data})
