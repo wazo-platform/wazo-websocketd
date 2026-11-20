@@ -218,26 +218,19 @@ class _BusConnection:
         self, tenant_uuid: str, upstream: str, origin_uuid: str, prefetch: int
     ) -> str:
         async with self._tenant_lock:
-            for _ in range(3):
-                subscribed = {t for c in self._consumers if (t := c._subscribed_tenant)}
-                try:
-                    if self._tenant_channel is None or not self._tenant_channel.is_open:
-                        await self._open_tenant_queue(prefetch)
-                        for tenant in subscribed | {tenant_uuid}:
-                            await self._bind_tenant(tenant, upstream, origin_uuid)
-                    elif tenant_uuid not in subscribed:
-                        await self._bind_tenant(tenant_uuid, upstream, origin_uuid)
-                    return _tenant_exchange_name(tenant_uuid)
-                except ChannelClosed as exc:
-                    logger.info(
-                        '[connection %d] tenant queue channel closed (%s), retrying',
-                        self._id,
-                        exc,
-                    )
-                    self._tenant_channel = None
-            raise BusConnectionError(
-                f'[connection {self._id}] unable to bind tenant `{tenant_uuid}`'
-            )
+            subscribed = {t for c in self._consumers if (t := c._subscribed_tenant)}
+            try:
+                if self._tenant_channel is None or not self._tenant_channel.is_open:
+                    await self._open_tenant_queue(prefetch)
+                    for tenant in subscribed | {tenant_uuid}:
+                        await self._bind_tenant(tenant, upstream, origin_uuid)
+                elif tenant_uuid not in subscribed:
+                    await self._bind_tenant(tenant_uuid, upstream, origin_uuid)
+            except (AmqpClosedConnection, ChannelClosed) as exc:
+                raise BusConnectionError(
+                    f'[connection {self._id}] unable to bind tenant `{tenant_uuid}`: {exc}'
+                )
+            return _tenant_exchange_name(tenant_uuid)
 
     async def _open_tenant_queue(self, prefetch: int) -> None:
         channel = await self.get_channel(wait=False)
@@ -260,12 +253,30 @@ class _BusConnection:
             )
 
     async def _bind_tenant(self, tenant_uuid: str, upstream: str, origin: str) -> None:
-        assert self._tenant_channel is not None
-        exchange = await _declare_tenant_exchange(
-            self._tenant_channel, upstream, tenant_uuid, origin
-        )
-        await self._tenant_channel.queue_bind(
-            self._tenant_queue, exchange, '', arguments=TENANT_BROADCAST
+        for _ in range(3):
+            channel = await self.get_channel(wait=False)
+            try:
+                exchange = await _declare_tenant_exchange(
+                    channel, upstream, tenant_uuid, origin
+                )
+                await channel.queue_bind(
+                    self._tenant_queue, exchange, '', arguments=TENANT_BROADCAST
+                )
+            except ChannelClosed as exc:
+                logger.info(
+                    '[connection %d] binding tenant `%s` failed (%s), retrying',
+                    self._id,
+                    tenant_uuid,
+                    exc,
+                )
+                continue
+            try:
+                await channel.close()
+            except (AmqpClosedConnection, ChannelClosed):
+                pass
+            return
+        raise BusConnectionError(
+            f'[connection {self._id}] unable to bind tenant `{tenant_uuid}`'
         )
 
     async def release_tenant_exchange(self, consumer: BusConsumer) -> None:
@@ -311,7 +322,7 @@ class _BusConnection:
                 return
             sockets: defaultdict[Callable[[BusMessage], str], list] = defaultdict(list)
             for consumer in self._consumers:
-                if consumer._subscribed_tenant != tenant_uuid:
+                if tenant_uuid is None or consumer._subscribed_tenant != tenant_uuid:
                     continue
                 try:
                     if not consumer._accepts(event):
